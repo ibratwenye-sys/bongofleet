@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  RIDER
+  MECHANIC
+
+  @@map("user_role")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+
+  @@map("payment_status")
+}
+
+enum MotorcycleStatus {
+  ACTIVE
+  MAINTENANCE
+  RETIRED
+
+  @@map("motorcycle_status")
+}
+
+/// A fleet-owning company/account. Root of multi-tenancy - every other table
+/// scopes its data to a tenantId.
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String
+  contactEmail String?  @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  users             User[]
+  riders            Rider[]
+  motorcycles       Motorcycle[]
+  dailyAssignments  DailyAssignment[]
+  dailyPayments     DailyPayment[]
+  gpsLocations      GpsLocation[]
+  maintenanceLogs   MaintenanceLog[]
+  expenses          Expense[]
+
+  @@map("tenants")
+}
+
+/// Anyone who logs in: owner, manager, rider, or mechanic. Riders get an
+/// additional Rider profile (1:1) holding rider-specific fields.
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  email        String
+  phone        String
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  riderProfile             Rider?
+  maintenanceLogsPerformed MaintenanceLog[]
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("users")
+}
+
+/// Rider-specific profile, 1:1 with a User whose role is RIDER.
+/// Soft-deleted (isActive/deletedAt) rather than hard-deleted so that
+/// DailyAssignment/DailyPayment history stays intact.
+model Rider {
+  id                String    @id @default(cuid())
+  tenantId          String    @map("tenant_id")
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  userId            String    @unique @map("user_id")
+  user              User      @relation(fields: [userId], references: [id])
+  licenseNumber     String    @map("license_number")
+  nationalId        String?   @map("national_id")
+  emergencyContact  String?   @map("emergency_contact")
+  isActive          Boolean   @default(true) @map("is_active")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  dailyAssignments DailyAssignment[]
+  dailyPayments    DailyPayment[]
+
+  @@unique([tenantId, licenseNumber])
+  @@index([tenantId])
+  @@map("riders")
+}
+
+/// A fleet motorcycle. Soft-deleted (isActive/deletedAt) rather than hard
+/// deleted so MaintenanceLog/Expense/GpsLocation/DailyAssignment history
+/// stays intact - relations below use onDelete: Restrict to enforce that
+/// at the DB level too.
+model Motorcycle {
+  id                 String           @id @default(cuid())
+  tenantId           String           @map("tenant_id")
+  tenant             Tenant           @relation(fields: [tenantId], references: [id])
+  registrationNumber String           @map("registration_number")
+  make               String?
+  model              String?
+  year               Int?
+  gpsDeviceId        String?          @map("gps_device_id")
+  status             MotorcycleStatus @default(ACTIVE)
+  isActive           Boolean          @default(true) @map("is_active")
+  deletedAt          DateTime?        @map("deleted_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  dailyAssignments DailyAssignment[]
+  gpsLocations     GpsLocation[]
+  maintenanceLogs  MaintenanceLog[]
+  expenses         Expense[]
+
+  @@unique([tenantId, registrationNumber])
+  @@unique([tenantId, gpsDeviceId])
+  @@index([tenantId])
+  @@map("motorcycles")
+}
+
+/// One rider assigned to one motorcycle for one calendar date. A motorcycle
+/// can only be assigned to one rider per day, and vice versa (see the two
+/// @@unique constraints below).
+model DailyAssignment {
+  id            String     @id @default(cuid())
+  tenantId      String     @map("tenant_id")
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  riderId       String     @map("rider_id")
+  rider         Rider      @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  motorcycleId  String     @map("motorcycle_id")
+  motorcycle    Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  assignedDate  DateTime   @map("assigned_date") @db.Date
+  targetAmount  Decimal    @map("target_amount") @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  dailyPayments DailyPayment[]
+
+  @@unique([tenantId, motorcycleId, assignedDate])
+  @@unique([tenantId, riderId, assignedDate])
+  @@index([tenantId])
+  @@map("daily_assignments")
+}
+
+/// A rider's remittance towards a DailyAssignment's targetAmount. One
+/// assignment can have multiple payment rows (e.g. a FAILED attempt
+/// followed by a successful retry), so this is many-to-one, not 1:1.
+model DailyPayment {
+  id                String          @id @default(cuid())
+  tenantId          String          @map("tenant_id")
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  dailyAssignmentId String          @map("daily_assignment_id")
+  dailyAssignment   DailyAssignment @relation(fields: [dailyAssignmentId], references: [id], onDelete: Restrict)
+  riderId           String          @map("rider_id")
+  rider             Rider           @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  amount            Decimal         @db.Decimal(10, 2)
+  status            PaymentStatus   @default(PENDING)
+  paymentMethod     String?         @map("payment_method")
+  paidAt            DateTime?       @map("paid_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([dailyAssignmentId])
+  @@map("daily_payments")
+}
+
+/// Append-only GPS ping log for live tracking. No partitioning/retention
+/// logic yet (MVP scope) - just indexed for the obvious query pattern
+/// (a motorcycle's pings over a time range).
+model GpsLocation {
+  id           String     @id @default(cuid())
+  tenantId     String     @map("tenant_id")
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  motorcycleId String     @map("motorcycle_id")
+  motorcycle   Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  latitude     Float
+  longitude    Float
+  speedKmh     Float?     @map("speed_kmh")
+  heading      Float?
+  recordedAt   DateTime   @map("recorded_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([motorcycleId, recordedAt])
+  @@index([tenantId, recordedAt])
+  @@map("gps_locations")
+}
+
+model MaintenanceLog {
+  id           String     @id @default(cuid())
+  tenantId     String     @map("tenant_id")
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  motorcycleId String     @map("motorcycle_id")
+  motorcycle   Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  mechanicId   String?    @map("mechanic_id")
+  mechanic     User?      @relation(fields: [mechanicId], references: [id])
+  description  String
+  cost         Decimal    @db.Decimal(10, 2)
+  performedAt  DateTime   @map("performed_at") @db.Date
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([motorcycleId])
+  @@map("maintenance_logs")
+}
+
+/// Fleet expense, optionally tied to a specific motorcycle (fuel, repair)
+/// or tenant-wide (e.g. office rent) when motorcycleId is null.
+model Expense {
+  id           String      @id @default(cuid())
+  tenantId     String      @map("tenant_id")
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  motorcycleId String?     @map("motorcycle_id")
+  motorcycle   Motorcycle? @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  category     String
+  amount       Decimal     @db.Decimal(10, 2)
+  incurredAt   DateTime    @map("incurred_at") @db.Date
+  description  String?
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("expenses")
+}
