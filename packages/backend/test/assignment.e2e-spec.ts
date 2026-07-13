@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
 import { cleanDatabase } from './utils/prisma-test.util';
+import { createTestApp } from './utils/create-test-app';
 
 async function signupOwner(app: INestApplication, overrides: Partial<Record<string, string>> = {}) {
   const body = {
@@ -68,8 +69,7 @@ describe('Assignment (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
-    await app.init();
+    app = await createTestApp(moduleFixture);
     prisma = moduleFixture.get(PrismaService);
   });
 

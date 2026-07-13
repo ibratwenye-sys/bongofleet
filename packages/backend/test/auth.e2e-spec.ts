@@ -4,6 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { cleanDatabase } from './utils/prisma-test.util';
+import { createTestApp } from './utils/create-test-app';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -23,8 +24,7 @@ describe('Auth (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
-    await app.init();
+    app = await createTestApp(moduleFixture);
     prisma = moduleFixture.get(PrismaService);
   });
 

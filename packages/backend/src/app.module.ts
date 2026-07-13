@@ -9,6 +9,7 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
+import { MotorcycleModule } from './modules/motorcycle/motorcycle.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -25,6 +26,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     AuthModule,
     PaymentModule,
     AssignmentModule,
+    MotorcycleModule,
   ],
   controllers: [AppController],
   providers: [
