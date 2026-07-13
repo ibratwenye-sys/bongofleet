@@ -1,3 +1,4 @@
+import { validate } from 'class-validator';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -5,6 +6,7 @@ import { DocumentOwnerType, DocumentType, UserRole } from '@prisma/client';
 import { DocumentService, computeDocumentStatus, documentFileFilter } from './document.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { CreateDocumentDto } from './dto/create-document.dto';
 
 describe('DocumentService', () => {
   let service: DocumentService;
@@ -165,5 +167,25 @@ describe('documentFileFilter', () => {
     documentFileFilter({}, makeFile('application/pdf'), callback);
 
     expect(callback).toHaveBeenCalledWith(null, true);
+  });
+});
+
+describe('DocumentType enum - fleet document types', () => {
+  it('includes the new fleet document types alongside the existing ones', () => {
+    expect(DocumentType.VEHICLE_INSPECTION).toBe('VEHICLE_INSPECTION');
+    expect(DocumentType.ROAD_SAFETY_WEEK).toBe('ROAD_SAFETY_WEEK');
+    expect(DocumentType.TBS_CERTIFICATE).toBe('TBS_CERTIFICATE');
+    expect(DocumentType.LATRA).toBe('LATRA');
+  });
+
+  it('CreateDocumentDto validation accepts a TBS_CERTIFICATE docType', async () => {
+    const dto = new CreateDocumentDto();
+    dto.ownerType = DocumentOwnerType.MOTORCYCLE;
+    dto.ownerId = 'moto-1';
+    dto.docType = DocumentType.TBS_CERTIFICATE;
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
   });
 });
