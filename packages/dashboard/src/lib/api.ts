@@ -62,8 +62,14 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}) as { message?: string });
-    throw new ApiError(res.status, body.message ?? `Request failed: ${res.status}`);
+    const body = await res.json().catch(() => ({}) as { message?: string | string[] });
+    // NestJS's default ValidationPipe returns `message` as an array of strings
+    // (one per failed field) for 400s; ConflictException etc. return a plain
+    // string. Normalize both into a single readable message.
+    const message = Array.isArray(body.message)
+      ? body.message.join(', ')
+      : (body.message ?? `Request failed: ${res.status}`);
+    throw new ApiError(res.status, message);
   }
 
   if (res.status === 204) {

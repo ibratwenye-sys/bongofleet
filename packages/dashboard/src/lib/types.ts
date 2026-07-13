@@ -39,9 +39,74 @@ export interface Assignment {
   targetAmount: string; // Prisma Decimal serializes as a string, not a number
 }
 
+export type MotorcycleStatus = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+
 export interface Motorcycle {
   id: string;
   registrationNumber: string;
-  status: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  gpsDeviceId: string | null;
+  status: MotorcycleStatus;
   isActive: boolean;
+}
+
+export interface CreateMotorcyclePayload {
+  registrationNumber: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  gpsDeviceId?: string;
+}
+
+export interface UpdateMotorcyclePayload {
+  registrationNumber?: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  gpsDeviceId?: string;
+  status?: MotorcycleStatus;
+}
+
+// A rider's name/email/phone live on the linked User, not flat on the Rider record
+// (see rider.service.ts's SAFE_USER_SELECT) - passwordHash is never included.
+export interface RiderUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  isActive: boolean;
+}
+
+export interface Rider {
+  id: string;
+  licenseNumber: string;
+  nationalId: string | null;
+  emergencyContact: string | null;
+  isActive: boolean;
+  user: RiderUser;
+}
+
+export interface CreateRiderPayload {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  licenseNumber: string;
+  initialPassword: string;
+  nationalId?: string;
+  emergencyContact?: string;
+}
+
+// No email/initialPassword - UpdateRiderDto deliberately doesn't allow changing
+// either (see rider.service.ts).
+export interface UpdateRiderPayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  licenseNumber?: string;
+  nationalId?: string;
+  emergencyContact?: string;
 }

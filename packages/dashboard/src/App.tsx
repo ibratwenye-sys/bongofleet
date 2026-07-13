@@ -4,6 +4,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { FleetPage } from './pages/FleetPage';
+import { RidersPage } from './pages/RidersPage';
 import { ComingSoonPage } from './pages/ComingSoonPage';
 
 function App() {
@@ -15,8 +17,8 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/fleet" element={<ComingSoonPage title="Fleet" />} />
-              <Route path="/riders" element={<ComingSoonPage title="Riders" />} />
+              <Route path="/fleet" element={<FleetPage />} />
+              <Route path="/riders" element={<RidersPage />} />
               <Route path="/assignments" element={<ComingSoonPage title="Assignments" />} />
               <Route path="/payments" element={<ComingSoonPage title="Payments" />} />
             </Route>
