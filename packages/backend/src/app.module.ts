@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { AssignmentModule } from './modules/assignment/assignment.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -23,6 +24,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     RedisModule,
     AuthModule,
     PaymentModule,
+    AssignmentModule,
   ],
   controllers: [AppController],
   providers: [
