@@ -46,6 +46,33 @@ services:
     volumes:
       - bongofleet_pgadmindata:/var/lib/pgadmin
 
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    container_name: bongofleet-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      # Host is the service name `postgres`/`redis`, not localhost - this container
+      # reaches them over the compose network, not the host's forwarded ports (which
+      # have a known Docker Desktop / Windows Postgres SCRAM auth bug).
+      DATABASE_URL: postgresql://${DB_USER:-bongofleet}:${DB_PASSWORD:-bongofleet_dev_password}@postgres:5432/${DB_NAME:-bongofleet}
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "3000:3000"
+
 volumes:
   bongofleet_pgdata:
   bongofleet_redisdata:

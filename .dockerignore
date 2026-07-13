@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+.git
+.husky
+.pnpm-store
+**/*.tsbuildinfo
+**/.env
+**/.env.local
