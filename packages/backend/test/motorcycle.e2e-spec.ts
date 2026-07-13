@@ -104,6 +104,52 @@ describe('Motorcycle (e2e)', () => {
       .get(`/motorcycles/${createRes.body.id}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
+
+    const listIncludingInactive = await request(app.getHttpServer())
+      .get('/motorcycles')
+      .query({ includeInactive: 'true' })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(listIncludingInactive.body).toHaveLength(1);
+    expect(listIncludingInactive.body[0].isActive).toBe(false);
+
+    const reactivateRes = await request(app.getHttpServer())
+      .patch(`/motorcycles/${createRes.body.id}/reactivate`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(reactivateRes.body.isActive).toBe(true);
+
+    const listAfterReactivate = await request(app.getHttpServer())
+      .get('/motorcycles')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(listAfterReactivate.body).toHaveLength(1);
+  });
+
+  it("enforces tenant isolation on reactivate: a second tenant cannot reactivate the first tenant's motorcycle", async () => {
+    const { accessToken: ownerAToken } = await signupOwner(app);
+
+    const createRes = await request(app.getHttpServer())
+      .post('/motorcycles')
+      .set('Authorization', `Bearer ${ownerAToken}`)
+      .send({ registrationNumber: 'KDA-005E' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/motorcycles/${createRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerAToken}`)
+      .expect(204);
+
+    const { accessToken: ownerBToken } = await signupOwner(app, {
+      email: 'owner-b@other-fleet.test',
+      companyName: 'Other Fleet',
+      phone: '+254700000099',
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/motorcycles/${createRes.body.id}/reactivate`)
+      .set('Authorization', `Bearer ${ownerBToken}`)
+      .expect(404);
   });
 
   it('rejects a duplicate registrationNumber', async () => {

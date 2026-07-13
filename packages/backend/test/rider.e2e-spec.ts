@@ -97,6 +97,59 @@ describe('Rider (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listAfterDeactivate.body).toHaveLength(0);
+
+    const listIncludingInactive = await request(app.getHttpServer())
+      .get('/riders')
+      .query({ includeInactive: 'true' })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(listIncludingInactive.body).toHaveLength(1);
+    expect(listIncludingInactive.body[0].isActive).toBe(false);
+
+    const reactivateRes = await request(app.getHttpServer())
+      .patch(`/riders/${createRes.body.id}/reactivate`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(reactivateRes.body.isActive).toBe(true);
+
+    // end-to-end proof reactivation actually restores login, not just a flag flip
+    const loginAfterReactivate = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: riderBody.email, password: riderBody.initialPassword })
+      .expect(200);
+    expect(loginAfterReactivate.body.accessToken).toBeDefined();
+
+    const listAfterReactivate = await request(app.getHttpServer())
+      .get('/riders')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(listAfterReactivate.body).toHaveLength(1);
+  });
+
+  it("enforces tenant isolation on reactivate: a second tenant cannot reactivate the first tenant's rider", async () => {
+    const { accessToken: ownerAToken } = await signupOwner(app);
+
+    const createRes = await request(app.getHttpServer())
+      .post('/riders')
+      .set('Authorization', `Bearer ${ownerAToken}`)
+      .send(riderBody)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/riders/${createRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerAToken}`)
+      .expect(204);
+
+    const { accessToken: ownerBToken } = await signupOwner(app, {
+      email: 'owner-b@other-fleet.test',
+      companyName: 'Other Fleet',
+      phone: '+254700000099',
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/riders/${createRes.body.id}/reactivate`)
+      .set('Authorization', `Bearer ${ownerBToken}`)
+      .expect(404);
   });
 
   it('rejects a duplicate email', async () => {

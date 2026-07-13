@@ -100,7 +100,7 @@ export class RiderService {
   async list(query: ListRidersQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const where: Prisma.RiderWhereInput = { isActive: true };
+    const where: Prisma.RiderWhereInput = query.includeInactive ? {} : { isActive: true };
 
     if (query.search) {
       where.OR = [
@@ -211,5 +211,29 @@ export class RiderService {
         data: { isActive: false },
       });
     });
+  }
+
+  async reactivate(id: string, actor: AuthenticatedUser) {
+    assertOwnerOrManager(actor);
+
+    const existing = await this.prisma.client.rider.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Rider not found');
+    }
+
+    const { rider, user } = await this.prisma.client.$transaction(async (tx) => {
+      const rider = await tx.rider.update({
+        where: { id },
+        data: { isActive: true, deletedAt: null },
+      });
+      const user = await tx.user.update({
+        where: { id: existing.userId },
+        data: { isActive: true },
+        select: SAFE_USER_SELECT,
+      });
+      return { rider, user };
+    });
+
+    return { ...rider, user };
   }
 }

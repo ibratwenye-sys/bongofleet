@@ -65,7 +65,7 @@ export class MotorcycleService {
   async list(query: ListMotorcyclesQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const where: Prisma.MotorcycleWhereInput = { isActive: true };
+    const where: Prisma.MotorcycleWhereInput = query.includeInactive ? {} : { isActive: true };
 
     if (query.status) {
       where.status = query.status;
@@ -148,6 +148,20 @@ export class MotorcycleService {
     await this.prisma.client.motorcycle.update({
       where: { id },
       data: { isActive: false, deletedAt: new Date() },
+    });
+  }
+
+  async reactivate(id: string, actor: AuthenticatedUser) {
+    assertOwnerOrManager(actor);
+
+    const existing = await this.prisma.client.motorcycle.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Motorcycle not found');
+    }
+
+    return this.prisma.client.motorcycle.update({
+      where: { id },
+      data: { isActive: true, deletedAt: null },
     });
   }
 }

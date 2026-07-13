@@ -57,4 +57,9 @@ export class MotorcycleController {
   async deactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     await this.motorcycleService.deactivate(id, actor);
   }
+
+  @Patch(':id/reactivate')
+  reactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.motorcycleService.reactivate(id, actor);
+  }
 }

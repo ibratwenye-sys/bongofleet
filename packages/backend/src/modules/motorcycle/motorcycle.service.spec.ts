@@ -151,4 +151,57 @@ describe('MotorcycleService', () => {
       });
     });
   });
+
+  describe('list', () => {
+    it('defaults to active-only motorcycles', async () => {
+      prisma.client.motorcycle.findMany.mockResolvedValue([]);
+
+      await service.list({}, owner);
+
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } }),
+      );
+    });
+
+    it('omits the isActive filter when includeInactive is true', async () => {
+      prisma.client.motorcycle.findMany.mockResolvedValue([]);
+
+      await service.list({ includeInactive: true }, owner);
+
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    });
+  });
+
+  describe('reactivate', () => {
+    it('sets isActive=true and clears deletedAt', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ id: 'moto-1', isActive: false });
+      prisma.client.motorcycle.update.mockResolvedValue({
+        id: 'moto-1',
+        isActive: true,
+        deletedAt: null,
+      });
+
+      await service.reactivate('moto-1', owner);
+
+      expect(prisma.client.motorcycle.update).toHaveBeenCalledWith({
+        where: { id: 'moto-1' },
+        data: { isActive: true, deletedAt: null },
+      });
+    });
+
+    it('throws NotFound when the motorcycle does not exist', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(null);
+
+      await expect(service.reactivate('missing', owner)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws Forbidden when called by a RIDER', async () => {
+      await expect(service.reactivate('moto-1', riderActor)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();
+    });
+  });
 });

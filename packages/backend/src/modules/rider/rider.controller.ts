@@ -57,4 +57,9 @@ export class RiderController {
   async deactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     await this.riderService.deactivate(id, actor);
   }
+
+  @Patch(':id/reactivate')
+  reactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.riderService.reactivate(id, actor);
+  }
 }
