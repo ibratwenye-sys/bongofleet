@@ -7,6 +7,8 @@ const TABLES_FK_SAFE_ORDER = [
   'daily_assignments',
   'maintenance_logs',
   'expenses',
+  'documents',
+  'guarantors',
   'riders',
   'motorcycles',
   'users',

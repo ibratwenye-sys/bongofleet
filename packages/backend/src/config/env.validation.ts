@@ -13,4 +13,6 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
   CORS_ORIGINS: Joi.string().allow('').default(''),
+
+  UPLOADS_DIR: Joi.string().default('./uploads'),
 });

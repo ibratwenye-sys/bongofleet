@@ -31,6 +31,26 @@ enum MotorcycleStatus {
   @@map("motorcycle_status")
 }
 
+enum DocumentOwnerType {
+  RIDER
+  MOTORCYCLE
+  GUARANTOR
+
+  @@map("document_owner_type")
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  DRIVERS_LICENSE
+  LATRA
+  INSURANCE
+  REGISTRATION_CARD
+  GUARANTOR_ID
+  OTHER
+
+  @@map("document_type")
+}
+
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
@@ -50,6 +70,8 @@ model Tenant {
   gpsLocations      GpsLocation[]
   maintenanceLogs   MaintenanceLog[]
   expenses          Expense[]
+  guarantors        Guarantor[]
+  documents         Document[]
 
   @@map("tenants")
 }
@@ -98,10 +120,62 @@ model Rider {
 
   dailyAssignments DailyAssignment[]
   dailyPayments    DailyPayment[]
+  guarantors       Guarantor[]
 
   @@unique([tenantId, licenseNumber])
   @@index([tenantId])
   @@map("riders")
+}
+
+/// A rider's named guarantor (a person who vouches for them), e.g. for a
+/// bike-financing arrangement. A rider can have any number of guarantors -
+/// no minimum is enforced here (the UI will encourage at least two).
+model Guarantor {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  riderId      String    @map("rider_id")
+  rider        Rider     @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  phone        String
+  relationship String?
+  nationalId   String?   @map("national_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([riderId])
+  @@map("guarantors")
+}
+
+/// An uploaded document (ID, license, insurance, etc.) belonging to a rider,
+/// motorcycle, or guarantor. Polymorphic by ownerType/ownerId rather than a
+/// Prisma relation, since it can point at three different tables. File bytes
+/// live on disk (see UPLOADS_DIR); only metadata + the storage path live here.
+model Document {
+  id              String            @id @default(cuid())
+  tenantId        String            @map("tenant_id")
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  ownerType       DocumentOwnerType @map("owner_type")
+  ownerId         String            @map("owner_id")
+  docType         DocumentType      @map("doc_type")
+  referenceNumber String?           @map("reference_number")
+  expiryDate      DateTime?         @map("expiry_date") @db.Date
+  fileName        String            @map("file_name")
+  mimeType        String            @map("mime_type")
+  storageKey      String            @map("storage_key")
+  sizeBytes       Int               @map("size_bytes")
+  uploadedAt      DateTime          @map("uploaded_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([ownerType, ownerId])
+  @@index([tenantId, expiryDate])
+  @@map("documents")
 }
 
 /// A fleet motorcycle. Soft-deleted (isActive/deletedAt) rather than hard

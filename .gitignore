@@ -34,3 +34,6 @@ coverage/
 
 # Docker volumes (bind-mounted local data, if any)
 docker/pgdata/
+
+# Uploaded document files (local dev; real data lives in the Docker volume)
+packages/backend/uploads/

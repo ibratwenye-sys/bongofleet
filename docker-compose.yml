@@ -70,10 +70,14 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      UPLOADS_DIR: /workspace/uploads
     ports:
       - "3000:3000"
+    volumes:
+      - bongofleet_uploads:/workspace/uploads
 
 volumes:
   bongofleet_pgdata:
   bongofleet_redisdata:
   bongofleet_pgadmindata:
+  bongofleet_uploads:

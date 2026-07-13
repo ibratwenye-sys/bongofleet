@@ -8,3 +8,4 @@
 **/*.tsbuildinfo
 **/.env
 **/.env.local
+**/uploads

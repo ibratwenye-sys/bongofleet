@@ -11,6 +11,8 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
 import { MotorcycleModule } from './modules/motorcycle/motorcycle.module';
 import { RiderModule } from './modules/rider/rider.module';
+import { DocumentModule } from './modules/document/document.module';
+import { GuarantorModule } from './modules/guarantor/guarantor.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -29,6 +31,8 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     AssignmentModule,
     MotorcycleModule,
     RiderModule,
+    DocumentModule,
+    GuarantorModule,
   ],
   controllers: [AppController],
   providers: [
