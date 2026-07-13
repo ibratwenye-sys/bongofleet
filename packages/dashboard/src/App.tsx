@@ -8,6 +8,8 @@ import { FleetPage } from './pages/FleetPage';
 import { RidersPage } from './pages/RidersPage';
 import { AssignmentsPage } from './pages/AssignmentsPage';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { RiderDetailPage } from './pages/RiderDetailPage';
+import { MotorcycleDetailPage } from './pages/MotorcycleDetailPage';
 
 function App() {
   return (
@@ -19,7 +21,9 @@ function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/fleet" element={<FleetPage />} />
+              <Route path="/fleet/:motorcycleId" element={<MotorcycleDetailPage />} />
               <Route path="/riders" element={<RidersPage />} />
+              <Route path="/riders/:riderId" element={<RiderDetailPage />} />
               <Route path="/assignments" element={<AssignmentsPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
             </Route>

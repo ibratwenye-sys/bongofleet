@@ -131,3 +131,64 @@ export interface UpdateRiderPayload {
   nationalId?: string;
   emergencyContact?: string;
 }
+
+export type DocumentOwnerType = 'RIDER' | 'MOTORCYCLE' | 'GUARANTOR';
+
+export type DocType =
+  | 'NATIONAL_ID'
+  | 'DRIVERS_LICENSE'
+  | 'LATRA'
+  | 'INSURANCE'
+  | 'REGISTRATION_CARD'
+  | 'GUARANTOR_ID'
+  | 'OTHER';
+
+export type DocumentExpiryStatus = 'VALID' | 'EXPIRING_SOON' | 'EXPIRED';
+
+// The raw shape returned by POST/GET /documents - deliberately has no
+// `status` field (see document.service.ts's list()); only GET
+// /documents/expiring computes one (see ExpiringDocument below).
+export interface Document {
+  id: string;
+  ownerType: DocumentOwnerType;
+  ownerId: string;
+  docType: DocType;
+  referenceNumber: string | null;
+  expiryDate: string | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
+export interface ExpiringDocument extends Document {
+  status: DocumentExpiryStatus;
+  ownerLabel: string;
+}
+
+export interface Guarantor {
+  id: string;
+  riderId: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  relationship: string | null;
+  nationalId: string | null;
+  isActive: boolean;
+}
+
+export interface CreateGuarantorPayload {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  relationship?: string;
+  nationalId?: string;
+}
+
+export interface UpdateGuarantorPayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  relationship?: string;
+  nationalId?: string;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch, ApiError } from '../lib/api';
 import type { CreateRiderPayload, Rider, UpdateRiderPayload } from '../lib/types';
 import { Modal } from '../components/Modal';
@@ -334,7 +335,9 @@ export function RidersPage() {
               filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-2 font-medium text-gray-900">
-                    {r.user.firstName} {r.user.lastName}
+                    <Link to={`/riders/${r.id}`} className="hover:underline">
+                      {r.user.firstName} {r.user.lastName}
+                    </Link>
                   </td>
                   <td className="px-4 py-2 text-gray-600">{r.user.phone}</td>
                   <td className="px-4 py-2 text-gray-600">{r.user.email}</td>

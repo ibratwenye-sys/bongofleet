@@ -10,6 +10,12 @@ export const PAYMENT_STATUS_STYLES: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-700',
 };
 
+export const DOCUMENT_STATUS_STYLES: Record<string, string> = {
+  VALID: 'bg-green-100 text-green-800',
+  EXPIRING_SOON: 'bg-amber-100 text-amber-800',
+  EXPIRED: 'bg-red-100 text-red-700',
+};
+
 export function StatusBadge({
   status,
   styles,

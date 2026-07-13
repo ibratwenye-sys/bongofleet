@@ -14,8 +14,11 @@ export class ApiError extends Error {
 
 async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const accessToken = tokenStore.getAccessToken();
+  // FormData bodies (file uploads) must NOT get an explicit Content-Type - the
+  // browser sets 'multipart/form-data; boundary=...' itself, and overriding it
+  // here would drop the boundary and break multer's parsing server-side.
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (accessToken) {
@@ -77,4 +80,24 @@ export async function apiFetch<T>(
   }
 
   return res.json() as Promise<T>;
+}
+
+export async function apiFetchBlob(path: string, isRetry = false): Promise<Blob> {
+  const res = await rawFetch(path);
+
+  if (res.status === 401 && !isRetry) {
+    const refreshed = await refreshTokens();
+    if (refreshed) {
+      return apiFetchBlob(path, true);
+    }
+    tokenStore.clear();
+    window.location.assign('/login');
+    throw new ApiError(401, 'Session expired');
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, `Request failed: ${res.status}`);
+  }
+
+  return res.blob();
 }

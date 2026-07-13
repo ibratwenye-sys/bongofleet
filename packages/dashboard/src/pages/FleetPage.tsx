@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch, ApiError } from '../lib/api';
 import type {
   CreateMotorcyclePayload,
@@ -304,7 +305,11 @@ export function FleetPage() {
             ) : (
               filtered.map((m) => (
                 <tr key={m.id}>
-                  <td className="px-4 py-2 font-medium text-gray-900">{m.registrationNumber}</td>
+                  <td className="px-4 py-2 font-medium text-gray-900">
+                    <Link to={`/fleet/${m.id}`} className="hover:underline">
+                      {m.registrationNumber}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2 text-gray-600">
                     {[m.make, m.model].filter(Boolean).join(' ') || '—'}
                   </td>
