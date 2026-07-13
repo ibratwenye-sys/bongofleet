@@ -8,7 +8,7 @@ import type {
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { StatusBadge } from '../components/StatusBadge';
+import { MOTORCYCLE_STATUS_STYLES, StatusBadge } from '../components/StatusBadge';
 
 const STATUS_OPTIONS: MotorcycleStatus[] = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 
@@ -310,7 +310,7 @@ export function FleetPage() {
                   </td>
                   <td className="px-4 py-2 text-gray-600">{m.year ?? '—'}</td>
                   <td className="px-4 py-2">
-                    <StatusBadge status={m.status} />
+                    <StatusBadge status={m.status} styles={MOTORCYCLE_STATUS_STYLES} />
                   </td>
                   <td className="px-4 py-2 text-gray-600">{m.gpsDeviceId ?? '—'}</td>
                   <td className="px-4 py-2 text-right">

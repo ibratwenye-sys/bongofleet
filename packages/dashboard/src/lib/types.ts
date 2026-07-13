@@ -37,6 +37,27 @@ export interface Assignment {
   motorcycleId: string;
   assignedDate: string;
   targetAmount: string; // Prisma Decimal serializes as a string, not a number
+  notes: string | null;
+}
+
+export interface CreateAssignmentPayload {
+  motorcycleId: string;
+  riderId: string;
+  assignedDate: string;
+  targetAmount: number;
+  notes?: string;
+}
+
+export interface CreatePaymentPayload {
+  dailyAssignmentId: string;
+  riderId: string;
+  amount: number;
+  paymentMethod?: string;
+}
+
+export interface UpdatePaymentPayload {
+  status: PaymentStatus;
+  paymentMethod?: string;
 }
 
 export type MotorcycleStatus = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
