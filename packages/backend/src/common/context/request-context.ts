@@ -19,6 +19,16 @@ export const requestContext = {
     return als.getStore();
   },
 
+  // True nesting via `als.run`, as opposed to `enterWith`. Use this to wrap the
+  // *entire* remainder of a request's handling (see RequestContextInterceptor) -
+  // `enterWith`'s "persists for the rest of the current execution" guarantee is
+  // weaker than it sounds once Nest's own internal RxJS-based pipeline is in the
+  // mix between a guard and the controller/service/Prisma call it's meant to
+  // protect; `run` sidesteps that by making the nesting explicit and synchronous.
+  run<T>(store: RequestContextStore, fn: () => T): T {
+    return als.run(store, fn);
+  },
+
   // `fn` must be awaited *inside* the `als.run` callback, not by the caller after
   // this returns. Prisma's queries are lazy thenables that don't dispatch (and
   // therefore don't invoke the tenant-scoping extension) until `.then()`/`await`

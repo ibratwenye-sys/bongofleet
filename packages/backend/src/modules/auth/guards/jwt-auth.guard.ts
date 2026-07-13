@@ -1,6 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { requestContext } from '../../../common/context/request-context';
 import { AuthenticatedUser } from '../auth.types';
 
 @Injectable()
@@ -10,12 +9,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err instanceof Error ? err : new UnauthorizedException('Unauthorized');
     }
 
-    requestContext.enterWith({
-      tenantId: user.tenantId,
-      userId: user.userId,
-      role: user.role,
-    });
-
+    // Tenant-context population moved to RequestContextInterceptor - it wraps
+    // the whole rest of the pipeline in `als.run`, which reliably survives
+    // Nest's internal RxJS-based dispatch between here and the controller/
+    // service, unlike `enterWith` called from a guard (see that interceptor's
+    // comment for why `enterWith` alone wasn't enough).
     return user as unknown as TUser;
   }
 }
