@@ -16,6 +16,9 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   LATRA: 'LATRA',
   INSURANCE: 'Insurance',
   REGISTRATION_CARD: 'Registration Card',
+  VEHICLE_INSPECTION: 'Vehicle Inspection',
+  ROAD_SAFETY_WEEK: 'Road Safety Week',
+  TBS_CERTIFICATE: 'TBS Certificate',
   GUARANTOR_ID: 'Guarantor ID',
   OTHER: 'Document',
 };

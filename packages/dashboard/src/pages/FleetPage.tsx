@@ -9,7 +9,7 @@ import type {
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { MOTORCYCLE_STATUS_STYLES, StatusBadge } from '../components/StatusBadge';
+import { INACTIVE_STYLES, MOTORCYCLE_STATUS_STYLES, StatusBadge } from '../components/StatusBadge';
 
 const STATUS_OPTIONS: MotorcycleStatus[] = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 
@@ -187,11 +187,15 @@ export function FleetPage() {
   const [statusFilter, setStatusFilter] = useState<MotorcycleStatus | 'ALL'>('ALL');
   const [formTarget, setFormTarget] = useState<'new' | Motorcycle | null>(null);
   const [deactivating, setDeactivating] = useState<Motorcycle | null>(null);
+  const [reactivating, setReactivating] = useState<Motorcycle | null>(null);
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function load() {
     try {
-      const data = await apiFetch<Motorcycle[]>('/motorcycles');
+      const data = await apiFetch<Motorcycle[]>(
+        `/motorcycles${showDeactivated ? '?includeInactive=true' : ''}`,
+      );
       setMotorcycles(data);
     } catch {
       setError('Could not load motorcycles. Please try again.');
@@ -200,7 +204,8 @@ export function FleetPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDeactivated]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -237,6 +242,19 @@ export function FleetPage() {
     }
   }
 
+  async function handleReactivate() {
+    if (!reactivating) return;
+    try {
+      await apiFetch(`/motorcycles/${reactivating.id}/reactivate`, { method: 'PATCH' });
+      setSuccessMessage('Motorcycle reactivated.');
+      setReactivating(null);
+      void load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reactivate motorcycle.');
+      setReactivating(null);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -256,7 +274,7 @@ export function FleetPage() {
       )}
       {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4 flex items-center gap-3">
         <input
           placeholder="Search registration number…"
           value={search}
@@ -275,6 +293,14 @@ export function FleetPage() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={showDeactivated}
+            onChange={(e) => setShowDeactivated(e.target.checked)}
+          />
+          Show deactivated
+        </label>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -304,11 +330,19 @@ export function FleetPage() {
               </tr>
             ) : (
               filtered.map((m) => (
-                <tr key={m.id}>
+                <tr key={m.id} className={m.isActive ? undefined : 'bg-gray-50 text-gray-400'}>
                   <td className="px-4 py-2 font-medium text-gray-900">
-                    <Link to={`/fleet/${m.id}`} className="hover:underline">
+                    <Link
+                      to={`/fleet/${m.id}`}
+                      className={`hover:underline ${m.isActive ? '' : 'text-gray-400'}`}
+                    >
                       {m.registrationNumber}
                     </Link>
+                    {!m.isActive && (
+                      <span className="ml-2">
+                        <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-gray-600">
                     {[m.make, m.model].filter(Boolean).join(' ') || '—'}
@@ -319,18 +353,29 @@ export function FleetPage() {
                   </td>
                   <td className="px-4 py-2 text-gray-600">{m.gpsDeviceId ?? '—'}</td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => setFormTarget(m)}
-                      className="mr-3 text-sm font-medium text-gray-700 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeactivating(m)}
-                      className="text-sm font-medium text-red-600 hover:underline"
-                    >
-                      Deactivate
-                    </button>
+                    {m.isActive ? (
+                      <>
+                        <button
+                          onClick={() => setFormTarget(m)}
+                          className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeactivating(m)}
+                          className="text-sm font-medium text-red-600 hover:underline"
+                        >
+                          Deactivate
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setReactivating(m)}
+                        className="text-sm font-medium text-gray-700 hover:underline"
+                      >
+                        Reactivate
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -355,6 +400,16 @@ export function FleetPage() {
           danger
           onConfirm={handleDeactivate}
           onCancel={() => setDeactivating(null)}
+        />
+      )}
+
+      {reactivating && (
+        <ConfirmDialog
+          title="Reactivate motorcycle"
+          message={`Reactivate ${reactivating.registrationNumber}? It will be visible in the fleet list again.`}
+          confirmLabel="Reactivate"
+          onConfirm={handleReactivate}
+          onCancel={() => setReactivating(null)}
         />
       )}
     </div>

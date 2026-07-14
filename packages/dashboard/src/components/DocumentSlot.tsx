@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import type { Document, DocType, DocumentOwnerType } from '../lib/types';
 import { computeDocumentStatus } from '../lib/document-status';
@@ -12,6 +12,7 @@ export function DocumentSlot({
   ownerId,
   docType,
   label,
+  hint,
   documents,
   onChanged,
 }: {
@@ -19,6 +20,7 @@ export function DocumentSlot({
   ownerId: string;
   docType: DocType;
   label: string;
+  hint?: string;
   documents: Document[];
   onChanged: () => void;
 }) {
@@ -28,16 +30,20 @@ export function DocumentSlot({
   const [viewing, setViewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noFileSelected, setNoFileSelected] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function resetForm() {
     setFile(null);
     setReferenceNumber('');
     setExpiryDate('');
     setError(null);
+    setNoFileSelected(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
   async function handleView() {
@@ -59,9 +65,10 @@ export function DocumentSlot({
     setError(null);
 
     if (!file) {
-      setError('Choose a file to upload.');
+      setNoFileSelected(true);
       return;
     }
+    setNoFileSelected(false);
 
     setSubmitting(true);
     try {
@@ -106,7 +113,10 @@ export function DocumentSlot({
   return (
     <div className="rounded border border-gray-200 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-medium text-gray-700">{label}</p>
+        <p className="text-sm font-medium text-gray-700">
+          {label}
+          {hint && <span className="ml-1 text-xs font-normal text-gray-500">{hint}</span>}
+        </p>
         {existing && !replacing && (
           <StatusBadge
             status={computeDocumentStatus(existing.expiryDate)}
@@ -147,11 +157,26 @@ export function DocumentSlot({
       ) : (
         <form onSubmit={handleUpload} className="space-y-2">
           <input
+            ref={fileInputRef}
             type="file"
             accept={ACCEPTED_TYPES}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setNoFileSelected(false);
+            }}
+            className="hidden"
           />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Choose photo or PDF
+            </button>
+            {file && <span className="truncate text-sm text-gray-600">{file.name}</span>}
+          </div>
+          {noFileSelected && <p className="text-xs text-gray-500">Choose a file to upload.</p>}
           <div className="grid grid-cols-2 gap-2">
             <input
               placeholder="Reference number (optional)"

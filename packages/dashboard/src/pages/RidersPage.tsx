@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../lib/api';
 import type { CreateRiderPayload, Rider, UpdateRiderPayload } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
 
 interface FormState {
   firstName: string;
@@ -228,11 +229,15 @@ export function RidersPage() {
   const [search, setSearch] = useState('');
   const [formTarget, setFormTarget] = useState<'new' | Rider | null>(null);
   const [deactivating, setDeactivating] = useState<Rider | null>(null);
+  const [reactivating, setReactivating] = useState<Rider | null>(null);
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function load() {
     try {
-      const data = await apiFetch<Rider[]>('/riders');
+      const data = await apiFetch<Rider[]>(
+        `/riders${showDeactivated ? '?includeInactive=true' : ''}`,
+      );
       setRiders(data);
     } catch {
       setError('Could not load riders. Please try again.');
@@ -241,7 +246,8 @@ export function RidersPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDeactivated]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -278,6 +284,19 @@ export function RidersPage() {
     }
   }
 
+  async function handleReactivate() {
+    if (!reactivating) return;
+    try {
+      await apiFetch(`/riders/${reactivating.id}/reactivate`, { method: 'PATCH' });
+      setSuccessMessage('Rider reactivated - they can log in again.');
+      setReactivating(null);
+      void load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reactivate rider.');
+      setReactivating(null);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -297,13 +316,21 @@ export function RidersPage() {
       )}
       {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-4">
         <input
           placeholder="Search name or license number…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-64 rounded border border-gray-300 px-3 py-1.5 text-sm"
         />
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={showDeactivated}
+            onChange={(e) => setShowDeactivated(e.target.checked)}
+          />
+          Show deactivated
+        </label>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -333,29 +360,48 @@ export function RidersPage() {
               </tr>
             ) : (
               filtered.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.isActive ? undefined : 'bg-gray-50 text-gray-400'}>
                   <td className="px-4 py-2 font-medium text-gray-900">
-                    <Link to={`/riders/${r.id}`} className="hover:underline">
+                    <Link
+                      to={`/riders/${r.id}`}
+                      className={`hover:underline ${r.isActive ? '' : 'text-gray-400'}`}
+                    >
                       {r.user.firstName} {r.user.lastName}
                     </Link>
+                    {!r.isActive && (
+                      <span className="ml-2">
+                        <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-gray-600">{r.user.phone}</td>
                   <td className="px-4 py-2 text-gray-600">{r.user.email}</td>
                   <td className="px-4 py-2 text-gray-600">{r.licenseNumber}</td>
                   <td className="px-4 py-2 text-gray-600">{r.nationalId ?? '—'}</td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => setFormTarget(r)}
-                      className="mr-3 text-sm font-medium text-gray-700 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeactivating(r)}
-                      className="text-sm font-medium text-red-600 hover:underline"
-                    >
-                      Deactivate
-                    </button>
+                    {r.isActive ? (
+                      <>
+                        <button
+                          onClick={() => setFormTarget(r)}
+                          className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeactivating(r)}
+                          className="text-sm font-medium text-red-600 hover:underline"
+                        >
+                          Deactivate
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setReactivating(r)}
+                        className="text-sm font-medium text-gray-700 hover:underline"
+                      >
+                        Reactivate
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -380,6 +426,16 @@ export function RidersPage() {
           danger
           onConfirm={handleDeactivate}
           onCancel={() => setDeactivating(null)}
+        />
+      )}
+
+      {reactivating && (
+        <ConfirmDialog
+          title="Reactivate rider"
+          message={`Reactivate ${reactivating.user.firstName} ${reactivating.user.lastName}? This restores their ability to log in.`}
+          confirmLabel="Reactivate"
+          onConfirm={handleReactivate}
+          onCancel={() => setReactivating(null)}
         />
       )}
     </div>

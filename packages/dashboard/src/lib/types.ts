@@ -140,6 +140,9 @@ export type DocType =
   | 'LATRA'
   | 'INSURANCE'
   | 'REGISTRATION_CARD'
+  | 'VEHICLE_INSPECTION'
+  | 'ROAD_SAFETY_WEEK'
+  | 'TBS_CERTIFICATE'
   | 'GUARANTOR_ID'
   | 'OTHER';
 

@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
+import { useIdleTimer } from '../lib/useIdleTimer';
+import { IdleLogoutModal } from './IdleLogoutModal';
 
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -12,11 +15,20 @@ const NAV_LINKS = [
 export function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [idleWarning, setIdleWarning] = useState(false);
 
   async function handleLogout() {
     await logout();
     navigate('/login', { replace: true });
   }
+
+  const { reset: resetIdleTimer } = useIdleTimer({
+    onWarn: () => setIdleWarning(true),
+    onTimeout: () => {
+      setIdleWarning(false);
+      void handleLogout();
+    },
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -59,6 +71,15 @@ export function AppShell() {
       <main className="p-6">
         <Outlet />
       </main>
+
+      {idleWarning && (
+        <IdleLogoutModal
+          onStay={() => {
+            resetIdleTimer();
+            setIdleWarning(false);
+          }}
+        />
+      )}
     </div>
   );
 }

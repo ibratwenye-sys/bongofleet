@@ -293,7 +293,7 @@ export function RiderDetailPage() {
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium text-gray-900">Documents</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <DocumentSlot
             ownerType="RIDER"
             ownerId={riderId}
@@ -307,14 +307,6 @@ export function RiderDetailPage() {
             ownerId={riderId}
             docType="DRIVERS_LICENSE"
             label="Driver's License"
-            documents={documents}
-            onChanged={load}
-          />
-          <DocumentSlot
-            ownerType="RIDER"
-            ownerId={riderId}
-            docType="LATRA"
-            label="LATRA"
             documents={documents}
             onChanged={load}
           />

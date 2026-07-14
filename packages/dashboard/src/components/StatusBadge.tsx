@@ -16,6 +16,10 @@ export const DOCUMENT_STATUS_STYLES: Record<string, string> = {
   EXPIRED: 'bg-red-100 text-red-700',
 };
 
+export const INACTIVE_STYLES: Record<string, string> = {
+  INACTIVE: 'bg-gray-200 text-gray-500',
+};
+
 export function StatusBadge({
   status,
   styles,
