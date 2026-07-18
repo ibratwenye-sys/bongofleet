@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -13,6 +14,7 @@ import { MotorcycleModule } from './modules/motorcycle/motorcycle.module';
 import { RiderModule } from './modules/rider/rider.module';
 import { DocumentModule } from './modules/document/document.module';
 import { GuarantorModule } from './modules/guarantor/guarantor.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -24,6 +26,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
       validationSchema: envValidationSchema,
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
     AuthModule,
@@ -33,6 +36,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     RiderModule,
     DocumentModule,
     GuarantorModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

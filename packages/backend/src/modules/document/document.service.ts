@@ -168,7 +168,12 @@ export class DocumentService {
     }));
   }
 
-  private async buildOwnerLabels(
+  /**
+   * Human-readable labels ("KDA-123", "Jane Doe") for the owners of a batch
+   * of documents. Public because the expiry-notification scan reuses it for
+   * digest emails; queries are tenant-scoped by the caller's context.
+   */
+  async buildOwnerLabels(
     documents: Array<{ ownerType: DocumentOwnerType; ownerId: string }>,
   ): Promise<Map<string, string>> {
     const labels = new Map<string, string>();

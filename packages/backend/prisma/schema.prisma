@@ -54,6 +54,13 @@ enum DocumentType {
   @@map("document_type")
 }
 
+enum DocumentAlertKind {
+  EXPIRING_SOON
+  EXPIRED
+
+  @@map("document_alert_kind")
+}
+
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
@@ -75,6 +82,7 @@ model Tenant {
   expenses          Expense[]
   guarantors        Guarantor[]
   documents         Document[]
+  documentAlerts    DocumentAlert[]
 
   @@map("tenants")
 }
@@ -175,10 +183,32 @@ model Document {
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
+  alerts DocumentAlert[]
+
   @@index([tenantId])
   @@index([ownerType, ownerId])
   @@index([tenantId, expiryDate])
   @@map("documents")
+}
+
+/// A record that an expiry alert email has already been sent for a document,
+/// so the daily scan never notifies the owner twice about the same thing.
+/// One row per (document, kind): a document can alert once as EXPIRING_SOON
+/// and once again as EXPIRED. Rows cascade-delete with their document, so a
+/// replaced (re-uploaded) document alerts afresh on its new expiry date.
+model DocumentAlert {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  documentId String            @map("document_id")
+  document   Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  kind       DocumentAlertKind
+  sentTo     String            @map("sent_to")
+  sentAt     DateTime          @default(now()) @map("sent_at")
+
+  @@unique([documentId, kind])
+  @@index([tenantId])
+  @@map("document_alerts")
 }
 
 /// A fleet motorcycle. Soft-deleted (isActive/deletedAt) rather than hard

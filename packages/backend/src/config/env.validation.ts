@@ -15,4 +15,20 @@ export const envValidationSchema = Joi.object({
   CORS_ORIGINS: Joi.string().allow('').default(''),
 
   UPLOADS_DIR: Joi.string().default('./uploads'),
+
+  // --- Outgoing email (document expiry alerts etc.) ---
+  // SMTP_HOST left blank = "log-only" mode: emails are written to the app log
+  // instead of being sent. Safe default for development; set a real SMTP host
+  // (e.g. an SES/Mailgun/Zoho relay) in production.
+  SMTP_HOST: Joi.string().allow('').default(''),
+  SMTP_PORT: Joi.number().default(587),
+  SMTP_SECURE: Joi.boolean().default(false),
+  SMTP_USER: Joi.string().allow('').default(''),
+  SMTP_PASS: Joi.string().allow('').default(''),
+  MAIL_FROM: Joi.string().default('BongoFleet <no-reply@bongofleet.app>'),
+
+  // --- Document expiry scan ---
+  DOCUMENT_EXPIRY_ALERT_DAYS: Joi.number().integer().min(1).max(365).default(30),
+  DOCUMENT_EXPIRY_CRON: Joi.string().default('0 7 * * *'),
+  DOCUMENT_EXPIRY_TZ: Joi.string().default('Africa/Dar_es_Salaam'),
 });

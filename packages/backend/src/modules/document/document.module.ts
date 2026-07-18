@@ -6,5 +6,6 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 @Module({
   controllers: [DocumentController],
   providers: [DocumentService, RolesGuard],
+  exports: [DocumentService],
 })
 export class DocumentModule {}
