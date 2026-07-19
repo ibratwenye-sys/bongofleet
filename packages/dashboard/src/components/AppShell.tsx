@@ -10,6 +10,8 @@ const NAV_LINKS = [
   { to: '/riders', label: 'Riders' },
   { to: '/assignments', label: 'Assignments' },
   { to: '/payments', label: 'Payments' },
+  { to: '/expenses', label: 'Expenses' },
+  { to: '/reports', label: 'Reports' },
 ];
 
 export function AppShell() {

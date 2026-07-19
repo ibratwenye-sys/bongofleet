@@ -195,3 +195,62 @@ export interface UpdateGuarantorPayload {
   relationship?: string;
   nationalId?: string;
 }
+
+// --- Expenses & analytics (money fields are Prisma Decimals -> strings) ---
+
+export interface Expense {
+  id: string;
+  motorcycleId: string | null;
+  category: string;
+  amount: string;
+  incurredAt: string;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface CreateExpensePayload {
+  category: string;
+  amount: number;
+  incurredAt: string;
+  motorcycleId?: string;
+  description?: string;
+}
+
+export interface UpdateExpensePayload {
+  category?: string;
+  amount?: number;
+  incurredAt?: string;
+  motorcycleId?: string;
+  description?: string;
+}
+
+export interface PnlSummary {
+  from: string | null;
+  to: string | null;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+  paymentCount: number;
+  expenseCount: number;
+}
+
+export interface MotorcyclePnl {
+  motorcycleId: string;
+  registrationNumber: string;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
+
+export interface RiderRevenue {
+  riderId: string;
+  riderName: string;
+  revenue: string;
+  paymentCount: number;
+}
+
+export interface ExpenseCategory {
+  category: string;
+  amount: string;
+  count: number;
+}

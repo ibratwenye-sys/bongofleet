@@ -10,6 +10,8 @@ import { AssignmentsPage } from './pages/AssignmentsPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { RiderDetailPage } from './pages/RiderDetailPage';
 import { MotorcycleDetailPage } from './pages/MotorcycleDetailPage';
+import { ExpensesPage } from './pages/ExpensesPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
               <Route path="/riders/:riderId" element={<RiderDetailPage />} />
               <Route path="/assignments" element={<AssignmentsPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
+              <Route path="/expenses" element={<ExpensesPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
             </Route>
           </Route>
         </Routes>
