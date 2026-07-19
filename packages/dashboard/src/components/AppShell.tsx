@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { to: '/assignments', label: 'Assignments' },
   { to: '/payments', label: 'Payments' },
   { to: '/expenses', label: 'Expenses' },
+  { to: '/maintenance', label: 'Maintenance' },
   { to: '/reports', label: 'Reports' },
 ];
 

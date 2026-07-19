@@ -70,6 +70,7 @@ export interface Motorcycle {
   year: number | null;
   gpsDeviceId: string | null;
   status: MotorcycleStatus;
+  currentMileage: number;
   isActive: boolean;
 }
 
@@ -253,4 +254,40 @@ export interface ExpenseCategory {
   category: string;
   amount: string;
   count: number;
+}
+
+// --- Maintenance (money fields are Prisma Decimals -> strings) ---
+
+export interface MaintenanceLog {
+  id: string;
+  motorcycleId: string;
+  mechanicId: string | null;
+  description: string;
+  cost: string;
+  performedAt: string;
+  mileageAtService: number | null;
+  nextServiceDate: string | null;
+  nextServiceMileage: number | null;
+  createdAt: string;
+}
+
+export interface CreateMaintenancePayload {
+  motorcycleId: string;
+  description: string;
+  cost: number;
+  performedAt: string;
+  mechanicId?: string;
+  mileageAtService?: number;
+  nextServiceDate?: string;
+  nextServiceMileage?: number;
+}
+
+export interface UpdateMaintenancePayload {
+  description?: string;
+  cost?: number;
+  performedAt?: string;
+  mechanicId?: string;
+  mileageAtService?: number;
+  nextServiceDate?: string;
+  nextServiceMileage?: number;
 }

@@ -35,4 +35,9 @@ export const envValidationSchema = Joi.object({
   // --- Missed-payment scan ---
   MISSED_PAYMENT_CRON: Joi.string().default('30 7 * * *'),
   MISSED_PAYMENT_LOOKBACK_DAYS: Joi.number().integer().min(1).max(90).default(7),
+
+  // --- Maintenance reminder scan ---
+  MAINTENANCE_REMINDER_CRON: Joi.string().default('0 8 * * *'),
+  MAINTENANCE_REMINDER_DAYS: Joi.number().integer().min(1).max(365).default(14),
+  MAINTENANCE_REMINDER_MILEAGE: Joi.number().integer().min(0).max(100000).default(500),
 });

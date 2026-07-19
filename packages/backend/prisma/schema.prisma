@@ -68,6 +68,13 @@ enum PaymentAlertKind {
   @@map("payment_alert_kind")
 }
 
+enum MaintenanceReminderKind {
+  DUE_SOON
+  OVERDUE
+
+  @@map("maintenance_reminder_kind")
+}
+
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
@@ -91,6 +98,7 @@ model Tenant {
   documents         Document[]
   documentAlerts    DocumentAlert[]
   assignmentAlerts  AssignmentAlert[]
+  maintenanceReminders MaintenanceReminder[]
 
   @@map("tenants")
 }
@@ -233,6 +241,7 @@ model Motorcycle {
   year               Int?
   gpsDeviceId        String?          @map("gps_device_id")
   status             MotorcycleStatus @default(ACTIVE)
+  currentMileage     Int              @default(0) @map("current_mileage")
   isActive           Boolean          @default(true) @map("is_active")
   deletedAt          DateTime?        @map("deleted_at")
   createdAt          DateTime         @default(now()) @map("created_at")
@@ -352,12 +361,38 @@ model MaintenanceLog {
   description  String
   cost         Decimal    @db.Decimal(10, 2)
   performedAt  DateTime   @map("performed_at") @db.Date
+  mileageAtService   Int?      @map("mileage_at_service")
+  nextServiceDate    DateTime? @map("next_service_date") @db.Date
+  nextServiceMileage Int?      @map("next_service_mileage")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  reminders MaintenanceReminder[]
 
   @@index([tenantId])
   @@index([motorcycleId])
   @@map("maintenance_logs")
+}
+
+/// Records that a service-due reminder email has been sent for a maintenance
+/// log's next-service target, so the daily scan never nags the owner twice for
+/// the same target. One row per (maintenanceLog, kind): a target can remind
+/// once as DUE_SOON and once more as OVERDUE. Logging a new service creates a
+/// new maintenance log (a new target), which reminds afresh. Cascade-deletes
+/// with its maintenance log.
+model MaintenanceReminder {
+  id                String                  @id @default(cuid())
+  tenantId          String                  @map("tenant_id")
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id])
+  maintenanceLogId  String                  @map("maintenance_log_id")
+  maintenanceLog    MaintenanceLog          @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
+  kind              MaintenanceReminderKind
+  sentTo            String                  @map("sent_to")
+  sentAt            DateTime                @default(now()) @map("sent_at")
+
+  @@unique([maintenanceLogId, kind])
+  @@index([tenantId])
+  @@map("maintenance_reminders")
 }
 
 /// Fleet expense, optionally tied to a specific motorcycle (fuel, repair)
