@@ -15,6 +15,8 @@ import { RiderModule } from './modules/rider/rider.module';
 import { DocumentModule } from './modules/document/document.module';
 import { GuarantorModule } from './modules/guarantor/guarantor.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { ExpenseModule } from './modules/expense/expense.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -37,6 +39,8 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     DocumentModule,
     GuarantorModule,
     NotificationModule,
+    ExpenseModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [
