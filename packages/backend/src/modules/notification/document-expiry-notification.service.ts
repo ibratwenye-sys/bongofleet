@@ -7,17 +7,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { requestContext } from '../../common/context/request-context';
 import { computeDocumentStatus, DocumentService } from '../document/document.service';
 import { MailerService } from './mailer.service';
+import { resolveOwnerRecipients, TenantSummary } from './notification.util';
 
 export const DOCUMENT_EXPIRY_CRON_JOB = 'document-expiry-scan';
 
 /** Marker recorded as the acting user for system-initiated (cron) work. */
 const SYSTEM_USER_ID = 'system:document-expiry-scan';
-
-interface TenantSummary {
-  id: string;
-  name: string;
-  contactEmail: string | null;
-}
 
 interface PendingAlert {
   document: Document & { alerts: DocumentAlert[] };
@@ -159,7 +154,7 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
           return 0;
         }
 
-        const recipients = await this.resolveRecipients(tenant);
+        const recipients = await resolveOwnerRecipients(this.prisma, tenant);
         if (recipients.length === 0) {
           this.logger.warn(
             `Tenant ${tenant.id} (${tenant.name}) has ${pending.length} document alert(s) ` +
@@ -193,23 +188,6 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
         return pending.length;
       },
     );
-  }
-
-  private async resolveRecipients(tenant: TenantSummary): Promise<string[]> {
-    const owners = await this.prisma.client.user.findMany({
-      where: { role: UserRole.OWNER, isActive: true },
-      select: { email: true },
-    });
-
-    const emails = new Set<string>();
-    for (const owner of owners) {
-      emails.add(owner.email.trim().toLowerCase());
-    }
-    if (tenant.contactEmail) {
-      emails.add(tenant.contactEmail.trim().toLowerCase());
-    }
-    emails.delete('');
-    return [...emails];
   }
 
   private buildDigest(

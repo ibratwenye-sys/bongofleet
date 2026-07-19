@@ -31,4 +31,8 @@ export const envValidationSchema = Joi.object({
   DOCUMENT_EXPIRY_ALERT_DAYS: Joi.number().integer().min(1).max(365).default(30),
   DOCUMENT_EXPIRY_CRON: Joi.string().default('0 7 * * *'),
   DOCUMENT_EXPIRY_TZ: Joi.string().default('Africa/Dar_es_Salaam'),
+
+  // --- Missed-payment scan ---
+  MISSED_PAYMENT_CRON: Joi.string().default('30 7 * * *'),
+  MISSED_PAYMENT_LOOKBACK_DAYS: Joi.number().integer().min(1).max(90).default(7),
 });

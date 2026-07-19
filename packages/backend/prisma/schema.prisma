@@ -61,6 +61,13 @@ enum DocumentAlertKind {
   @@map("document_alert_kind")
 }
 
+enum PaymentAlertKind {
+  NO_PAYMENT
+  SHORTFALL
+
+  @@map("payment_alert_kind")
+}
+
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
@@ -83,6 +90,7 @@ model Tenant {
   guarantors        Guarantor[]
   documents         Document[]
   documentAlerts    DocumentAlert[]
+  assignmentAlerts  AssignmentAlert[]
 
   @@map("tenants")
 }
@@ -259,6 +267,7 @@ model DailyAssignment {
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
   dailyPayments DailyPayment[]
+  alert         AssignmentAlert?
 
   @@unique([tenantId, motorcycleId, assignedDate])
   @@unique([tenantId, riderId, assignedDate])
@@ -287,6 +296,27 @@ model DailyPayment {
   @@index([tenantId])
   @@index([dailyAssignmentId])
   @@map("daily_payments")
+}
+
+/// A record that a missed/short payment alert email has been sent for a
+/// daily assignment, so the daily scan never nags the owner twice about the
+/// same day. One alert ever per assignment (unique dailyAssignmentId): once
+/// the owner has been told a day came up short, further chasing happens in
+/// the dashboard, not their inbox. Cascade-deletes with its assignment.
+model AssignmentAlert {
+  id                String           @id @default(cuid())
+  tenantId          String           @map("tenant_id")
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  dailyAssignmentId String           @unique @map("daily_assignment_id")
+  dailyAssignment   DailyAssignment  @relation(fields: [dailyAssignmentId], references: [id], onDelete: Cascade)
+  kind              PaymentAlertKind
+  targetAmount      Decimal          @map("target_amount") @db.Decimal(10, 2)
+  paidAmount        Decimal          @map("paid_amount") @db.Decimal(10, 2)
+  sentTo            String           @map("sent_to")
+  sentAt            DateTime         @default(now()) @map("sent_at")
+
+  @@index([tenantId])
+  @@map("assignment_alerts")
 }
 
 /// Append-only GPS ping log for live tracking. No partitioning/retention

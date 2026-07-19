@@ -2,6 +2,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { requestContext } from '../../src/common/context/request-context';
 
 const TABLES_FK_SAFE_ORDER = [
+  'assignment_alerts',
   'document_alerts',
   'gps_locations',
   'daily_payments',
