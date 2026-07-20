@@ -126,6 +126,9 @@ importers:
       '@types/passport-jwt':
         specifier: ^4.0.1
         version: 4.0.1
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       '@types/supertest':
         specifier: ^7.2.0
         version: 7.2.0

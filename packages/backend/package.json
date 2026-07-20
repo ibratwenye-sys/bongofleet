@@ -17,7 +17,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@bongofleet/shared-lib": "workspace:*",
@@ -56,6 +57,7 @@
     "@types/node": "^20.16.5",
     "@types/nodemailer": "^8.0.1",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^8.5.0",
     "@typescript-eslint/parser": "^8.5.0",
