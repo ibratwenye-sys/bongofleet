@@ -21,6 +21,8 @@ export interface Assignment {
   assignedDate: string;
   targetAmount: string;
   notes: string | null;
+  /** Permanent, never-repeating ride number (e.g. BF-7K3M9QP2). */
+  reference: string | null;
 }
 
 export interface AssignmentDetail extends Assignment {
@@ -38,6 +40,8 @@ export interface Payment {
   paymentMethod: string | null;
   paidAt: string | null;
   createdAt: string;
+  receiptFileName: string | null;
+  receiptUploadedAt: string | null;
 }
 
 /** A payment recorded while offline, waiting to be sent to the server. */

@@ -272,6 +272,10 @@ model DailyAssignment {
   assignedDate  DateTime   @map("assigned_date") @db.Date
   targetAmount  Decimal    @map("target_amount") @db.Decimal(10, 2)
   notes         String?
+  /// Permanent, never-repeating ride number (e.g. BF-7K3M9QP2) assigned when
+  /// the ride is registered. All of this ride's deposits/receipts quote it, so
+  /// a bank statement or mobile-money callback reconciles back to this ride.
+  reference     String?    @unique
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
@@ -298,6 +302,11 @@ model DailyPayment {
   amount            Decimal         @db.Decimal(10, 2)
   status            PaymentStatus   @default(PENDING)
   paymentMethod     String?         @map("payment_method")
+  receiptStorageKey String?         @map("receipt_storage_key")
+  receiptFileName   String?         @map("receipt_file_name")
+  receiptMimeType   String?         @map("receipt_mime_type")
+  receiptSizeBytes  Int?            @map("receipt_size_bytes")
+  receiptUploadedAt DateTime?       @map("receipt_uploaded_at")
   paidAt            DateTime?       @map("paid_at")
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")

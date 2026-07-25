@@ -27,7 +27,9 @@ export function setOnSessionExpired(handler: () => void): void {
 async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const accessToken = await getAccessToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // Multipart (receipt upload) must NOT get an explicit Content-Type - the
+    // runtime sets 'multipart/form-data; boundary=...' itself.
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (accessToken) {

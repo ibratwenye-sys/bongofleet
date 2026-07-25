@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import * as ImagePicker from 'expo-image-picker';
 import { apiFetch, ApiError, NetworkError } from '../api';
 import { clearTokens, getQueue } from '../storage';
 import { enqueuePayment, flushQueue } from '../queue';
@@ -41,6 +43,7 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
   const refreshQueueCount = useCallback(async () => {
@@ -166,6 +169,55 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
     }
   }
 
+  async function handleUploadReceipt(paymentId: string) {
+    try {
+      if (Platform.OS !== 'web') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Permission needed', 'Allow photo access to attach a receipt.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+
+      const form = new FormData();
+      const name = asset.fileName ?? `receipt-${Date.now()}.jpg`;
+      if (Platform.OS === 'web') {
+        const blob = await (await fetch(asset.uri)).blob();
+        form.append('file', blob, name);
+      } else {
+        form.append('file', {
+          uri: asset.uri,
+          name,
+          type: asset.mimeType ?? 'image/jpeg',
+        } as unknown as Blob);
+      }
+
+      setUploadingId(paymentId);
+      await apiFetch(`/payments/${paymentId}/receipt`, { method: 'POST', body: form });
+      setBanner('Receipt uploaded.');
+      await load();
+    } catch (err) {
+      if (err instanceof NetworkError) {
+        Alert.alert(
+          'No connection',
+          'Cannot upload the receipt while offline. Try again when connected.',
+        );
+      } else if (err instanceof ApiError) {
+        Alert.alert('Upload failed', err.message);
+      } else {
+        Alert.alert('Error', 'Could not upload the receipt. Please try again.');
+      }
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -231,6 +283,15 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
                 <Text style={styles.bike}>
                   {assignment.motorcycle?.registrationNumber ?? 'Motorcycle'}
                 </Text>
+                {assignment.reference && (
+                  <View style={styles.rideBox}>
+                    <Text style={styles.rideLabel}>Ride number</Text>
+                    <Text style={styles.rideNumber}>{assignment.reference}</Text>
+                    <Text style={styles.rideHint}>
+                      Quote this when you deposit, so your payment is matched to this ride.
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.row}>
                   <View style={styles.stat}>
                     <Text style={styles.statLabel}>Target</Text>
@@ -294,12 +355,24 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
         ListEmptyComponent={<Text style={styles.empty}>No payments yet.</Text>}
         renderItem={({ item }) => (
           <View style={styles.paymentRow}>
-            <View>
+            <View style={styles.paymentInfo}>
               <Text style={styles.paymentAmount}>{formatTZS(item.amount)}</Text>
               <Text style={styles.paymentMeta}>
                 {item.createdAt.slice(0, 10)}
                 {item.paymentMethod ? ` · ${item.paymentMethod}` : ''}
               </Text>
+              {item.receiptUploadedAt ? (
+                <Text style={styles.receiptAttached}>✓ Receipt attached</Text>
+              ) : uploadingId === item.id ? (
+                <View style={styles.receiptUploading}>
+                  <ActivityIndicator size="small" color="#2563eb" />
+                  <Text style={styles.receiptUploadingText}>Uploading…</Text>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => void handleUploadReceipt(item.id)}>
+                  <Text style={styles.uploadReceipt}>Upload receipt</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <Text
               style={[
@@ -352,6 +425,21 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
   bike: { fontSize: 22, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  rideBox: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  rideLabel: { fontSize: 11, fontWeight: '600', color: '#1e40af', textTransform: 'uppercase' },
+  rideNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  rideHint: { fontSize: 12, color: '#3b82f6', marginTop: 4 },
   row: { flexDirection: 'row', marginBottom: 16 },
   stat: { flex: 1 },
   statLabel: { fontSize: 12, color: '#6b7280' },
@@ -384,8 +472,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  paymentInfo: { flex: 1, paddingRight: 8 },
   paymentAmount: { fontSize: 16, fontWeight: '600', color: '#111827' },
   paymentMeta: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  receiptAttached: { fontSize: 12, color: '#15803d', fontWeight: '600', marginTop: 6 },
+  uploadReceipt: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginTop: 6 },
+  receiptUploading: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  receiptUploadingText: { fontSize: 12, color: '#2563eb', marginLeft: 6 },
   status: { fontSize: 11, fontWeight: '700', overflow: 'hidden' },
   statusCompleted: { color: '#15803d' },
   statusPending: { color: '#b45309' },

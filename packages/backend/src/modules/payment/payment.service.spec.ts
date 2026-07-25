@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PaymentStatus, UserRole } from '@prisma/client';
 import { PaymentService } from './payment.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -66,7 +67,11 @@ describe('PaymentService', () => {
     };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [PaymentService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PaymentService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: () => './uploads' } },
+      ],
     }).compile();
 
     service = moduleRef.get(PaymentService);

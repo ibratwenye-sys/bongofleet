@@ -8,6 +8,7 @@ import {
 import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { generateRideReference } from '../../common/reference.util';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
@@ -48,24 +49,36 @@ export class AssignmentService {
       throw new ConflictException('This rider already has an assignment on this date');
     }
 
-    try {
-      return await this.prisma.client.dailyAssignment.create({
-        data: {
-          tenantId: actor.tenantId,
-          motorcycleId: dto.motorcycleId,
-          riderId: dto.riderId,
-          assignedDate,
-          targetAmount: dto.targetAmount,
-          notes: dto.notes,
-        },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException(
-          'This motorcycle or rider already has an assignment on this date',
-        );
+    // Retry only on the (astronomically rare) ride-reference collision; a date
+    // conflict on motorcycle/rider is a real ConflictException, not a retry.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.prisma.client.dailyAssignment.create({
+          data: {
+            tenantId: actor.tenantId,
+            motorcycleId: dto.motorcycleId,
+            riderId: dto.riderId,
+            assignedDate,
+            targetAmount: dto.targetAmount,
+            notes: dto.notes,
+            reference: generateRideReference(),
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          const target = error.meta?.target;
+          const referenceCollision = Array.isArray(target)
+            ? target.some((t) => String(t).includes('reference'))
+            : String(target ?? '').includes('reference');
+          if (referenceCollision && attempt < 5) {
+            continue;
+          }
+          throw new ConflictException(
+            'This motorcycle or rider already has an assignment on this date',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
   }
 

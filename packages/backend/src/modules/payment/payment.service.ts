@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
+import { promises as fs } from 'node:fs';
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, PaymentStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -13,9 +17,35 @@ import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 
 const AMOUNT_CAP_MULTIPLIER = 1.5;
 
+export const ALLOWED_RECEIPT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+export const MAX_RECEIPT_SIZE_BYTES = 10 * 1024 * 1024;
+
+export function receiptFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+): void {
+  if (!ALLOWED_RECEIPT_MIME_TYPES.has(file.mimetype)) {
+    callback(new BadRequestException('Only JPEG, PNG, or PDF receipts are allowed'), false);
+    return;
+  }
+  callback(null, true);
+}
+
+function sanitizeFileName(originalName: string): string {
+  return originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
 @Injectable()
 export class PaymentService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly uploadsDir: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
+    this.uploadsDir = this.config.get<string>('UPLOADS_DIR', './uploads');
+  }
 
   async createPayment(dto: CreatePaymentDto, actor: AuthenticatedUser) {
     const assignment = await this.prisma.client.dailyAssignment.findUnique({
@@ -148,6 +178,73 @@ export class PaymentService {
       where: { dailyAssignmentId: assignmentId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async uploadReceipt(id: string, file: Express.Multer.File, actor: AuthenticatedUser) {
+    const payment = await this.prisma.client.dailyPayment.findUnique({ where: { id } });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    if (actor.role === UserRole.RIDER) {
+      const ownRiderId = await this.getOwnRiderId(actor);
+      if (payment.riderId !== ownRiderId) {
+        // Same "not found" as an unknown id, so a rider can't probe others' ids.
+        throw new NotFoundException('Payment not found');
+      }
+    }
+
+    const fileName = `${randomUUID()}-${sanitizeFileName(file.originalname)}`;
+    const storageKey = path.join(actor.tenantId, 'payment-receipts', fileName);
+    const absolutePath = path.join(this.uploadsDir, storageKey);
+
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, file.buffer);
+
+    try {
+      const updated = await this.prisma.client.dailyPayment.update({
+        where: { id },
+        data: {
+          receiptStorageKey: storageKey,
+          receiptFileName: file.originalname,
+          receiptMimeType: file.mimetype,
+          receiptSizeBytes: file.size,
+          receiptUploadedAt: new Date(),
+        },
+      });
+      // Replacing an earlier receipt? drop the now-orphaned file.
+      if (payment.receiptStorageKey && payment.receiptStorageKey !== storageKey) {
+        await fs
+          .unlink(path.join(this.uploadsDir, payment.receiptStorageKey))
+          .catch(() => undefined);
+      }
+      return updated;
+    } catch (error) {
+      await fs.unlink(absolutePath).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async getReceiptFile(id: string, actor: AuthenticatedUser) {
+    const payment = await this.prisma.client.dailyPayment.findUnique({ where: { id } });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    if (actor.role === UserRole.RIDER) {
+      const ownRiderId = await this.getOwnRiderId(actor);
+      if (payment.riderId !== ownRiderId) {
+        throw new NotFoundException('Payment not found');
+      }
+    }
+    if (!payment.receiptStorageKey) {
+      throw new NotFoundException('No receipt uploaded for this payment');
+    }
+    const absolutePath = path.join(this.uploadsDir, payment.receiptStorageKey);
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      throw new NotFoundException('Receipt file not found');
+    }
+    return { payment, absolutePath };
   }
 
   private async getOwnRiderId(actor: AuthenticatedUser): Promise<string> {
