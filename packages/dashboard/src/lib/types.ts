@@ -62,9 +62,12 @@ export interface UpdatePaymentPayload {
 
 export type MotorcycleStatus = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
 
+export type VehicleType = 'MOTORBIKE' | 'BAJAJI' | 'CAR' | 'TRUCK';
+
 export interface Motorcycle {
   id: string;
   registrationNumber: string;
+  vehicleType: VehicleType;
   make: string | null;
   model: string | null;
   year: number | null;
@@ -76,6 +79,7 @@ export interface Motorcycle {
 
 export interface CreateMotorcyclePayload {
   registrationNumber: string;
+  vehicleType?: VehicleType;
   make?: string;
   model?: string;
   year?: number;
@@ -84,6 +88,7 @@ export interface CreateMotorcyclePayload {
 
 export interface UpdateMotorcyclePayload {
   registrationNumber?: string;
+  vehicleType?: VehicleType;
   make?: string;
   model?: string;
   year?: number;

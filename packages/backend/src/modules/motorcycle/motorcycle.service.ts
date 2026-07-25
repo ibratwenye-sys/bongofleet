@@ -45,6 +45,7 @@ export class MotorcycleService {
         data: {
           tenantId: actor.tenantId,
           registrationNumber: dto.registrationNumber,
+          vehicleType: dto.vehicleType,
           make: dto.make,
           model: dto.model,
           year: dto.year,
@@ -69,6 +70,10 @@ export class MotorcycleService {
 
     if (query.status) {
       where.status = query.status;
+    }
+
+    if (query.vehicleType) {
+      where.vehicleType = query.vehicleType;
     }
 
     if (query.search) {
@@ -120,6 +125,7 @@ export class MotorcycleService {
         where: { id },
         data: {
           registrationNumber: dto.registrationNumber,
+          vehicleType: dto.vehicleType,
           make: dto.make,
           model: dto.model,
           year: dto.year,

@@ -23,6 +23,13 @@ enum PaymentStatus {
   @@map("payment_status")
 }
 
+enum VehicleType {
+  MOTORBIKE
+  BAJAJI
+  CAR
+  TRUCK
+}
+
 enum MotorcycleStatus {
   ACTIVE
   MAINTENANCE
@@ -236,6 +243,7 @@ model Motorcycle {
   tenantId           String           @map("tenant_id")
   tenant             Tenant           @relation(fields: [tenantId], references: [id])
   registrationNumber String           @map("registration_number")
+  vehicleType        VehicleType      @default(MOTORBIKE) @map("vehicle_type")
   make               String?
   model              String?
   year               Int?

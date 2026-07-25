@@ -6,6 +6,7 @@ import type {
   Motorcycle,
   MotorcycleStatus,
   UpdateMotorcyclePayload,
+  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -13,8 +14,17 @@ import { INACTIVE_STYLES, MOTORCYCLE_STATUS_STYLES, StatusBadge } from '../compo
 
 const STATUS_OPTIONS: MotorcycleStatus[] = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 
+const VEHICLE_TYPE_OPTIONS: VehicleType[] = ['MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
+const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
+  MOTORBIKE: 'Motorbike',
+  BAJAJI: 'Bajaji',
+  CAR: 'Car',
+  TRUCK: 'Truck',
+};
+
 interface FormState {
   registrationNumber: string;
+  vehicleType: VehicleType;
   make: string;
   model: string;
   year: string;
@@ -25,6 +35,7 @@ interface FormState {
 function toFormState(motorcycle: Motorcycle | null): FormState {
   return {
     registrationNumber: motorcycle?.registrationNumber ?? '',
+    vehicleType: motorcycle?.vehicleType ?? 'MOTORBIKE',
     make: motorcycle?.make ?? '',
     model: motorcycle?.model ?? '',
     year: motorcycle?.year != null ? String(motorcycle.year) : '',
@@ -61,6 +72,7 @@ function MotorcycleFormModal({
       if (isEdit) {
         const payload: UpdateMotorcyclePayload = {
           registrationNumber: form.registrationNumber.trim(),
+          vehicleType: form.vehicleType,
           make: form.make.trim() || undefined,
           model: form.model.trim() || undefined,
           year: form.year ? Number(form.year) : undefined,
@@ -71,17 +83,18 @@ function MotorcycleFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Motorcycle updated.');
+        onSaved('Vehicle updated.');
       } else {
         const payload: CreateMotorcyclePayload = {
           registrationNumber: form.registrationNumber.trim(),
+          vehicleType: form.vehicleType,
           make: form.make.trim() || undefined,
           model: form.model.trim() || undefined,
           year: form.year ? Number(form.year) : undefined,
           gpsDeviceId: form.gpsDeviceId.trim() || undefined,
         };
         await apiFetch('/motorcycles', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Motorcycle added.');
+        onSaved('Vehicle added.');
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -91,7 +104,7 @@ function MotorcycleFormModal({
   }
 
   return (
-    <Modal title={isEdit ? 'Edit motorcycle' : 'Add motorcycle'} onClose={onClose}>
+    <Modal title={isEdit ? 'Edit vehicle' : 'Add vehicle'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -102,6 +115,20 @@ function MotorcycleFormModal({
             onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle type</label>
+          <select
+            value={form.vehicleType}
+            onChange={(e) => setForm({ ...form, vehicleType: e.target.value as VehicleType })}
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          >
+            {VEHICLE_TYPE_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {VEHICLE_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -185,6 +212,7 @@ export function FleetPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MotorcycleStatus | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<VehicleType | 'ALL'>('ALL');
   const [formTarget, setFormTarget] = useState<'new' | Motorcycle | null>(null);
   const [deactivating, setDeactivating] = useState<Motorcycle | null>(null);
   const [reactivating, setReactivating] = useState<Motorcycle | null>(null);
@@ -217,11 +245,12 @@ export function FleetPage() {
     if (!motorcycles) return [];
     return motorcycles.filter((m) => {
       const matchesStatus = statusFilter === 'ALL' || m.status === statusFilter;
+      const matchesType = typeFilter === 'ALL' || m.vehicleType === typeFilter;
       const matchesSearch =
         !search.trim() || m.registrationNumber.toLowerCase().includes(search.trim().toLowerCase());
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesType && matchesSearch;
     });
-  }, [motorcycles, search, statusFilter]);
+  }, [motorcycles, search, statusFilter, typeFilter]);
 
   function handleSaved(message: string) {
     setFormTarget(null);
@@ -263,7 +292,7 @@ export function FleetPage() {
           onClick={() => setFormTarget('new')}
           className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          Add motorcycle
+          Add vehicle
         </button>
       </div>
 
@@ -281,6 +310,18 @@ export function FleetPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64 rounded border border-gray-300 px-3 py-1.5 text-sm"
         />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as VehicleType | 'ALL')}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+        >
+          <option value="ALL">All types</option>
+          {VEHICLE_TYPE_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {VEHICLE_TYPE_LABELS[t]}
+            </option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as MotorcycleStatus | 'ALL')}
@@ -308,6 +349,7 @@ export function FleetPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Registration</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Type</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Make/Model</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Year</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Status</th>
@@ -318,14 +360,14 @@ export function FleetPage() {
           <tbody className="divide-y divide-gray-100">
             {motorcycles === null ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
-                  No motorcycles found.
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  No vehicles found.
                 </td>
               </tr>
             ) : (
@@ -344,6 +386,7 @@ export function FleetPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2 text-gray-600">{VEHICLE_TYPE_LABELS[m.vehicleType]}</td>
                   <td className="px-4 py-2 text-gray-600">
                     {[m.make, m.model].filter(Boolean).join(' ') || '—'}
                   </td>

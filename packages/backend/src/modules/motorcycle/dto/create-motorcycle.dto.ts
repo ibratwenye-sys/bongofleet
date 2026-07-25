@@ -1,12 +1,16 @@
 import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { MotorcycleStatus } from '@prisma/client';
+import { MotorcycleStatus, VehicleType } from '@prisma/client';
 
 export class CreateMotorcycleDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   registrationNumber: string;
+
+  @IsOptional()
+  @IsEnum(VehicleType)
+  vehicleType?: VehicleType;
 
   @IsOptional()
   @IsString()
