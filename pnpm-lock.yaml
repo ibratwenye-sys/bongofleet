@@ -66,8 +66,8 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       cron:
-        specifier: ^3.2.1
-        version: 3.5.0
+        specifier: 3.2.1
+        version: 3.2.1
       helmet:
         specifier: ^8.2.0
         version: 8.3.0
@@ -178,10 +178,10 @@ importers:
         specifier: workspace:*
         version: link:../shared-lib
       react:
-        specifier: 19.2.3
+        specifier: ^19.2.0
         version: 19.2.3
       react-dom:
-        specifier: 19.2.8
+        specifier: ^19.2.0
         version: 19.2.8(react@19.2.3)
       react-router-dom:
         specifier: ^7.18.1
@@ -2741,9 +2741,6 @@ packages:
 
   cron@3.2.1:
     resolution: {integrity: sha512-w2n5l49GMmmkBFEsH9FIDhjZ1n1QgTMOCMGuQtOXs5veNiosZmso6bQGuqOJSYAXXrG84WQFVneNk+Yt0Ua9iw==}
-
-  cron@3.5.0:
-    resolution: {integrity: sha512-0eYZqCnapmxYcV06uktql93wNWdlTmmBFP2iYz+JPVcQqlyFYcn1lFuIk4R54pkOmE7mcldTAPZv6X5XA4Q46A==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -8925,11 +8922,6 @@ snapshots:
   create-require@1.1.1: {}
 
   cron@3.2.1:
-    dependencies:
-      '@types/luxon': 3.4.2
-      luxon: 3.5.0
-
-  cron@3.5.0:
     dependencies:
       '@types/luxon': 3.4.2
       luxon: 3.5.0
