@@ -219,6 +219,7 @@ export interface CreateExpensePayload {
   amount: number;
   incurredAt: string;
   motorcycleId?: string;
+  transportJobId?: string;
   description?: string;
 }
 
@@ -253,6 +254,62 @@ export interface RiderRevenue {
   riderName: string;
   revenue: string;
   paymentCount: number;
+}
+
+// --- Transport jobs (cars/trucks) ---
+
+export type TransportJobStatus = 'SCHEDULED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED';
+
+export interface TransportJob {
+  id: string;
+  motorcycleId: string;
+  motorcycle: { registrationNumber: string; vehicleType: VehicleType } | null;
+  riderId: string | null;
+  rider: { user: { firstName: string; lastName: string } } | null;
+  ownerDriven: boolean;
+  reference: string | null;
+  origin: string;
+  destination: string;
+  cargo: string | null;
+  revenue: string;
+  status: TransportJobStatus;
+  scheduledDate: string;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  expensesTotal: string;
+  netProfit: string;
+}
+
+export interface VehicleTransportSummary {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: VehicleType | null;
+  jobCount: number;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
+
+export interface CreateTransportJobPayload {
+  motorcycleId: string;
+  riderId?: string;
+  ownerDriven?: boolean;
+  origin: string;
+  destination: string;
+  cargo?: string;
+  revenue: number;
+  scheduledDate: string;
+}
+
+export interface UpdateTransportJobPayload {
+  riderId?: string;
+  ownerDriven?: boolean;
+  origin?: string;
+  destination?: string;
+  cargo?: string;
+  revenue?: number;
+  scheduledDate?: string;
+  status?: TransportJobStatus;
 }
 
 export interface ExpenseCategory {

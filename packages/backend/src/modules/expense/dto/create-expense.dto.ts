@@ -32,6 +32,11 @@ export class CreateExpenseDto {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  transportJobId?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500)
   description?: string;
 }

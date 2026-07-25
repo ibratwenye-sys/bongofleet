@@ -46,14 +46,27 @@ export class ExpenseService {
 
   async create(dto: CreateExpenseDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
-    if (dto.motorcycleId) {
+
+    // A job expense also carries the job's vehicle, so per-vehicle transport
+    // rollups pick it up (the job's motorcycleId wins over any passed value).
+    let motorcycleId = dto.motorcycleId;
+    if (dto.transportJobId) {
+      const job = await this.prisma.client.transportJob.findUnique({
+        where: { id: dto.transportJobId },
+      });
+      if (!job) {
+        throw new NotFoundException('Transport job not found');
+      }
+      motorcycleId = job.motorcycleId;
+    } else if (dto.motorcycleId) {
       await this.assertMotorcycleExists(dto.motorcycleId);
     }
 
     return this.prisma.client.expense.create({
       data: {
         tenantId: actor.tenantId,
-        motorcycleId: dto.motorcycleId,
+        motorcycleId,
+        transportJobId: dto.transportJobId,
         category: dto.category,
         amount: dto.amount,
         incurredAt: new Date(`${dto.incurredAt}T00:00:00.000Z`),

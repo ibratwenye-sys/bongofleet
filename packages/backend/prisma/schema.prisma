@@ -106,6 +106,7 @@ model Tenant {
   documentAlerts    DocumentAlert[]
   assignmentAlerts  AssignmentAlert[]
   maintenanceReminders MaintenanceReminder[]
+  transportJobs     TransportJob[]
 
   @@map("tenants")
 }
@@ -155,6 +156,7 @@ model Rider {
   dailyAssignments DailyAssignment[]
   dailyPayments    DailyPayment[]
   guarantors       Guarantor[]
+  transportJobs    TransportJob[]
 
   @@unique([tenantId, licenseNumber])
   @@index([tenantId])
@@ -259,6 +261,7 @@ model Motorcycle {
   gpsLocations     GpsLocation[]
   maintenanceLogs  MaintenanceLog[]
   expenses         Expense[]
+  transportJobs    TransportJob[]
 
   @@unique([tenantId, registrationNumber])
   @@unique([tenantId, gpsDeviceId])
@@ -420,6 +423,10 @@ model Expense {
   tenant       Tenant      @relation(fields: [tenantId], references: [id])
   motorcycleId String?     @map("motorcycle_id")
   motorcycle   Motorcycle? @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  /// When set, this expense is attributed to a transport job for per-job P&L.
+  /// Job expenses also carry motorcycleId (the job's vehicle) for per-vehicle rollups.
+  transportJobId String?       @map("transport_job_id")
+  transportJob   TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
   category     String
   amount       Decimal     @db.Decimal(10, 2)
   incurredAt   DateTime    @map("incurred_at") @db.Date
@@ -428,5 +435,45 @@ model Expense {
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
   @@index([tenantId])
+  @@index([transportJobId])
   @@map("expenses")
+}
+
+enum TransportJobStatus {
+  SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+/// A car/truck transport job: move goods or a vehicle from origin to
+/// destination for an agreed revenue. Expenses tag onto it for per-job and
+/// per-vehicle profit/loss (the cost-benefit view). Rental vehicles
+/// (motorbike/bajaji) use DailyAssignment instead.
+model TransportJob {
+  id            String             @id @default(cuid())
+  tenantId      String             @map("tenant_id")
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
+  motorcycleId  String             @map("motorcycle_id")
+  motorcycle    Motorcycle         @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  riderId       String?            @map("rider_id")
+  rider         Rider?             @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  ownerDriven   Boolean            @default(false) @map("owner_driven")
+  reference     String?            @unique
+  origin        String
+  destination   String
+  cargo         String?
+  revenue       Decimal            @db.Decimal(12, 2)
+  status        TransportJobStatus @default(SCHEDULED)
+  scheduledDate DateTime           @map("scheduled_date") @db.Date
+  pickedUpAt    DateTime?          @map("picked_up_at")
+  deliveredAt   DateTime?          @map("delivered_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  expenses      Expense[]
+
+  @@index([tenantId])
+  @@index([motorcycleId])
+  @@map("transport_jobs")
 }
