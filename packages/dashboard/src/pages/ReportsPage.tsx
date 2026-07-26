@@ -18,6 +18,16 @@ const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
   TRUCK: 'Truck',
 };
 
+// Singular nouns for the per-vehicle table heading, so a truck report reads
+// "Profit per truck" instead of the old fleet-wide "Profit per motorcycle".
+const CATEGORY_NOUN: Record<VehicleType | 'ALL', string> = {
+  ALL: 'vehicle',
+  MOTORBIKE: 'motorbike',
+  BAJAJI: 'bajaji',
+  CAR: 'car',
+  TRUCK: 'truck',
+};
+
 // A small, dependency-free categorical palette for the breakdown bar. Chosen to
 // stay legible on the white cards used across the dashboard.
 const BAR_COLORS = [
@@ -207,8 +217,11 @@ export function ReportsPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Profit per motorcycle</h2>
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">
+                Profit per {CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']}
+              </h2>
               <ProfitTable
+                unitLabel={CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']}
                 rows={data.perMotorcycle.map((m) => ({
                   key: m.motorcycleId,
                   label: m.registrationNumber,
@@ -216,14 +229,18 @@ export function ReportsPage() {
                   expenses: m.expenses,
                   netProfit: m.netProfit,
                 }))}
-                emptyText="No motorcycle activity in this period."
+                emptyText={`No ${CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']} activity in this period.`}
               />
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue per rider</h2>
               {data.perRider.length === 0 ? (
-                <p className="text-sm text-gray-500">No rider revenue in this period.</p>
+                <p className="text-sm text-gray-500">
+                  {data.pnl.vehicleType === 'CAR' || data.pnl.vehicleType === 'TRUCK'
+                    ? 'Rider revenue comes from daily rentals. Car and truck income is earned per transport job — see the Transport page.'
+                    : 'No rider revenue in this period.'}
+                </p>
               ) : (
                 <table className="min-w-full text-sm">
                   <thead>
@@ -260,9 +277,11 @@ export function ReportsPage() {
 function ProfitTable({
   rows,
   emptyText,
+  unitLabel = 'vehicle',
 }: {
   rows: Array<{ key: string; label: string; revenue: string; expenses: string; netProfit: string }>;
   emptyText: string;
+  unitLabel?: string;
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-gray-500">{emptyText}</p>;
@@ -271,7 +290,7 @@ function ProfitTable({
     <table className="min-w-full text-sm">
       <thead>
         <tr className="text-left text-gray-500">
-          <th className="py-1 font-medium">Bike</th>
+          <th className="py-1 font-medium capitalize">{unitLabel}</th>
           <th className="py-1 text-right font-medium">Revenue</th>
           <th className="py-1 text-right font-medium">Expenses</th>
           <th className="py-1 text-right font-medium">Net</th>

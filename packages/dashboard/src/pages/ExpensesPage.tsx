@@ -158,14 +158,14 @@ function ExpenseFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Motorcycle <span className="text-gray-400">(optional)</span>
+            Vehicle <span className="text-gray-400">(optional)</span>
           </label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="">Fleet-wide (not bike-specific)</option>
+            <option value="">Fleet-wide (not vehicle-specific)</option>
             {motorcycles.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.registrationNumber}
@@ -363,7 +363,7 @@ export function ExpensesPage() {
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Category</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Motorcycle</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Description</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Amount</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>

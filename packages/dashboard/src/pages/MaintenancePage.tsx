@@ -55,7 +55,7 @@ function MaintenanceFormModal({
     setError(null);
 
     if (!isEdit && !form.motorcycleId) {
-      setError('Please choose a motorcycle.');
+      setError('Please choose a vehicle.');
       return;
     }
     if (!form.description.trim()) {
@@ -118,13 +118,13 @@ function MaintenanceFormModal({
       <form onSubmit={handleSubmit} className="space-y-3">
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Motorcycle</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
             <select
               value={form.motorcycleId}
               onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
             >
-              <option value="">Choose a motorcycle…</option>
+              <option value="">Choose a vehicle…</option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.registrationNumber} (current {m.currentMileage.toLocaleString()} km)
@@ -174,7 +174,7 @@ function MaintenanceFormModal({
             value={form.mileageAtService}
             onChange={(e) => setForm({ ...form, mileageAtService: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Updates the bike's current mileage"
+            placeholder="Updates the vehicle's current mileage"
           />
         </div>
         <div className="rounded border border-gray-100 bg-gray-50 p-3">
@@ -343,7 +343,7 @@ export function MaintenancePage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Motorcycle</label>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Vehicle</label>
           <select
             value={motorcycleFilter}
             onChange={(e) => setMotorcycleFilter(e.target.value)}
@@ -364,7 +364,7 @@ export function MaintenancePage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Motorcycle</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Description</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Odometer</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Next service</th>

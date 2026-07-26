@@ -52,7 +52,7 @@ function AssignmentFormModal({
     setError(null);
 
     if (!form.motorcycleId || !form.riderId || !form.assignedDate) {
-      setError('Rider, motorcycle, and date are required.');
+      setError('Rider, vehicle, and date are required.');
       return;
     }
     const targetAmount = Number(form.targetAmount);
@@ -98,13 +98,13 @@ function AssignmentFormModal({
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Motorcycle</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="">Select a motorcycle…</option>
+            <option value="">Select a vehicle…</option>
             {motorcycles.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.registrationNumber} {[m.make, m.model].filter(Boolean).join(' ')}
@@ -290,7 +290,7 @@ export function AssignmentsPage() {
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Rider</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Motorcycle</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Target</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Payments</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
@@ -326,7 +326,7 @@ export function AssignmentsPage() {
                       {rider ? `${rider.user.firstName} ${rider.user.lastName}` : 'Unknown rider'}
                     </td>
                     <td className="px-4 py-2 text-gray-600">
-                      {motorcycle?.registrationNumber ?? 'Unknown bike'}
+                      {motorcycle?.registrationNumber ?? 'Unknown vehicle'}
                     </td>
                     <td className="px-4 py-2 text-gray-600">
                       {formatTZS(parseFloat(a.targetAmount))}

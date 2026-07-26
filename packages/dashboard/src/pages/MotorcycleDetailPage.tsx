@@ -22,7 +22,7 @@ export function MotorcycleDetailPage() {
       setMotorcycle(motorcycleData);
       setDocuments(documentsData);
     } catch {
-      setError('Could not load motorcycle. Please try again.');
+      setError('Could not load vehicle. Please try again.');
     }
   }
 

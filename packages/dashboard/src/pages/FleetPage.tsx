@@ -226,7 +226,7 @@ export function FleetPage() {
       );
       setMotorcycles(data);
     } catch {
-      setError('Could not load motorcycles. Please try again.');
+      setError('Could not load vehicles. Please try again.');
     }
   }
 
@@ -262,11 +262,11 @@ export function FleetPage() {
     if (!deactivating) return;
     try {
       await apiFetch(`/motorcycles/${deactivating.id}`, { method: 'DELETE' });
-      setSuccessMessage('Motorcycle deactivated.');
+      setSuccessMessage('Vehicle deactivated.');
       setDeactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not deactivate motorcycle.');
+      setError(err instanceof ApiError ? err.message : 'Could not deactivate vehicle.');
       setDeactivating(null);
     }
   }
@@ -275,11 +275,11 @@ export function FleetPage() {
     if (!reactivating) return;
     try {
       await apiFetch(`/motorcycles/${reactivating.id}/reactivate`, { method: 'PATCH' });
-      setSuccessMessage('Motorcycle reactivated.');
+      setSuccessMessage('Vehicle reactivated.');
       setReactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reactivate motorcycle.');
+      setError(err instanceof ApiError ? err.message : 'Could not reactivate vehicle.');
       setReactivating(null);
     }
   }
@@ -437,7 +437,7 @@ export function FleetPage() {
 
       {deactivating && (
         <ConfirmDialog
-          title="Deactivate motorcycle"
+          title="Deactivate vehicle"
           message={`Deactivate ${deactivating.registrationNumber}? It will be hidden from the fleet list, but its history is kept.`}
           confirmLabel="Deactivate"
           danger
@@ -448,7 +448,7 @@ export function FleetPage() {
 
       {reactivating && (
         <ConfirmDialog
-          title="Reactivate motorcycle"
+          title="Reactivate vehicle"
           message={`Reactivate ${reactivating.registrationNumber}? It will be visible in the fleet list again.`}
           confirmLabel="Reactivate"
           onConfirm={handleReactivate}
