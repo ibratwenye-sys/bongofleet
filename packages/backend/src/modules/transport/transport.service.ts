@@ -190,10 +190,45 @@ export class TransportService {
       }
     }
     if (dto.driverId !== undefined && !(dto.ownerDriven ?? existing.ownerDriven)) {
-      const driver = await this.prisma.client.driver.findUnique({ where: { id: dto.driverId } });
+      const driver = await this.prisma.client.driver.findUnique({
+        where: { id: dto.driverId },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      });
       if (!driver || !driver.isActive) {
         throw new NotFoundException('Driver not found');
       }
+
+      // The vehicle itself is not changeable via this endpoint, but the check
+      // is written against the RESULTING pairing (not just "did driverId
+      // change") so it stays correct if that ever changes.
+      const vehicle = await this.prisma.client.motorcycle.findUnique({
+        where: { id: existing.motorcycleId },
+      });
+      if (!vehicle) {
+        throw new NotFoundException('Vehicle not found');
+      }
+
+      if (!isCompatible(driver.driverType, vehicle.vehicleType)) {
+        const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+        const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
+        if (!authorized) {
+          throw new BadRequestException(
+            describeMismatch(
+              { name: driverName, driverType: driver.driverType },
+              { registrationNumber: vehicle.registrationNumber, vehicleType: vehicle.vehicleType },
+            ),
+          );
+        }
+        data.categoryOverrideReason = dto.categoryOverrideReason as string;
+        data.categoryOverrideByUserId = actor.userId;
+        data.categoryOverrideAt = new Date();
+        this.logger.warn(
+          `Category override by ${actor.email} (OWNER): ${driverName} (${driver.driverType}) ` +
+            `assigned to ${vehicle.registrationNumber} (${vehicle.vehicleType}) via update. ` +
+            `Reason: ${data.categoryOverrideReason}`,
+        );
+      }
+
       data.driver = { connect: { id: dto.driverId } };
     }
     if (dto.origin !== undefined) data.origin = dto.origin;

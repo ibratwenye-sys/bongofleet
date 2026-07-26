@@ -19,6 +19,7 @@ import { ExpenseModule } from './modules/expense/expense.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { TransportModule } from './modules/transport/transport.module';
+import { OwnershipPlanModule } from './modules/ownership-plan/ownership-plan.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -45,6 +46,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     AnalyticsModule,
     MaintenanceModule,
     TransportModule,
+    OwnershipPlanModule,
   ],
   controllers: [AppController],
   providers: [

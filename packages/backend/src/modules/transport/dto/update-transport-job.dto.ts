@@ -9,9 +9,12 @@ import {
   IsString,
   Max,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { TransportJobStatus } from '@prisma/client';
+
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class UpdateTransportJobDto {
   @IsOptional()
@@ -55,4 +58,16 @@ export class UpdateTransportJobDto {
   @IsOptional()
   @IsEnum(TransportJobStatus)
   status?: TransportJobStatus;
+
+  /**
+   * The reason IS the confirmation - present and >= 10 chars means "an OWNER
+   * is deliberately overriding the driver-category/vehicle-type mismatch."
+   * Only consulted when this PATCH actually changes who is driving.
+   */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  categoryOverrideReason?: string;
 }

@@ -267,6 +267,71 @@ describe('TransportService', () => {
     });
   });
 
+  describe('updateJob - driver category compatibility', () => {
+    const existingJob = {
+      id: 'job-1',
+      status: 'SCHEDULED',
+      ownerDriven: false,
+      motorcycleId: 'veh-1',
+      pickedUpAt: null,
+      deliveredAt: null,
+    };
+
+    beforeEach(() => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(existingJob);
+      prisma.client.motorcycle.findUnique.mockResolvedValue(truck);
+      prisma.client.transportJob.update.mockImplementation(({ data }) => data);
+    });
+
+    it('rejects a PATCH that reassigns to an incompatible driver, with no override', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      await expect(
+        service.updateJob('job-1', { driverId: 'driver-1' }, owner),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.client.transportJob.update).not.toHaveBeenCalled();
+    });
+
+    it('an OWNER override with a valid reason succeeds and persists all three columns', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      const reason = 'Owner is personally driving the truck today.';
+      const data = await service.updateJob(
+        'job-1',
+        { driverId: 'driver-1', categoryOverrideReason: reason },
+        owner,
+      );
+
+      expect(data.categoryOverrideReason).toBe(reason);
+      expect(data.categoryOverrideByUserId).toBe(owner.userId);
+      expect(data.categoryOverrideAt).toBeInstanceOf(Date);
+    });
+
+    it('a MANAGER override attempt is rejected, even with a reason', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      const reason = 'Manager insists on driving the truck today.';
+      await expect(
+        service.updateJob(
+          'job-1',
+          { driverId: 'driver-1', categoryOverrideReason: reason },
+          manager,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.client.transportJob.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a compatible reassignment without a reason, leaving override columns unset', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.TRUCK_DRIVER));
+
+      const data = await service.updateJob('job-1', { driverId: 'driver-1' }, owner);
+
+      expect(data.categoryOverrideReason).toBeUndefined();
+      expect(data.categoryOverrideByUserId).toBeUndefined();
+      expect(data.categoryOverrideAt).toBeUndefined();
+    });
+  });
+
   describe('deleteJob', () => {
     it('blocks deletion when the job has expenses', async () => {
       prisma.client.transportJob.findUnique.mockResolvedValue({
