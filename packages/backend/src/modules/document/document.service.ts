@@ -61,12 +61,19 @@ export class DocumentService {
 
   private async assertOwnerExists(ownerType: DocumentOwnerType, ownerId: string): Promise<void> {
     let found: unknown;
-    if (ownerType === DocumentOwnerType.RIDER) {
-      found = await this.prisma.client.driver.findUnique({ where: { id: ownerId } });
-    } else if (ownerType === DocumentOwnerType.MOTORCYCLE) {
-      found = await this.prisma.client.motorcycle.findUnique({ where: { id: ownerId } });
-    } else {
-      found = await this.prisma.client.guarantor.findUnique({ where: { id: ownerId } });
+    switch (ownerType) {
+      case DocumentOwnerType.RIDER:
+        found = await this.prisma.client.driver.findUnique({ where: { id: ownerId } });
+        break;
+      case DocumentOwnerType.MOTORCYCLE:
+        found = await this.prisma.client.motorcycle.findUnique({ where: { id: ownerId } });
+        break;
+      case DocumentOwnerType.GUARANTOR:
+        found = await this.prisma.client.guarantor.findUnique({ where: { id: ownerId } });
+        break;
+      case DocumentOwnerType.OWNERSHIP_PLAN:
+        found = await this.prisma.client.ownershipPlan.findUnique({ where: { id: ownerId } });
+        break;
     }
     if (!found) {
       throw new NotFoundException(`${ownerType.toLowerCase()} not found`);

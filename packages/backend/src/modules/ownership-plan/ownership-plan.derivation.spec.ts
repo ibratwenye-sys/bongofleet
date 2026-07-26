@@ -1,5 +1,10 @@
 import { Prisma } from '@prisma/client';
-import { derivePlanFigures, PlanPosition } from './ownership-plan.derivation';
+import {
+  computeRemainingToOwn,
+  computeRemainingUnreserved,
+  derivePlanFigures,
+  PlanPosition,
+} from './ownership-plan.derivation';
 
 const TODAY = new Date('2026-08-01T00:00:00.000Z'); // a Saturday
 
@@ -143,6 +148,25 @@ describe('derivePlanFigures', () => {
       );
       expect(result.remainingToOwn).toBe('4000.00');
       expect(result.remainingToBill).toBe('0.00');
+    });
+  });
+
+  describe('computeRemainingUnreserved (Stage F: PENDING/COMPLETED asymmetry)', () => {
+    it('remainingToOwn is unaffected by a PENDING payment; remainingUnreserved is', () => {
+      const totalPrice = new Prisma.Decimal(20000);
+      const downPayment = new Prisma.Decimal(0);
+      const amountPaidCompleted = new Prisma.Decimal(0); // the PENDING payment never completed
+      const amountReserved = new Prisma.Decimal(15000); // PENDING + COMPLETED
+
+      const remainingToOwn = computeRemainingToOwn(totalPrice, downPayment, amountPaidCompleted);
+      const remainingUnreserved = computeRemainingUnreserved(
+        totalPrice,
+        downPayment,
+        amountReserved,
+      );
+
+      expect(remainingToOwn.toFixed(2)).toBe('20000.00');
+      expect(remainingUnreserved.toFixed(2)).toBe('5000.00');
     });
   });
 });

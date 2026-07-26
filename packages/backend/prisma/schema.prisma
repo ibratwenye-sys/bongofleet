@@ -53,6 +53,7 @@ enum DocumentOwnerType {
   RIDER
   MOTORCYCLE
   GUARANTOR
+  OWNERSHIP_PLAN
 
   @@map("document_owner_type")
 }
@@ -67,6 +68,7 @@ enum DocumentType {
   VEHICLE_INSPECTION
   ROAD_SAFETY_WEEK
   TBS_CERTIFICATE
+  HIRE_PURCHASE_CONTRACT
   OTHER
 
   @@map("document_type")

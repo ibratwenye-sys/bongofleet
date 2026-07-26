@@ -8,15 +8,36 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, PaymentStatus, UserRole } from '@prisma/client';
+import { DailyPayment, Prisma, PaymentStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
-import { computeRemainingToOwn } from '../ownership-plan/ownership-plan.derivation';
+import { computeRemainingUnreserved } from '../ownership-plan/ownership-plan.derivation';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 
 const AMOUNT_CAP_MULTIPLIER = 1.5;
+
+/**
+ * createPayment's return shape, for both the ordinary and plan-cascade
+ * paths - purely additive over the raw DailyPayment row (id/amount/status/
+ * dailyAssignmentId keep meaning exactly what they always have; the mobile
+ * "Record payment" flow from patch 0010 reads only those and keeps working).
+ *
+ * The object itself (the "primary") is the row created against the
+ * assignment named in the request, when one exists - and otherwise the
+ * OLDEST allocation. A driver deep in arrears may pay against today's row
+ * and have all of it consumed clearing older days, leaving today with no
+ * row of its own this time.
+ */
+export type PaymentCreationResult = DailyPayment & {
+  /** Every row this call created, oldest assignment first. Length 1 for an
+   * ordinary (non-plan) payment, containing the primary itself. */
+  allocations: DailyPayment[];
+  /** Sum of allocations[].amount. Equals the primary's own amount for an
+   * ordinary payment. */
+  totalAllocated: Prisma.Decimal;
+};
 
 /**
  * A plan payment above this many days' worth of the plan's daily amount
@@ -55,7 +76,10 @@ export class PaymentService {
     this.uploadsDir = this.config.get<string>('UPLOADS_DIR', './uploads');
   }
 
-  async createPayment(dto: CreatePaymentDto, actor: AuthenticatedUser) {
+  async createPayment(
+    dto: CreatePaymentDto,
+    actor: AuthenticatedUser,
+  ): Promise<PaymentCreationResult> {
     const assignment = await this.prisma.client.dailyAssignment.findUnique({
       where: { id: dto.dailyAssignmentId },
     });
@@ -93,7 +117,7 @@ export class PaymentService {
       );
     }
 
-    return this.prisma.client.dailyPayment.create({
+    const payment = await this.prisma.client.dailyPayment.create({
       data: {
         tenantId: actor.tenantId,
         dailyAssignmentId: dto.dailyAssignmentId,
@@ -103,6 +127,11 @@ export class PaymentService {
         status: PaymentStatus.PENDING,
       },
     });
+    return {
+      ...payment,
+      allocations: [payment],
+      totalAllocated: new Prisma.Decimal(payment.amount),
+    };
   }
 
   /**
@@ -121,7 +150,7 @@ export class PaymentService {
     assignment: { ownershipPlanId: string | null },
     dto: CreatePaymentDto,
     actor: AuthenticatedUser,
-  ) {
+  ): Promise<PaymentCreationResult> {
     const planId = assignment.ownershipPlanId as string;
     const plan = await this.prisma.client.ownershipPlan.findUnique({ where: { id: planId } });
     if (!plan) {
@@ -143,35 +172,35 @@ export class PaymentService {
       include: { dailyPayments: { where: { status: { not: PaymentStatus.FAILED } } } },
     });
 
-    // A driver can never be asked to pay more than the vehicle is worth: the
-    // vehicle is exactly what remainingToOwn (COMPLETED payments only, the
-    // canonical figure from Part 1) says is still outstanding.
-    const amountPaidCompleted = planAssignments.reduce(
-      (
-        sum: Prisma.Decimal,
-        a: { dailyPayments: Array<{ amount: Prisma.Decimal; status: PaymentStatus }> },
-      ) =>
+    // A driver can never be asked to pay more than the vehicle is worth. The
+    // guard tests against remainingUnreserved (PENDING + COMPLETED), not the
+    // COMPLETED-only remainingToOwn: two payments that each individually pass
+    // a COMPLETED-only ceiling could otherwise both go through and jointly
+    // overpay the plan while both sit PENDING. A PENDING payment reserves its
+    // space until it actually fails. planAssignments' dailyPayments include
+    // is already filtered to non-FAILED, so this is the same data, summed
+    // without the COMPLETED-only filter.
+    const amountReserved = planAssignments.reduce(
+      (sum: Prisma.Decimal, a: { dailyPayments: Array<{ amount: Prisma.Decimal }> }) =>
         sum.plus(
-          a.dailyPayments.reduce(
-            (s: Prisma.Decimal, p) => (p.status === PaymentStatus.COMPLETED ? s.plus(p.amount) : s),
-            new Prisma.Decimal(0),
-          ),
+          a.dailyPayments.reduce((s: Prisma.Decimal, p) => s.plus(p.amount), new Prisma.Decimal(0)),
         ),
       new Prisma.Decimal(0),
     );
-    const remainingToOwn = computeRemainingToOwn(
+    const remainingUnreserved = computeRemainingUnreserved(
       new Prisma.Decimal(plan.totalPrice),
       new Prisma.Decimal(plan.downPayment),
-      amountPaidCompleted,
+      amountReserved,
     );
-    if (remainingToOwn.lessThanOrEqualTo(0)) {
+    if (remainingUnreserved.lessThanOrEqualTo(0)) {
       throw new BadRequestException(
-        'This ownership plan is already fully paid - no further plan payments are needed',
+        'This ownership plan has no unreserved balance left - it is already fully paid or ' +
+          'fully covered by pending payments',
       );
     }
-    if (amount.greaterThan(remainingToOwn)) {
+    if (amount.greaterThan(remainingUnreserved)) {
       throw new BadRequestException(
-        `Amount exceeds the ${remainingToOwn.toFixed(2)} still owed on this ownership plan`,
+        `Amount exceeds the ${remainingUnreserved.toFixed(2)} still unreserved on this ownership plan`,
       );
     }
 
@@ -207,10 +236,12 @@ export class PaymentService {
       pool = new Prisma.Decimal(0);
     }
 
-    return this.prisma.client.$transaction(async (tx) => {
-      const created = [];
+    // allocations iterates oldest-first (planAssignments is ordered that way
+    // and Map preserves insertion order), so `created` is oldest-first too.
+    const created = await this.prisma.client.$transaction(async (tx) => {
+      const rows = [];
       for (const [dailyAssignmentId, allocatedAmount] of allocations) {
-        created.push(
+        rows.push(
           await tx.dailyPayment.create({
             data: {
               tenantId: actor.tenantId,
@@ -223,8 +254,20 @@ export class PaymentService {
           }),
         );
       }
-      return created;
+      return rows;
     });
+
+    // The primary is the row against the assignment the request named, when
+    // one exists - and otherwise the oldest allocation, because a driver deep
+    // in arrears may pay against today's row and have all of it consumed by
+    // older days, leaving today with no row at all this time.
+    const primary =
+      created.find((c) => c.dailyAssignmentId === dto.dailyAssignmentId) ?? created[0];
+    const totalAllocated = created.reduce(
+      (sum: Prisma.Decimal, c) => sum.plus(c.amount),
+      new Prisma.Decimal(0),
+    );
+    return { ...primary, allocations: created, totalAllocated };
   }
 
   async listPayments(query: ListPaymentsQueryDto, actor: AuthenticatedUser) {

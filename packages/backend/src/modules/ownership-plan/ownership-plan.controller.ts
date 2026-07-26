@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { createReadStream } from 'node:fs';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -7,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OwnershipPlanService } from './ownership-plan.service';
 import { OwnershipPlanGeneratorService } from './ownership-plan-generator.service';
+import { OwnershipPlanContractService } from './ownership-plan-contract.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 
@@ -18,6 +31,7 @@ export class OwnershipPlanController {
   constructor(
     private readonly ownershipPlanService: OwnershipPlanService,
     private readonly generatorService: OwnershipPlanGeneratorService,
+    private readonly contractService: OwnershipPlanContractService,
   ) {}
 
   @Post()
@@ -55,5 +69,37 @@ export class OwnershipPlanController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.ownershipPlanService.update(id, dto, actor);
+  }
+
+  // §9. Generating creates a NEW Document row every time - regeneration never
+  // overwrites a prior version.
+  @Post(':id/contract')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  generateContract(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.contractService.generate(id, actor);
+  }
+
+  // OWNER, MANAGER, and the DRIVER on this specific plan - RolesGuard alone
+  // can't express "this driver, not any driver", so the access check happens
+  // inside OwnershipPlanContractService.getLatest().
+  @Get(':id/contract')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
+  async downloadContract(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { document, absolutePath } = await this.contractService.getLatest(id, actor);
+    res.set({
+      'Content-Type': document.mimeType,
+      'Content-Disposition': `inline; filename="${document.fileName}"`,
+    });
+    return new StreamableFile(createReadStream(absolutePath));
+  }
+
+  @Get(':id/contracts')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  listContracts(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.contractService.listAll(id, actor);
   }
 }

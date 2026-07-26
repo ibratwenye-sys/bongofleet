@@ -93,8 +93,9 @@ function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decimal): Pri
  * remainingToOwn frozen at their arrears forever, while remainingToBill is
  * what caps the generator from billing past the price of the vehicle. Both
  * are computed exactly once, here and in computeRemainingToBill respectively,
- * and reused everywhere (ownership-plan.service.ts, the nightly generator,
- * payment.service.ts's overpayment guard) rather than re-derived.
+ * and reused everywhere (ownership-plan.service.ts, the nightly generator)
+ * rather than re-derived. See computeRemainingUnreserved for the (stricter)
+ * quantity payment.service.ts's overpayment guard actually tests against.
  */
 export function computeRemainingToOwn(
   totalPrice: Prisma.Decimal,
@@ -119,6 +120,23 @@ export function computeRemainingToBill(
   amountBilled: Prisma.Decimal,
 ): Prisma.Decimal {
   return totalOwed(totalPrice, downPayment).minus(amountBilled);
+}
+
+/**
+ * The overpayment guard's actual ceiling. remainingToOwn is COMPLETED-only,
+ * so two payments that are each individually within it can both pass and
+ * jointly overpay the plan while both sit PENDING - rare today (payments
+ * complete immediately), but ordinary once mobile-money reconciliation makes
+ * PENDING common. This counts PENDING + COMPLETED (everything but FAILED): a
+ * PENDING payment reserves its space until it actually fails. Always <=
+ * remainingToOwn, since amountReserved >= amountPaid.
+ */
+export function computeRemainingUnreserved(
+  totalPrice: Prisma.Decimal,
+  downPayment: Prisma.Decimal,
+  amountReserved: Prisma.Decimal,
+): Prisma.Decimal {
+  return totalOwed(totalPrice, downPayment).minus(amountReserved);
 }
 
 /**

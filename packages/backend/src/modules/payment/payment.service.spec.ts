@@ -100,7 +100,12 @@ describe('PaymentService', () => {
           }),
         }),
       );
-      expect(result).toEqual({ id: 'payment-1', ...dto });
+      // Purely additive: every field a caller reading only id/amount/status/
+      // dailyAssignmentId (patch 0010's mobile flow) relies on is unchanged.
+      expect(result).toMatchObject({ id: 'payment-1', ...dto });
+      expect(result.allocations).toHaveLength(1);
+      expect(result.allocations[0]).toEqual({ id: 'payment-1', ...dto });
+      expect(result.totalAllocated.toFixed(2)).toBe(new Prisma.Decimal(dto.amount).toFixed(2));
     });
 
     it('throws NotFound when the assignment does not exist', async () => {
@@ -197,20 +202,43 @@ describe('PaymentService', () => {
       });
       prisma.client.dailyAssignment.findMany.mockResolvedValue([d1, d2, d3]);
 
-      const result = (await service.createPayment(
+      const result = await service.createPayment(
         { dailyAssignmentId: 'a3', driverId: 'driver-1', amount: 36000 },
         owner,
-      )) as Array<{ amount: Prisma.Decimal }>;
+      );
 
       expect(txDailyPaymentCreate).toHaveBeenCalledTimes(3);
-      const total = result.reduce(
-        (sum: Prisma.Decimal, p: { amount: Prisma.Decimal }) => sum.plus(p.amount),
-        new Prisma.Decimal(0),
-      );
-      expect(total.toFixed(2)).toBe('36000.00'); // no orphaned money
-      for (const p of result as Array<{ amount: Prisma.Decimal }>) {
-        expect(p.amount.toFixed(2)).toBe('12000.00'); // none over, none under
+      expect(result.allocations).toHaveLength(3);
+      expect(result.allocations.map((a) => a.dailyAssignmentId)).toEqual(['a1', 'a2', 'a3']); // oldest first
+      expect(result.totalAllocated.toFixed(2)).toBe('36000.00'); // no orphaned money
+      for (const p of result.allocations) {
+        expect(new Prisma.Decimal(p.amount).toFixed(2)).toBe('12000.00'); // none over, none under
       }
+    });
+
+    it('when the cascade fully consumes older arrears, the primary is the oldest allocation, not the named assignment', async () => {
+      // Two older unpaid days, plus today (a3, the one named in the request).
+      // A lump sum exactly covering the two older days leaves a3 with no row
+      // at all this time - the primary must not be a3.
+      const d1 = planAssignment('a1', '2026-07-01', 12000);
+      const d2 = planAssignment('a2', '2026-07-02', 12000);
+      const d3 = planAssignment('a3', '2026-07-03', 12000);
+      prisma.client.dailyAssignment.findUnique.mockResolvedValue({
+        id: 'a3',
+        driverId: 'driver-1',
+        ownershipPlanId: 'plan-1',
+      });
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([d1, d2, d3]);
+
+      const result = await service.createPayment(
+        { dailyAssignmentId: 'a3', driverId: 'driver-1', amount: 24000 },
+        owner,
+      );
+
+      expect(result.allocations).toHaveLength(2);
+      expect(result.allocations.map((a) => a.dailyAssignmentId)).toEqual(['a1', 'a2']);
+      expect(result.dailyAssignmentId).toBe('a1'); // the oldest, not a3
+      expect(result.totalAllocated.toFixed(2)).toBe('24000.00');
     });
 
     it('a driver paying 60,000 against an already-current 12,000 day comes out five days ahead, with no orphaned money', async () => {
@@ -232,12 +260,9 @@ describe('PaymentService', () => {
       );
 
       expect(txDailyPaymentCreate).toHaveBeenCalledTimes(1);
-      const total = (result as Array<{ amount: Prisma.Decimal }>).reduce(
-        (sum, p) => sum.plus(p.amount),
-        new Prisma.Decimal(0),
-      );
-      expect(total.toFixed(2)).toBe('60000.00'); // no orphaned money
-      expect((result as Array<{ amount: Prisma.Decimal }>)[0].amount.toFixed(2)).toBe('60000.00');
+      expect(result.totalAllocated.toFixed(2)).toBe('60000.00'); // no orphaned money
+      expect(result.allocations).toHaveLength(1);
+      expect(new Prisma.Decimal(result.allocations[0].amount).toFixed(2)).toBe('60000.00');
 
       // Once reconciled to COMPLETED, this is what "five days ahead" means:
       // 72,000 paid (12,000 already + 60,000 new) against a 12,000 amountDue.
@@ -328,6 +353,43 @@ describe('PaymentService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.client.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('two PENDING payments that individually pass a COMPLETED-only ceiling are jointly rejected by the second one', async () => {
+      prisma.client.ownershipPlan.findUnique.mockResolvedValue({
+        ...plan,
+        totalPrice: new Prisma.Decimal(20000),
+      });
+      prisma.client.dailyAssignment.findUnique.mockResolvedValue({
+        id: 'a1',
+        driverId: 'driver-1',
+        ownershipPlanId: 'plan-1',
+      });
+      // Call 1 sees no existing payments; call 2 sees call 1's own PENDING
+      // 15,000 already reserved against the same assignment.
+      prisma.client.dailyAssignment.findMany
+        .mockResolvedValueOnce([planAssignment('a1', '2026-07-01', 12000, [])])
+        .mockResolvedValueOnce([
+          planAssignment('a1', '2026-07-01', 12000, [
+            { amount: 15000, status: PaymentStatus.PENDING },
+          ]),
+        ]);
+
+      // remainingToOwn (COMPLETED-only) is 20,000 for BOTH calls, since
+      // neither payment ever completes - a COMPLETED-only ceiling would wave
+      // both of these 15,000 payments through, jointly overpaying by 10,000.
+      const first = await service.createPayment(
+        { dailyAssignmentId: 'a1', driverId: 'driver-1', amount: 15000 },
+        owner,
+      );
+      expect(first).toBeDefined();
+
+      await expect(
+        service.createPayment(
+          { dailyAssignmentId: 'a1', driverId: 'driver-1', amount: 15000 },
+          owner,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
