@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import type { ExpenseCategory, MotorcyclePnl, PnlSummary, RiderRevenue } from '../lib/types';
+import type {
+  ExpenseCategory,
+  MotorcyclePnl,
+  PnlSummary,
+  RiderRevenue,
+  VehicleType,
+} from '../lib/types';
 import { formatTZS, startOfThisMonth, today } from '../lib/format';
+
+const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
+const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
+  ALL: 'All vehicles',
+  MOTORBIKE: 'Motorbike',
+  BAJAJI: 'Bajaji',
+  CAR: 'Car',
+  TRUCK: 'Truck',
+};
 
 // A small, dependency-free categorical palette for the breakdown bar. Chosen to
 // stay legible on the white cards used across the dashboard.
@@ -91,6 +106,7 @@ function ExpenseBreakdown({ rows }: { rows: ExpenseCategory[] }) {
 export function ReportsPage() {
   const [from, setFrom] = useState<string>(startOfThisMonth());
   const [to, setTo] = useState<string>(today());
+  const [category, setCategory] = useState<VehicleType | 'ALL'>('ALL');
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -98,7 +114,7 @@ export function ReportsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const qs = `?from=${from}&to=${to}`;
+    const qs = `?from=${from}&to=${to}${category !== 'ALL' ? `&vehicleType=${category}` : ''}`;
     try {
       const [pnl, perMotorcycle, perRider, breakdown] = await Promise.all([
         apiFetch<PnlSummary>(`/analytics/pnl${qs}`),
@@ -112,7 +128,7 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to]);
+  }, [from, to, category]);
 
   useEffect(() => {
     void load();
@@ -126,6 +142,20 @@ export function ReportsPage() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
         <div className="flex items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as VehicleType | 'ALL')}
+              className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+            >
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABELS[c]}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">From</label>
             <input
@@ -168,8 +198,11 @@ export function ReportsPage() {
             <StatCard label="Net profit" value={formatTZS(data.pnl.netProfit)} tone={netTone} />
           </div>
           <p className="-mt-2 text-xs text-gray-400">
-            {data.pnl.paymentCount} payment(s) · {data.pnl.expenseCount} expense record(s) in this
-            period. Revenue counts reconciled payments dated by the assignment day.
+            Revenue = rental {formatTZS(data.pnl.rentalRevenue)} ({data.pnl.paymentCount} payment
+            {data.pnl.paymentCount === 1 ? '' : 's'}) + transport{' '}
+            {formatTZS(data.pnl.transportRevenue)} ({data.pnl.transportJobCount} job
+            {data.pnl.transportJobCount === 1 ? '' : 's'}). {data.pnl.expenseCount} expense
+            record(s) in this period.
           </p>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

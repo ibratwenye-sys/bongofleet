@@ -234,16 +234,21 @@ export interface UpdateExpensePayload {
 export interface PnlSummary {
   from: string | null;
   to: string | null;
+  vehicleType: VehicleType | null;
   revenue: string;
+  rentalRevenue: string;
+  transportRevenue: string;
   expenses: string;
   netProfit: string;
   paymentCount: number;
+  transportJobCount: number;
   expenseCount: number;
 }
 
 export interface MotorcyclePnl {
   motorcycleId: string;
   registrationNumber: string;
+  vehicleType: VehicleType;
   revenue: string;
   expenses: string;
   netProfit: string;

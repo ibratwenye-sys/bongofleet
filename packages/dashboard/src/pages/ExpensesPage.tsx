@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import type { CreateExpensePayload, Expense, Motorcycle, UpdateExpensePayload } from '../lib/types';
+import type {
+  CreateExpensePayload,
+  Expense,
+  Motorcycle,
+  UpdateExpensePayload,
+  VehicleType,
+} from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { formatTZS, startOfThisMonth, today } from '../lib/format';
+
+const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
+const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
+  ALL: 'All types',
+  MOTORBIKE: 'Motorbike',
+  BAJAJI: 'Bajaji',
+  CAR: 'Car',
+  TRUCK: 'Truck',
+};
 
 // Common categories offered as quick suggestions; the field is still free text
 // so an owner can type anything (backend accepts any non-empty category).
@@ -200,6 +215,7 @@ export function ExpensesPage() {
   const [from, setFrom] = useState<string>(startOfThisMonth());
   const [to, setTo] = useState<string>(today());
   const [motorcycleFilter, setMotorcycleFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<VehicleType | 'ALL'>('ALL');
   const [formTarget, setFormTarget] = useState<'new' | Expense | null>(null);
   const [deleting, setDeleting] = useState<Expense | null>(null);
 
@@ -208,6 +224,9 @@ export function ExpensesPage() {
     const params = new URLSearchParams({ from, to });
     if (motorcycleFilter !== 'ALL') {
       params.set('motorcycleId', motorcycleFilter);
+    }
+    if (categoryFilter !== 'ALL') {
+      params.set('vehicleType', categoryFilter);
     }
     try {
       const data = await apiFetch<Expense[]>(`/expenses?${params.toString()}`);
@@ -226,7 +245,7 @@ export function ExpensesPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, motorcycleFilter]);
+  }, [from, to, motorcycleFilter, categoryFilter]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -304,7 +323,21 @@ export function ExpensesPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Motorcycle</label>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Vehicle type</label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value as VehicleType | 'ALL')}
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+          >
+            {CATEGORY_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Vehicle</label>
           <select
             value={motorcycleFilter}
             onChange={(e) => setMotorcycleFilter(e.target.value)}

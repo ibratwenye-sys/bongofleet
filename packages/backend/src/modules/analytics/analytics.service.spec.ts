@@ -13,6 +13,7 @@ describe('AnalyticsService', () => {
   let prisma: {
     client: {
       dailyPayment: { aggregate: jest.Mock; findMany: jest.Mock; groupBy: jest.Mock };
+      transportJob: { aggregate: jest.Mock; findMany: jest.Mock };
       expense: { aggregate: jest.Mock; findMany: jest.Mock; groupBy: jest.Mock };
       maintenanceLog: { aggregate: jest.Mock; findMany: jest.Mock };
       motorcycle: { findMany: jest.Mock };
@@ -36,12 +37,16 @@ describe('AnalyticsService', () => {
     prisma = {
       client: {
         dailyPayment: { aggregate: jest.fn(), findMany: jest.fn(), groupBy: jest.fn() },
+        transportJob: { aggregate: jest.fn(), findMany: jest.fn() },
         expense: { aggregate: jest.fn(), findMany: jest.fn(), groupBy: jest.fn() },
         maintenanceLog: { aggregate: jest.fn(), findMany: jest.fn() },
         motorcycle: { findMany: jest.fn() },
         rider: { findMany: jest.fn() },
       },
     };
+    // Sensible transport defaults; individual tests override.
+    prisma.client.transportJob.aggregate.mockResolvedValue({ _sum: { revenue: null }, _count: 0 });
+    prisma.client.transportJob.findMany.mockResolvedValue([]);
     service = new AnalyticsService(prisma as unknown as PrismaService);
   });
 
@@ -50,10 +55,14 @@ describe('AnalyticsService', () => {
       await expect(service.getSummary({}, rider)).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('computes net profit = revenue - (expenses + maintenance)', async () => {
+    it('combines rental + transport revenue, minus expenses + maintenance', async () => {
       prisma.client.dailyPayment.aggregate.mockResolvedValue({
         _sum: { amount: dec(150000) },
         _count: 12,
+      });
+      prisma.client.transportJob.aggregate.mockResolvedValue({
+        _sum: { revenue: dec(50000) },
+        _count: 2,
       });
       prisma.client.expense.aggregate.mockResolvedValue({
         _sum: { amount: dec(40000) },
@@ -69,10 +78,14 @@ describe('AnalyticsService', () => {
       expect(result).toEqual({
         from: '2026-07-01',
         to: '2026-07-31',
-        revenue: '150000.00',
+        vehicleType: null,
+        revenue: '200000.00',
+        rentalRevenue: '150000.00',
+        transportRevenue: '50000.00',
         expenses: '50000.00',
-        netProfit: '100000.00',
+        netProfit: '150000.00',
         paymentCount: 12,
+        transportJobCount: 2,
         expenseCount: 7,
       });
     });
@@ -117,8 +130,8 @@ describe('AnalyticsService', () => {
         { cost: dec(500), motorcycleId: 'moto-2' },
       ]);
       prisma.client.motorcycle.findMany.mockResolvedValue([
-        { id: 'moto-1', registrationNumber: 'KDA-1' },
-        { id: 'moto-2', registrationNumber: 'KDA-2' },
+        { id: 'moto-1', registrationNumber: 'KDA-1', vehicleType: 'MOTORBIKE' },
+        { id: 'moto-2', registrationNumber: 'KDA-2', vehicleType: 'BAJAJI' },
       ]);
 
       const rows = await service.getPerMotorcycle({}, owner);
@@ -127,6 +140,7 @@ describe('AnalyticsService', () => {
         {
           motorcycleId: 'moto-1',
           registrationNumber: 'KDA-1',
+          vehicleType: 'MOTORBIKE',
           revenue: '10000.00',
           expenses: '1000.00',
           netProfit: '9000.00',
@@ -134,11 +148,38 @@ describe('AnalyticsService', () => {
         {
           motorcycleId: 'moto-2',
           registrationNumber: 'KDA-2',
+          vehicleType: 'BAJAJI',
           revenue: '3000.00',
           expenses: '500.00',
           netProfit: '2500.00',
         },
       ]);
+    });
+
+    it('folds transport-job revenue into a vehicle P&L', async () => {
+      prisma.client.dailyPayment.findMany.mockResolvedValue([]);
+      prisma.client.transportJob.findMany.mockResolvedValue([
+        { revenue: dec(500000), motorcycleId: 'truck-1' },
+        { revenue: dec(300000), motorcycleId: 'truck-1' },
+      ]);
+      prisma.client.expense.findMany.mockResolvedValue([
+        { amount: dec(200000), motorcycleId: 'truck-1' },
+      ]);
+      prisma.client.maintenanceLog.findMany.mockResolvedValue([]);
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        { id: 'truck-1', registrationNumber: 'T-1', vehicleType: 'TRUCK' },
+      ]);
+
+      const rows = await service.getPerMotorcycle({ vehicleType: 'TRUCK' }, owner);
+
+      expect(rows[0]).toEqual({
+        motorcycleId: 'truck-1',
+        registrationNumber: 'T-1',
+        vehicleType: 'TRUCK',
+        revenue: '800000.00',
+        expenses: '200000.00',
+        netProfit: '600000.00',
+      });
     });
 
     it('includes a bike that only has expenses (negative profit)', async () => {

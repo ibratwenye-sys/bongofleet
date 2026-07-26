@@ -82,6 +82,7 @@ export class ExpenseService {
     return this.prisma.client.expense.findMany({
       where: {
         ...(query.motorcycleId ? { motorcycleId: query.motorcycleId } : {}),
+        ...(query.vehicleType ? { motorcycle: { vehicleType: query.vehicleType } } : {}),
         ...(query.category ? { category: query.category } : {}),
         ...(incurredAt ? { incurredAt } : {}),
       },
