@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DocumentOwnerType, UserRole } from '@prisma/client';
+import { DocumentOwnerType, DriverType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { CreateDocumentDto } from './dto/create-document.dto';
@@ -226,6 +226,28 @@ export class DocumentService {
     }
 
     return labels;
+  }
+
+  /**
+   * driverType per driver id, for the DRIVERS_LICENSE expiry digest only - a
+   * truck driver's licence class matters more than a rider's, so the digest
+   * names the category rather than a generic "rider". Deliberately separate
+   * from buildOwnerLabels(), which also backs the dashboard's expiring-documents
+   * list and must not change shape for this.
+   */
+  async buildDriverCategories(driverIds: string[]): Promise<Map<string, DriverType>> {
+    const categories = new Map<string, DriverType>();
+    if (driverIds.length === 0) {
+      return categories;
+    }
+    const drivers = await this.prisma.client.driver.findMany({
+      where: { id: { in: driverIds } },
+      select: { id: true, driverType: true },
+    });
+    for (const driver of drivers) {
+      categories.set(driver.id, driver.driverType);
+    }
+    return categories;
   }
 }
 

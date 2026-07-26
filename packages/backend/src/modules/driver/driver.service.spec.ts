@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { DriverType, UserRole } from '@prisma/client';
 import { DriverService } from './driver.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -92,6 +92,28 @@ describe('DriverService', () => {
       );
       expect(result).not.toHaveProperty('passwordHash');
       expect(result.user).not.toHaveProperty('passwordHash');
+    });
+
+    it('passes driverType through to the Driver row when given, letting the DB default to RIDER otherwise', async () => {
+      prisma.client.user.findFirst.mockResolvedValue(null);
+      prisma.client.driver.findFirst.mockResolvedValue(null);
+      jest.spyOn(passwordUtil, 'hashPassword').mockResolvedValue('hashed');
+
+      const driverCreate = jest.fn().mockResolvedValue({ id: 'driver-1', userId: 'user-1' });
+      prisma.client.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
+        fn({
+          user: { create: jest.fn().mockResolvedValue({ id: 'user-1' }) },
+          driver: { create: driverCreate },
+        }),
+      );
+
+      await service.create({ ...dto, driverType: DriverType.TRUCK_DRIVER }, owner);
+
+      expect(driverCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ driverType: DriverType.TRUCK_DRIVER }),
+        }),
+      );
     });
 
     it('throws Conflict on a duplicate email', async () => {

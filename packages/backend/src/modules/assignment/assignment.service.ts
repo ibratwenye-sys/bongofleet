@@ -3,17 +3,21 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { generateRideReference } from '../../common/reference.util';
+import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
 @Injectable()
 export class AssignmentService {
+  private readonly logger = new Logger(AssignmentService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async createAssignment(dto: CreateAssignmentDto, actor: AuthenticatedUser) {
@@ -28,9 +32,44 @@ export class AssignmentService {
       throw new NotFoundException('Motorcycle not found');
     }
 
-    const driver = await this.prisma.client.driver.findUnique({ where: { id: dto.driverId } });
+    const driver = await this.prisma.client.driver.findUnique({
+      where: { id: dto.driverId },
+      include: { user: { select: { firstName: true, lastName: true } } },
+    });
     if (!driver || !driver.isActive) {
       throw new NotFoundException('Driver not found');
+    }
+
+    let categoryOverride: {
+      categoryOverrideReason: string;
+      categoryOverrideByUserId: string;
+      categoryOverrideAt: Date;
+    } | null = null;
+
+    if (!isCompatible(driver.driverType, motorcycle.vehicleType)) {
+      const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+      const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
+      if (!authorized) {
+        throw new BadRequestException(
+          describeMismatch(
+            { name: driverName, driverType: driver.driverType },
+            {
+              registrationNumber: motorcycle.registrationNumber,
+              vehicleType: motorcycle.vehicleType,
+            },
+          ),
+        );
+      }
+      categoryOverride = {
+        categoryOverrideReason: dto.categoryOverrideReason as string,
+        categoryOverrideByUserId: actor.userId,
+        categoryOverrideAt: new Date(),
+      };
+      this.logger.warn(
+        `Category override by ${actor.email} (OWNER): ${driverName} (${driver.driverType}) ` +
+          `assigned to ${motorcycle.registrationNumber} (${motorcycle.vehicleType}). ` +
+          `Reason: ${categoryOverride.categoryOverrideReason}`,
+      );
     }
 
     const assignedDate = new Date(dto.assignedDate);
@@ -62,6 +101,7 @@ export class AssignmentService {
             targetAmount: dto.targetAmount,
             notes: dto.notes,
             reference: generateRideReference(),
+            ...categoryOverride,
           },
         });
       } catch (error) {

@@ -1,5 +1,6 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { DriverType } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -39,4 +40,9 @@ export class CreateDriverDto {
   @IsOptional()
   @IsString()
   emergencyContact?: string;
+
+  /** Defaults to RIDER at the database level when omitted. */
+  @IsOptional()
+  @IsEnum(DriverType)
+  driverType?: DriverType;
 }

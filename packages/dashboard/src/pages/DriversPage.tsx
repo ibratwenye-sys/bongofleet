@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, ApiError } from '../lib/api';
-import type { CreateDriverPayload, Driver, UpdateDriverPayload } from '../lib/types';
+import type { CreateDriverPayload, Driver, DriverType, UpdateDriverPayload } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
+
+const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
+const CATEGORY_LABELS: Record<DriverType, string> = {
+  RIDER: 'Rider',
+  CAR_DRIVER: 'Car driver',
+  TRUCK_DRIVER: 'Truck driver',
+};
 
 interface FormState {
   firstName: string;
@@ -15,6 +22,7 @@ interface FormState {
   initialPassword: string;
   nationalId: string;
   emergencyContact: string;
+  driverType: DriverType;
 }
 
 function toFormState(driver: Driver | null): FormState {
@@ -27,6 +35,7 @@ function toFormState(driver: Driver | null): FormState {
     initialPassword: '',
     nationalId: driver?.nationalId ?? '',
     emergencyContact: driver?.emergencyContact ?? '',
+    driverType: driver?.driverType ?? 'RIDER',
   };
 }
 
@@ -81,6 +90,7 @@ function DriverFormModal({
           licenseNumber: form.licenseNumber.trim(),
           nationalId: form.nationalId.trim() || undefined,
           emergencyContact: form.emergencyContact.trim() || undefined,
+          driverType: form.driverType,
         };
         await apiFetch(`/drivers/${driver.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
         onSaved('Driver updated.');
@@ -94,6 +104,7 @@ function DriverFormModal({
           initialPassword: form.initialPassword,
           nationalId: form.nationalId.trim() || undefined,
           emergencyContact: form.emergencyContact.trim() || undefined,
+          driverType: form.driverType,
         };
         await apiFetch('/drivers', { method: 'POST', body: JSON.stringify(payload) });
         onSaved('Driver added.');
@@ -159,6 +170,21 @@ function DriverFormModal({
             onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
+          <select
+            value={form.driverType}
+            onChange={(e) => setForm({ ...form, driverType: e.target.value as DriverType })}
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          >
+            {CATEGORY_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
         </div>
 
         {!isEdit && (
@@ -227,6 +253,7 @@ export function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<DriverType | 'ALL'>('ALL');
   const [formTarget, setFormTarget] = useState<'new' | Driver | null>(null);
   const [deactivating, setDeactivating] = useState<Driver | null>(null);
   const [reactivating, setReactivating] = useState<Driver | null>(null);
@@ -258,12 +285,14 @@ export function DriversPage() {
   const filtered = useMemo(() => {
     if (!drivers) return [];
     const term = search.trim().toLowerCase();
-    if (!term) return drivers;
     return drivers.filter((d) => {
+      const matchesCategory = categoryFilter === 'ALL' || d.driverType === categoryFilter;
       const name = `${d.user.firstName} ${d.user.lastName}`.toLowerCase();
-      return name.includes(term) || d.licenseNumber.toLowerCase().includes(term);
+      const matchesSearch =
+        !term || name.includes(term) || d.licenseNumber.toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
     });
-  }, [drivers, search]);
+  }, [drivers, search, categoryFilter]);
 
   function handleSaved(message: string) {
     setFormTarget(null);
@@ -323,6 +352,18 @@ export function DriversPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64 rounded border border-gray-300 px-3 py-1.5 text-sm"
         />
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value as DriverType | 'ALL')}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+        >
+          <option value="ALL">All categories</option>
+          {CATEGORY_OPTIONS.map((c) => (
+            <option key={c} value={c}>
+              {CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <input
             type="checkbox"
@@ -338,6 +379,7 @@ export function DriversPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Name</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Category</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Phone</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Email</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">License</th>
@@ -348,13 +390,13 @@ export function DriversPage() {
           <tbody className="divide-y divide-gray-100">
             {drivers === null ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   No drivers found.
                 </td>
               </tr>
@@ -374,6 +416,7 @@ export function DriversPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2 text-gray-600">{CATEGORY_LABELS[d.driverType]}</td>
                   <td className="px-4 py-2 text-gray-600">{d.user.phone}</td>
                   <td className="px-4 py-2 text-gray-600">{d.user.email}</td>
                   <td className="px-4 py-2 text-gray-600">{d.licenseNumber}</td>

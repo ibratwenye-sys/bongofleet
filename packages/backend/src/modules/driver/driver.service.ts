@@ -80,6 +80,7 @@ export class DriverService {
             licenseNumber: dto.licenseNumber,
             nationalId: dto.nationalId,
             emergencyContact: dto.emergencyContact,
+            driverType: dto.driverType,
           },
         });
 
@@ -176,6 +177,7 @@ export class DriverService {
             licenseNumber: dto.licenseNumber,
             nationalId: dto.nationalId,
             emergencyContact: dto.emergencyContact,
+            driverType: dto.driverType,
           },
         });
 

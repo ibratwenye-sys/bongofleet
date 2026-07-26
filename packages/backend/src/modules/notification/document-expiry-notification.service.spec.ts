@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { DocumentAlertKind, DocumentOwnerType, DocumentType } from '@prisma/client';
+import { DocumentAlertKind, DocumentOwnerType, DocumentType, DriverType } from '@prisma/client';
 import { DocumentExpiryNotificationService } from './document-expiry-notification.service';
 import { MailerService } from './mailer.service';
 import { DocumentService } from '../document/document.service';
@@ -58,7 +58,7 @@ describe('DocumentExpiryNotificationService', () => {
     };
   };
   let mailer: { send: jest.Mock };
-  let documentService: { buildOwnerLabels: jest.Mock };
+  let documentService: { buildOwnerLabels: jest.Mock; buildDriverCategories: jest.Mock };
   let schedulerRegistry: { addCronJob: jest.Mock };
 
   const tenant = { id: 'tenant-1', name: 'Acme Fleet', contactEmail: null as string | null };
@@ -75,7 +75,10 @@ describe('DocumentExpiryNotificationService', () => {
       },
     };
     mailer = { send: jest.fn().mockResolvedValue(true) };
-    documentService = { buildOwnerLabels: jest.fn().mockResolvedValue(new Map()) };
+    documentService = {
+      buildOwnerLabels: jest.fn().mockResolvedValue(new Map()),
+      buildDriverCategories: jest.fn().mockResolvedValue(new Map()),
+    };
     schedulerRegistry = { addCronJob: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
@@ -151,6 +154,48 @@ describe('DocumentExpiryNotificationService', () => {
       ],
       skipDuplicates: true,
     });
+  });
+
+  it('names a truck driver by category in the DRIVERS_LICENSE digest, not "rider"', async () => {
+    prisma.client.document.findMany.mockResolvedValue([
+      makeDocument({
+        id: 'doc-licence',
+        ownerType: DocumentOwnerType.RIDER,
+        ownerId: 'driver-9',
+        docType: DocumentType.DRIVERS_LICENSE,
+        expiryDate: daysFromNow(-1),
+      }),
+    ]);
+    documentService.buildOwnerLabels.mockResolvedValue(new Map([['RIDER:driver-9', 'Amina Said']]));
+    documentService.buildDriverCategories.mockResolvedValue(
+      new Map([['driver-9', DriverType.TRUCK_DRIVER]]),
+    );
+
+    await service.scanAndNotify(NOW);
+
+    const message = mailer.send.mock.calls[0][0];
+    expect(message.text).toContain('[truck driver Amina Said]');
+    expect(message.text).not.toContain('[rider Amina Said]');
+  });
+
+  it('still labels a non-licence rider document generically, ignoring category', async () => {
+    prisma.client.document.findMany.mockResolvedValue([
+      makeDocument({
+        id: 'doc-id-card',
+        ownerType: DocumentOwnerType.RIDER,
+        ownerId: 'driver-9',
+        docType: DocumentType.NATIONAL_ID,
+        expiryDate: daysFromNow(-1),
+      }),
+    ]);
+    documentService.buildOwnerLabels.mockResolvedValue(new Map([['RIDER:driver-9', 'Amina Said']]));
+    documentService.buildDriverCategories.mockResolvedValue(new Map());
+
+    await service.scanAndNotify(NOW);
+
+    const message = mailer.send.mock.calls[0][0];
+    expect(message.text).toContain('[rider Amina Said]');
+    expect(documentService.buildDriverCategories).toHaveBeenCalledWith([]);
   });
 
   it('skips documents already alerted for the same kind, but escalates to EXPIRED', async () => {

@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, TransportJobStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { generateRideReference } from '../../common/reference.util';
+import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
@@ -32,6 +34,8 @@ function netProfit(
 
 @Injectable()
 export class TransportService {
+  private readonly logger = new Logger(TransportService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async createJob(dto: CreateTransportJobDto, actor: AuthenticatedUser) {
@@ -46,12 +50,44 @@ export class TransportService {
 
     const ownerDriven = dto.ownerDriven ?? false;
     let driverId: string | null = dto.driverId ?? null;
+    let categoryOverride: {
+      categoryOverrideReason: string;
+      categoryOverrideByUserId: string;
+      categoryOverrideAt: Date;
+    } | null = null;
+
     if (ownerDriven) {
       driverId = null; // owner-driven jobs carry no assigned driver
     } else if (driverId) {
-      const driver = await this.prisma.client.driver.findUnique({ where: { id: driverId } });
+      const driver = await this.prisma.client.driver.findUnique({
+        where: { id: driverId },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      });
       if (!driver || !driver.isActive) {
         throw new NotFoundException('Driver not found');
+      }
+
+      if (!isCompatible(driver.driverType, vehicle.vehicleType)) {
+        const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+        const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
+        if (!authorized) {
+          throw new BadRequestException(
+            describeMismatch(
+              { name: driverName, driverType: driver.driverType },
+              { registrationNumber: vehicle.registrationNumber, vehicleType: vehicle.vehicleType },
+            ),
+          );
+        }
+        categoryOverride = {
+          categoryOverrideReason: dto.categoryOverrideReason as string,
+          categoryOverrideByUserId: actor.userId,
+          categoryOverrideAt: new Date(),
+        };
+        this.logger.warn(
+          `Category override by ${actor.email} (OWNER): ${driverName} (${driver.driverType}) ` +
+            `assigned to ${vehicle.registrationNumber} (${vehicle.vehicleType}). ` +
+            `Reason: ${categoryOverride.categoryOverrideReason}`,
+        );
       }
     }
 
@@ -70,6 +106,7 @@ export class TransportService {
             cargo: dto.cargo,
             revenue: dto.revenue,
             scheduledDate: new Date(dto.scheduledDate),
+            ...categoryOverride,
           },
         });
       } catch (error) {

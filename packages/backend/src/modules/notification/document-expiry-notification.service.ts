@@ -2,10 +2,19 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
-import { Document, DocumentAlert, DocumentAlertKind, UserRole } from '@prisma/client';
+import {
+  Document,
+  DocumentAlert,
+  DocumentAlertKind,
+  DocumentOwnerType,
+  DocumentType,
+  DriverType,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { requestContext } from '../../common/context/request-context';
 import { computeDocumentStatus, DocumentService } from '../document/document.service';
+import { DRIVER_TYPE_LABELS } from '../../common/driver-vehicle-compatibility';
 import { MailerService } from './mailer.service';
 import { resolveOwnerRecipients, TenantSummary } from './notification.util';
 
@@ -167,8 +176,17 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
           pending.map(({ document }) => document),
         );
 
+        const licenceDriverIds = pending
+          .filter(
+            ({ document }) =>
+              document.ownerType === DocumentOwnerType.RIDER &&
+              document.docType === DocumentType.DRIVERS_LICENSE,
+          )
+          .map(({ document }) => document.ownerId);
+        const driverCategories = await this.documentService.buildDriverCategories(licenceDriverIds);
+
         const sent = await this.mailer.send(
-          this.buildDigest(tenant, pending, withinDays, recipients, ownerLabels),
+          this.buildDigest(tenant, pending, withinDays, recipients, ownerLabels, driverCategories),
         );
         if (!sent) {
           // Nothing recorded - the next daily run retries this tenant.
@@ -196,6 +214,7 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
     withinDays: number,
     recipients: string[],
     ownerLabels: Map<string, string>,
+    driverCategories: Map<string, DriverType>,
   ): { to: string[]; subject: string; text: string } {
     const expired = pending.filter(({ kind }) => kind === DocumentAlertKind.EXPIRED);
     const expiringSoon = pending.filter(({ kind }) => kind === DocumentAlertKind.EXPIRING_SOON);
@@ -218,13 +237,13 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
     if (expired.length > 0) {
       lines.push('', 'EXPIRED:');
       for (const { document } of expired) {
-        lines.push(this.describeDocument(document, 'expired on', ownerLabels));
+        lines.push(this.describeDocument(document, 'expired on', ownerLabels, driverCategories));
       }
     }
     if (expiringSoon.length > 0) {
       lines.push('', `EXPIRING WITHIN ${withinDays} DAYS:`);
       for (const { document } of expiringSoon) {
-        lines.push(this.describeDocument(document, 'expires on', ownerLabels));
+        lines.push(this.describeDocument(document, 'expires on', ownerLabels, driverCategories));
       }
     }
 
@@ -242,12 +261,21 @@ export class DocumentExpiryNotificationService implements OnModuleInit {
     document: PendingAlert['document'],
     verb: string,
     ownerLabels: Map<string, string>,
+    driverCategories: Map<string, DriverType>,
   ): string {
     const docType = document.docType.replace(/_/g, ' ');
     const reference = document.referenceNumber ? ` (ref ${document.referenceNumber})` : '';
     const date = document.expiryDate ? document.expiryDate.toISOString().slice(0, 10) : 'unknown';
     const label = ownerLabels.get(`${document.ownerType}:${document.ownerId}`) ?? document.ownerId;
-    const owner = `${document.ownerType.toLowerCase()} ${label}`;
+    // A truck driver's licence class matters more than a rider's, so a
+    // DRIVERS_LICENSE alert names the specific category instead of the
+    // generic "rider" every other rider-owned document uses.
+    const ownerKind =
+      document.ownerType === DocumentOwnerType.RIDER &&
+      document.docType === DocumentType.DRIVERS_LICENSE
+        ? DRIVER_TYPE_LABELS[driverCategories.get(document.ownerId) ?? DriverType.RIDER]
+        : document.ownerType.toLowerCase();
+    const owner = `${ownerKind} ${label}`;
     return `  - [${owner}] ${docType}${reference} - ${verb} ${date}`;
   }
 }

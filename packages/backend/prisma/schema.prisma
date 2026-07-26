@@ -30,6 +30,17 @@ enum VehicleType {
   TRUCK
 }
 
+/// Which vehicles a driver may be assigned. RIDER covers motorbike + bajaji
+/// (the daily-deposit rental fleet); CAR_DRIVER and TRUCK_DRIVER cover the
+/// transport-job fleet. Enforced in the service layer, not just here.
+enum DriverType {
+  RIDER
+  CAR_DRIVER
+  TRUCK_DRIVER
+
+  @@map("driver_type")
+}
+
 enum MotorcycleStatus {
   ACTIVE
   MAINTENANCE
@@ -146,6 +157,7 @@ model Driver {
   userId            String    @unique @map("user_id")
   user              User      @relation(fields: [userId], references: [id])
   licenseNumber     String    @map("license_number")
+  driverType        DriverType @default(RIDER) @map("driver_type")
   nationalId        String?   @map("national_id")
   emergencyContact  String?   @map("emergency_contact")
   isActive          Boolean   @default(true) @map("is_active")
@@ -287,6 +299,11 @@ model DailyAssignment {
   /// the ride is registered. All of this ride's deposits/receipts quote it, so
   /// a bank statement or mobile-money callback reconciles back to this ride.
   reference     String?    @unique
+  /// Set together, only when an OWNER overrides a driver-category/vehicle-type
+  /// mismatch at creation. Null on every ordinary (compatible) assignment.
+  categoryOverrideReason   String?   @map("category_override_reason")
+  categoryOverrideByUserId String?   @map("category_override_by_user_id")
+  categoryOverrideAt       DateTime? @map("category_override_at")
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
@@ -468,6 +485,11 @@ model TransportJob {
   scheduledDate DateTime           @map("scheduled_date") @db.Date
   pickedUpAt    DateTime?          @map("picked_up_at")
   deliveredAt   DateTime?          @map("delivered_at")
+  /// Set together, only when an OWNER overrides a driver-category/vehicle-type
+  /// mismatch at creation. Null on every ordinary (compatible) job.
+  categoryOverrideReason   String?   @map("category_override_reason")
+  categoryOverrideByUserId String?   @map("category_override_by_user_id")
+  categoryOverrideAt       DateTime? @map("category_override_at")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
 

@@ -107,9 +107,12 @@ export interface DriverUser {
   isActive: boolean;
 }
 
+export type DriverType = 'RIDER' | 'CAR_DRIVER' | 'TRUCK_DRIVER';
+
 export interface Driver {
   id: string;
   licenseNumber: string;
+  driverType: DriverType;
   nationalId: string | null;
   emergencyContact: string | null;
   isActive: boolean;
@@ -125,6 +128,7 @@ export interface CreateDriverPayload {
   initialPassword: string;
   nationalId?: string;
   emergencyContact?: string;
+  driverType?: DriverType;
 }
 
 // No email/initialPassword - UpdateDriverDto deliberately doesn't allow changing
@@ -136,6 +140,7 @@ export interface UpdateDriverPayload {
   licenseNumber?: string;
   nationalId?: string;
   emergencyContact?: string;
+  driverType?: DriverType;
 }
 
 export type DocumentOwnerType = 'RIDER' | 'MOTORCYCLE' | 'GUARANTOR';

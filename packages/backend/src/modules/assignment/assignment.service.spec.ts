@@ -5,8 +5,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { validate } from 'class-validator';
+import { DriverType, UserRole, VehicleType } from '@prisma/client';
 import { AssignmentService } from './assignment.service';
+import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 
@@ -35,6 +37,16 @@ describe('AssignmentService', () => {
     jti: 'jti-owner',
   };
 
+  const manager: AuthenticatedUser = {
+    userId: 'user-manager',
+    tenantId: 'tenant-1',
+    role: UserRole.MANAGER,
+    email: 'manager@example.com',
+    firstName: 'M',
+    lastName: 'Anager',
+    jti: 'jti-manager',
+  };
+
   const driverActor: AuthenticatedUser = {
     userId: 'user-driver',
     tenantId: 'tenant-1',
@@ -45,8 +57,26 @@ describe('AssignmentService', () => {
     jti: 'jti-driver',
   };
 
-  const motorcycle = { id: 'moto-1', tenantId: 'tenant-1', isActive: true };
-  const driver = { id: 'driver-1', tenantId: 'tenant-1', userId: 'user-driver', isActive: true };
+  const motorcycle = {
+    id: 'moto-1',
+    tenantId: 'tenant-1',
+    isActive: true,
+    vehicleType: VehicleType.MOTORBIKE,
+    registrationNumber: 'T123 ABC',
+  };
+
+  function makeDriver(driverType: DriverType) {
+    return {
+      id: 'driver-1',
+      tenantId: 'tenant-1',
+      userId: 'user-driver',
+      isActive: true,
+      driverType,
+      user: { firstName: 'Juma', lastName: 'Hassan' },
+    };
+  }
+
+  const driver = makeDriver(DriverType.RIDER);
 
   const dto = {
     motorcycleId: 'moto-1',
@@ -129,6 +159,141 @@ describe('AssignmentService', () => {
       expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();
       expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
       expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createAssignment - driver category compatibility', () => {
+    beforeEach(() => {
+      prisma.client.dailyAssignment.findFirst.mockResolvedValue(null);
+      prisma.client.dailyAssignment.create.mockImplementation(({ data }) => ({
+        id: 'assignment-1',
+        ...data,
+      }));
+    });
+
+    it.each([
+      [DriverType.RIDER, VehicleType.MOTORBIKE],
+      [DriverType.RIDER, VehicleType.BAJAJI],
+      [DriverType.CAR_DRIVER, VehicleType.CAR],
+      [DriverType.TRUCK_DRIVER, VehicleType.TRUCK],
+    ])('allows a %s to be assigned a %s', async (driverType, vehicleType) => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ ...motorcycle, vehicleType });
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(driverType));
+
+      const result = await service.createAssignment(dto, owner);
+
+      expect(result).toBeDefined();
+      expect(prisma.client.dailyAssignment.create).toHaveBeenCalled();
+    });
+
+    it.each([
+      [DriverType.RIDER, VehicleType.CAR],
+      [DriverType.RIDER, VehicleType.TRUCK],
+      [DriverType.CAR_DRIVER, VehicleType.MOTORBIKE],
+      [DriverType.CAR_DRIVER, VehicleType.BAJAJI],
+      [DriverType.CAR_DRIVER, VehicleType.TRUCK],
+      [DriverType.TRUCK_DRIVER, VehicleType.MOTORBIKE],
+      [DriverType.TRUCK_DRIVER, VehicleType.BAJAJI],
+      [DriverType.TRUCK_DRIVER, VehicleType.CAR],
+    ])('rejects a %s assigned a %s, with no override', async (driverType, vehicleType) => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ ...motorcycle, vehicleType });
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(driverType));
+
+      await expect(service.createAssignment(dto, owner)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+    });
+
+    it('names both sides of the mismatch in the error message', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({
+        ...motorcycle,
+        vehicleType: VehicleType.TRUCK,
+        registrationNumber: 'T123 ABC',
+      });
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      await expect(service.createAssignment(dto, owner)).rejects.toThrow(
+        'Juma Hassan is a rider and cannot be assigned T123 ABC, which is a truck.',
+      );
+    });
+
+    it('an OWNER override with a valid reason succeeds and persists all three columns', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({
+        ...motorcycle,
+        vehicleType: VehicleType.TRUCK,
+      });
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      const reason = 'Owner is personally driving the truck today.';
+      await service.createAssignment({ ...dto, categoryOverrideReason: reason }, owner);
+
+      expect(prisma.client.dailyAssignment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            categoryOverrideReason: reason,
+            categoryOverrideByUserId: owner.userId,
+            categoryOverrideAt: expect.any(Date),
+          }),
+        }),
+      );
+    });
+
+    it('a MANAGER attempting the override is rejected, even with a reason', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({
+        ...motorcycle,
+        vehicleType: VehicleType.TRUCK,
+      });
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      const reason = 'Manager insists on driving the truck today.';
+      await expect(
+        service.createAssignment({ ...dto, categoryOverrideReason: reason }, manager),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+    });
+
+    it('a compatible assignment created without a reason leaves all three columns unset', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
+      prisma.client.driver.findUnique.mockResolvedValue(makeDriver(DriverType.RIDER));
+
+      await service.createAssignment(dto, owner);
+
+      const { data } = prisma.client.dailyAssignment.create.mock.calls[0][0];
+      expect(data.categoryOverrideReason).toBeUndefined();
+      expect(data.categoryOverrideByUserId).toBeUndefined();
+      expect(data.categoryOverrideAt).toBeUndefined();
+    });
+  });
+
+  describe('CreateAssignmentDto - categoryOverrideReason validation', () => {
+    function makeDto(overrides: Partial<CreateAssignmentDto> = {}): CreateAssignmentDto {
+      const instance = new CreateAssignmentDto();
+      instance.motorcycleId = 'moto-1';
+      instance.driverId = 'driver-1';
+      instance.assignedDate = '2026-07-01';
+      instance.targetAmount = 50000;
+      Object.assign(instance, overrides);
+      return instance;
+    }
+
+    it('accepts a reason of 10 or more characters', async () => {
+      const dto = makeDto({ categoryOverrideReason: 'Owner is driving personally.' });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('rejects a reason shorter than 10 characters', async () => {
+      const dto = makeDto({ categoryOverrideReason: 'too short' });
+      const errors = await validate(dto);
+      expect(errors).not.toHaveLength(0);
+      expect(errors.some((e) => e.property === 'categoryOverrideReason')).toBe(true);
+    });
+
+    it('accepts no reason at all (override not requested)', async () => {
+      const dto = makeDto();
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
     });
   });
 
