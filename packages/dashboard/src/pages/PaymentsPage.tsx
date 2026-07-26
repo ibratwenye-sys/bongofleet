@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
 import type {
   Assignment,
+  Driver,
   Motorcycle,
   Payment,
   PaymentStatus,
-  Rider,
   UpdatePaymentPayload,
 } from '../lib/types';
 import { PAYMENT_STATUS_STYLES, StatusBadge } from '../components/StatusBadge';
@@ -25,7 +25,7 @@ export function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
-  const [riders, setRiders] = useState<Rider[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'ALL'>('ALL');
   const [showRecordPayment, setShowRecordPayment] = useState(false);
@@ -34,16 +34,16 @@ export function PaymentsPage() {
 
   async function load() {
     try {
-      const [paymentsData, assignmentsData, motorcyclesData, ridersData] = await Promise.all([
+      const [paymentsData, assignmentsData, motorcyclesData, driversData] = await Promise.all([
         apiFetch<Payment[]>('/payments'),
         apiFetch<Assignment[]>('/assignments'),
         apiFetch<Motorcycle[]>('/motorcycles'),
-        apiFetch<Rider[]>('/riders'),
+        apiFetch<Driver[]>('/drivers'),
       ]);
       setPayments(paymentsData);
       setAssignments(assignmentsData);
       setMotorcycles(motorcyclesData);
-      setRiders(ridersData);
+      setDrivers(driversData);
     } catch {
       setError('Could not load payments. Please try again.');
     }
@@ -59,7 +59,7 @@ export function PaymentsPage() {
     return () => clearTimeout(timer);
   }, [successMessage]);
 
-  const riderById = useMemo(() => new Map(riders.map((r) => [r.id, r])), [riders]);
+  const driverById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
 
   const filtered = useMemo(() => {
     if (!payments) return [];
@@ -129,7 +129,7 @@ export function PaymentsPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Rider</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Driver</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Amount</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Method</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Status</th>
@@ -151,12 +151,14 @@ export function PaymentsPage() {
               </tr>
             ) : (
               filtered.map((p) => {
-                const rider = riderById.get(p.riderId);
+                const driver = driverById.get(p.driverId);
                 return (
                   <tr key={p.id}>
                     <td className="px-4 py-2 text-gray-600">{p.createdAt.slice(0, 10)}</td>
                     <td className="px-4 py-2 text-gray-900">
-                      {rider ? `${rider.user.firstName} ${rider.user.lastName}` : 'Unknown rider'}
+                      {driver
+                        ? `${driver.user.firstName} ${driver.user.lastName}`
+                        : 'Unknown driver'}
                     </td>
                     <td className="px-4 py-2 text-gray-600">{formatTZS(parseFloat(p.amount))}</td>
                     <td className="px-4 py-2 text-gray-600">{p.paymentMethod ?? '—'}</td>
@@ -194,7 +196,7 @@ export function PaymentsPage() {
       {showRecordPayment && (
         <PaymentFormModal
           assignments={assignments}
-          riders={riders}
+          drivers={drivers}
           motorcycles={motorcycles}
           onClose={() => setShowRecordPayment(false)}
           onSaved={handleSaved}

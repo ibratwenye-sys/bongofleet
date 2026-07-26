@@ -10,7 +10,7 @@ describe('TransportService', () => {
   let prisma: {
     client: {
       motorcycle: { findUnique: jest.Mock; findMany: jest.Mock };
-      rider: { findUnique: jest.Mock };
+      driver: { findUnique: jest.Mock };
       transportJob: {
         create: jest.Mock;
         findMany: jest.Mock;
@@ -32,7 +32,7 @@ describe('TransportService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = { ...owner, role: UserRole.RIDER, userId: 'user-rider' };
+  const driverActor: AuthenticatedUser = { ...owner, role: UserRole.RIDER, userId: 'user-driver' };
 
   const truck = { id: 'veh-1', tenantId: 'tenant-1', isActive: true, vehicleType: 'TRUCK' };
 
@@ -40,7 +40,7 @@ describe('TransportService', () => {
     prisma = {
       client: {
         motorcycle: { findUnique: jest.fn(), findMany: jest.fn() },
-        rider: { findUnique: jest.fn() },
+        driver: { findUnique: jest.fn() },
         transportJob: {
           create: jest.fn(),
           findMany: jest.fn(),
@@ -67,7 +67,7 @@ describe('TransportService', () => {
 
   describe('createJob', () => {
     it('forbids a RIDER', async () => {
-      await expect(service.createJob(dto, riderActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.createJob(dto, driverActor)).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('throws NotFound when the vehicle is missing', async () => {
@@ -82,9 +82,9 @@ describe('TransportService', () => {
         ...data,
       }));
 
-      const result = await service.createJob({ ...dto, ownerDriven: true, riderId: 'r-1' }, owner);
+      const result = await service.createJob({ ...dto, ownerDriven: true, driverId: 'r-1' }, owner);
 
-      expect(result.riderId).toBeNull();
+      expect(result.driverId).toBeNull();
       expect(result.ownerDriven).toBe(true);
       expect(result.reference).toMatch(/^BF-[0-9A-HJKMNP-TV-Z]{8}$/);
     });

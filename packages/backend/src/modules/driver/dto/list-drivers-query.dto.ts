@@ -1,7 +1,7 @@
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
-export class ListRidersQueryDto {
+export class ListDriversQueryDto {
   @IsOptional()
   @IsString()
   search?: string;

@@ -60,21 +60,21 @@ async function main(): Promise<void> {
       },
     });
 
-    // A rider (login + profile), a motorcycle, one assignment paid in full, an
+    // A driver (login + profile), a motorcycle, one assignment paid in full, an
     // expense, and a maintenance log - enough for Reports to show real numbers.
-    const riderUser = await prisma.user.create({
+    const driverUser = await prisma.user.create({
       data: {
         tenantId: tenant.id,
-        email: 'rider1@bongofleet.com',
+        email: 'driver1@bongofleet.com',
         phone: '+255700000001',
-        passwordHash: await hashPassword('Rider1234!'),
+        passwordHash: await hashPassword('Driver1234!'),
         role: 'RIDER',
         firstName: 'Juma',
-        lastName: 'Rider',
+        lastName: 'Driver',
       },
     });
-    const rider = await prisma.rider.create({
-      data: { tenantId: tenant.id, userId: riderUser.id, licenseNumber: 'LIC-DEMO-1' },
+    const driver = await prisma.driver.create({
+      data: { tenantId: tenant.id, userId: driverUser.id, licenseNumber: 'LIC-DEMO-1' },
     });
     const motorcycle = await prisma.motorcycle.create({
       data: { tenantId: tenant.id, registrationNumber: 'T123 ABC', currentMileage: 8000 },
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     const assignment = await prisma.dailyAssignment.create({
       data: {
         tenantId: tenant.id,
-        riderId: rider.id,
+        driverId: driver.id,
         motorcycleId: motorcycle.id,
         assignedDate: dateOnly(1),
         targetAmount: 15000,
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
       data: {
         tenantId: tenant.id,
         dailyAssignmentId: assignment.id,
-        riderId: rider.id,
+        driverId: driver.id,
         amount: 15000,
         status: 'COMPLETED',
         paidAt: new Date(),

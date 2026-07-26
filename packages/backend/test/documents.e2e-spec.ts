@@ -60,19 +60,19 @@ describe('Documents & Guarantors (e2e)', () => {
   it('uploads, lists, downloads, and tracks expiry for documents; manages guarantors; enforces tenant isolation', async () => {
     const { accessToken } = await signupOwner(app);
 
-    const riderRes = await request(app.getHttpServer())
-      .post('/riders')
+    const driverRes = await request(app.getHttpServer())
+      .post('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
-        firstName: 'Riri',
-        lastName: 'Der',
+        firstName: 'Dara',
+        lastName: 'Ver',
         phone: '+254710000001',
-        email: 'rider1@acme-fleet.test',
+        email: 'driver1@acme-fleet.test',
         licenseNumber: 'LIC-E2E-1',
-        initialPassword: 'riderpass123',
+        initialPassword: 'driverpass123',
       })
       .expect(201);
-    const riderId = riderRes.body.id as string;
+    const driverId = driverRes.body.id as string;
 
     const motoRes = await request(app.getHttpServer())
       .post('/motorcycles')
@@ -81,18 +81,18 @@ describe('Documents & Guarantors (e2e)', () => {
       .expect(201);
     const motorcycleId = motoRes.body.id as string;
 
-    // --- upload a document for the rider ---
+    // --- upload a document for the driver ---
     const uploadRes = await request(app.getHttpServer())
       .post('/documents')
       .set('Authorization', `Bearer ${accessToken}`)
       .field('ownerType', 'RIDER')
-      .field('ownerId', riderId)
+      .field('ownerId', driverId)
       .field('docType', 'NATIONAL_ID')
       .attach('file', TINY_PNG, { filename: 'id-card.png', contentType: 'image/png' })
       .expect(201);
     expect(uploadRes.body.fileName).toBe('id-card.png');
     expect(uploadRes.body.mimeType).toBe('image/png');
-    const riderDocumentId = uploadRes.body.id as string;
+    const driverDocumentId = uploadRes.body.id as string;
 
     // --- upload a document for the motorcycle, with a near-term expiry ---
     const inTenDays = new Date();
@@ -110,15 +110,15 @@ describe('Documents & Guarantors (e2e)', () => {
     // --- list by owner ---
     const listRes = await request(app.getHttpServer())
       .get('/documents')
-      .query({ ownerType: 'RIDER', ownerId: riderId })
+      .query({ ownerType: 'RIDER', ownerId: driverId })
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listRes.body).toHaveLength(1);
-    expect(listRes.body[0].id).toBe(riderDocumentId);
+    expect(listRes.body[0].id).toBe(driverDocumentId);
 
     // --- download and confirm the bytes round-trip exactly ---
     const downloadRes = await request(app.getHttpServer())
-      .get(`/documents/${riderDocumentId}/file`)
+      .get(`/documents/${driverDocumentId}/file`)
       .set('Authorization', `Bearer ${accessToken}`)
       .buffer()
       .parse(bufferParser)
@@ -142,7 +142,7 @@ describe('Documents & Guarantors (e2e)', () => {
       .post('/documents')
       .set('Authorization', `Bearer ${accessToken}`)
       .field('ownerType', 'RIDER')
-      .field('ownerId', riderId)
+      .field('ownerId', driverId)
       .field('docType', 'OTHER')
       .attach('file', Buffer.from('not an image'), {
         filename: 'notes.txt',
@@ -152,18 +152,18 @@ describe('Documents & Guarantors (e2e)', () => {
 
     // --- guarantors: add two, list them ---
     await request(app.getHttpServer())
-      .post(`/riders/${riderId}/guarantors`)
+      .post(`/drivers/${driverId}/guarantors`)
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ firstName: 'Grace', lastName: 'Guarantor', phone: '+254700000123' })
       .expect(201);
     await request(app.getHttpServer())
-      .post(`/riders/${riderId}/guarantors`)
+      .post(`/drivers/${driverId}/guarantors`)
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ firstName: 'Gabriel', lastName: 'Guarantor', phone: '+254700000124' })
       .expect(201);
 
     const guarantorsRes = await request(app.getHttpServer())
-      .get(`/riders/${riderId}/guarantors`)
+      .get(`/drivers/${driverId}/guarantors`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(guarantorsRes.body).toHaveLength(2);
@@ -175,7 +175,7 @@ describe('Documents & Guarantors (e2e)', () => {
       phone: '+254700000099',
     });
     await request(app.getHttpServer())
-      .get(`/documents/${riderDocumentId}/file`)
+      .get(`/documents/${driverDocumentId}/file`)
       .set('Authorization', `Bearer ${otherOwnerToken}`)
       .expect(404);
   });

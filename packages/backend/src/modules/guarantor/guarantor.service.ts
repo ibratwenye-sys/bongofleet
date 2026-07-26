@@ -15,21 +15,21 @@ function assertOwnerOrManager(actor: AuthenticatedUser): void {
 export class GuarantorService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async assertRiderExists(riderId: string): Promise<void> {
-    const rider = await this.prisma.client.rider.findUnique({ where: { id: riderId } });
-    if (!rider) {
-      throw new NotFoundException('Rider not found');
+  private async assertDriverExists(driverId: string): Promise<void> {
+    const driver = await this.prisma.client.driver.findUnique({ where: { id: driverId } });
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
     }
   }
 
-  async create(riderId: string, dto: CreateGuarantorDto, actor: AuthenticatedUser) {
+  async create(driverId: string, dto: CreateGuarantorDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
-    await this.assertRiderExists(riderId);
+    await this.assertDriverExists(driverId);
 
     return this.prisma.client.guarantor.create({
       data: {
         tenantId: actor.tenantId,
-        riderId,
+        driverId,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -39,12 +39,12 @@ export class GuarantorService {
     });
   }
 
-  async list(riderId: string, actor: AuthenticatedUser) {
+  async list(driverId: string, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
-    await this.assertRiderExists(riderId);
+    await this.assertDriverExists(driverId);
 
     return this.prisma.client.guarantor.findMany({
-      where: { riderId, isActive: true },
+      where: { driverId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
   }

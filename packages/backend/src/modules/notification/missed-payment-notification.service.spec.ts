@@ -33,7 +33,7 @@ function makeAssignment(
     assignedDate: daysFromNow(-1),
     targetAmount: new Prisma.Decimal(10000),
     dailyPayments: [] as Array<{ amount: Prisma.Decimal; status: PaymentStatus }>,
-    rider: { user: { firstName: 'Juma', lastName: 'Rider' } },
+    driver: { user: { firstName: 'Juma', lastName: 'Driver' } },
     motorcycle: { registrationNumber: 'KDA-123' },
     ...overrides,
   };
@@ -111,7 +111,7 @@ describe('MissedPaymentNotificationService', () => {
     expect(message.subject).toContain('2 daily payment(s)');
     expect(message.text).toContain('NO PAYMENT RECORDED:');
     expect(message.text).toContain('PAID UNDER TARGET:');
-    expect(message.text).toContain('Juma Rider');
+    expect(message.text).toContain('Juma Driver');
     expect(message.text).toContain('KDA-123');
     expect(message.text).toContain('short by 6000.00');
 

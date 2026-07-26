@@ -1,37 +1,37 @@
 import { useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import type { Assignment, CreatePaymentPayload, Motorcycle, Rider } from '../lib/types';
+import type { Assignment, CreatePaymentPayload, Driver, Motorcycle } from '../lib/types';
 import { Modal } from './Modal';
 
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'BANK_TRANSFER'];
 
-function riderName(riders: Rider[], riderId: string): string {
-  const rider = riders.find((r) => r.id === riderId);
-  return rider ? `${rider.user.firstName} ${rider.user.lastName}` : 'Unknown rider';
+function driverName(drivers: Driver[], driverId: string): string {
+  const driver = drivers.find((d) => d.id === driverId);
+  return driver ? `${driver.user.firstName} ${driver.user.lastName}` : 'Unknown driver';
 }
 
 function assignmentLabel(
   assignment: Assignment,
-  riders: Rider[],
+  drivers: Driver[],
   motorcycles: Motorcycle[],
 ): string {
   const motorcycle = motorcycles.find((m) => m.id === assignment.motorcycleId);
   const target = Number(assignment.targetAmount).toLocaleString();
-  return `${assignment.assignedDate.slice(0, 10)} — ${riderName(riders, assignment.riderId)} — ${
+  return `${assignment.assignedDate.slice(0, 10)} — ${driverName(drivers, assignment.driverId)} — ${
     motorcycle?.registrationNumber ?? 'Unknown bike'
   } — target ${target} TZS`;
 }
 
 export function PaymentFormModal({
   assignments,
-  riders,
+  drivers,
   motorcycles,
   lockedAssignment,
   onClose,
   onSaved,
 }: {
   assignments: Assignment[];
-  riders: Rider[];
+  drivers: Driver[];
   motorcycles: Motorcycle[];
   lockedAssignment?: Assignment;
   onClose: () => void;
@@ -64,7 +64,7 @@ export function PaymentFormModal({
     try {
       const payload: CreatePaymentPayload = {
         dailyAssignmentId: selectedAssignment.id,
-        riderId: selectedAssignment.riderId,
+        driverId: selectedAssignment.driverId,
         amount: amountNumber,
         paymentMethod: paymentMethod || undefined,
       };
@@ -82,7 +82,7 @@ export function PaymentFormModal({
       <form onSubmit={handleSubmit} className="space-y-3">
         {lockedAssignment ? (
           <div className="rounded bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            {assignmentLabel(lockedAssignment, riders, motorcycles)}
+            {assignmentLabel(lockedAssignment, drivers, motorcycles)}
           </div>
         ) : (
           <div>
@@ -95,7 +95,7 @@ export function PaymentFormModal({
               <option value="">Select an assignment…</option>
               {assignments.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {assignmentLabel(a, riders, motorcycles)}
+                  {assignmentLabel(a, drivers, motorcycles)}
                 </option>
               ))}
             </select>

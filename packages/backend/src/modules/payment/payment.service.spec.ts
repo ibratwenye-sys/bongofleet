@@ -11,7 +11,7 @@ describe('PaymentService', () => {
   let prisma: {
     client: {
       dailyAssignment: { findUnique: jest.Mock };
-      rider: { findUnique: jest.Mock };
+      driver: { findUnique: jest.Mock };
       dailyPayment: {
         findUnique: jest.Mock;
         findMany: jest.Mock;
@@ -31,32 +31,32 @@ describe('PaymentService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
   const assignment = {
     id: 'assignment-1',
     tenantId: 'tenant-1',
-    riderId: 'rider-1',
+    driverId: 'driver-1',
     motorcycleId: 'moto-1',
     targetAmount: 50000,
     assignedDate: new Date('2026-07-01'),
   };
 
-  const rider = { id: 'rider-1', tenantId: 'tenant-1', userId: 'user-rider' };
+  const driver = { id: 'driver-1', tenantId: 'tenant-1', userId: 'user-driver' };
 
   beforeEach(async () => {
     prisma = {
       client: {
         dailyAssignment: { findUnique: jest.fn() },
-        rider: { findUnique: jest.fn() },
+        driver: { findUnique: jest.fn() },
         dailyPayment: {
           findUnique: jest.fn(),
           findMany: jest.fn(),
@@ -78,11 +78,11 @@ describe('PaymentService', () => {
   });
 
   describe('createPayment', () => {
-    const dto = { dailyAssignmentId: 'assignment-1', riderId: 'rider-1', amount: 40000 };
+    const dto = { dailyAssignmentId: 'assignment-1', driverId: 'driver-1', amount: 40000 };
 
     it('succeeds for a valid owner request', async () => {
       prisma.client.dailyAssignment.findUnique.mockResolvedValue(assignment);
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.dailyPayment.create.mockResolvedValue({ id: 'payment-1', ...dto });
 
       const result = await service.createPayment(dto, owner);
@@ -104,62 +104,62 @@ describe('PaymentService', () => {
       await expect(service.createPayment(dto, owner)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('throws NotFound when the rider does not exist', async () => {
+    it('throws NotFound when the driver does not exist', async () => {
       prisma.client.dailyAssignment.findUnique.mockResolvedValue(assignment);
-      prisma.client.rider.findUnique.mockResolvedValue(null);
+      prisma.client.driver.findUnique.mockResolvedValue(null);
 
       await expect(service.createPayment(dto, owner)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws BadRequest when amount exceeds 150% of the target amount', async () => {
       prisma.client.dailyAssignment.findUnique.mockResolvedValue(assignment);
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
 
       await expect(service.createPayment({ ...dto, amount: 76000 }, owner)).rejects.toBeInstanceOf(
         BadRequestException,
       );
     });
 
-    it("throws Forbidden when a RIDER records a payment for another rider's assignment", async () => {
-      // assignment/dto both reference rider-1, but the calling RIDER's own
-      // profile (looked up by userId) is a *different* rider (rider-2).
-      const someoneElsesRider = { id: 'rider-1', tenantId: 'tenant-1', userId: 'user-other' };
-      const callersOwnRider = { id: 'rider-2', tenantId: 'tenant-1', userId: 'user-rider' };
+    it("throws Forbidden when a RIDER records a payment for another driver's assignment", async () => {
+      // assignment/dto both reference driver-1, but the calling RIDER's own
+      // profile (looked up by userId) is a *different* driver (driver-2).
+      const someoneElsesDriver = { id: 'driver-1', tenantId: 'tenant-1', userId: 'user-other' };
+      const callersOwnDriver = { id: 'driver-2', tenantId: 'tenant-1', userId: 'user-driver' };
 
       prisma.client.dailyAssignment.findUnique.mockResolvedValue(assignment);
-      prisma.client.rider.findUnique.mockImplementation(
+      prisma.client.driver.findUnique.mockImplementation(
         ({ where }: { where: { id?: string; userId?: string } }) => {
-          if (where.id) return someoneElsesRider;
-          if (where.userId) return callersOwnRider;
+          if (where.id) return someoneElsesDriver;
+          if (where.userId) return callersOwnDriver;
           return null;
         },
       );
 
-      await expect(service.createPayment(dto, riderActor)).rejects.toBeInstanceOf(
+      await expect(service.createPayment(dto, driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
     });
   });
 
   describe('listPayments', () => {
-    it('returns tenant-scoped results for OWNER, respecting the riderId filter', async () => {
+    it('returns tenant-scoped results for OWNER, respecting the driverId filter', async () => {
       prisma.client.dailyPayment.findMany.mockResolvedValue([{ id: 'p1' }]);
 
-      await service.listPayments({ riderId: 'rider-9' }, owner);
+      await service.listPayments({ driverId: 'driver-9' }, owner);
 
       expect(prisma.client.dailyPayment.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ riderId: 'rider-9' }) }),
+        expect.objectContaining({ where: expect.objectContaining({ driverId: 'driver-9' }) }),
       );
     });
 
     it('force-scopes a RIDER to their own payments regardless of query params', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.dailyPayment.findMany.mockResolvedValue([{ id: 'p1' }]);
 
-      await service.listPayments({ riderId: 'someone-elses-rider-id' }, riderActor);
+      await service.listPayments({ driverId: 'someone-elses-driver-id' }, driverActor);
 
       expect(prisma.client.dailyPayment.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ riderId: rider.id }) }),
+        expect.objectContaining({ where: expect.objectContaining({ driverId: driver.id }) }),
       );
     });
   });
@@ -194,7 +194,7 @@ describe('PaymentService', () => {
 
     it('throws Forbidden when called by a RIDER', async () => {
       await expect(
-        service.updatePaymentStatus('payment-1', { status: PaymentStatus.COMPLETED }, riderActor),
+        service.updatePaymentStatus('payment-1', { status: PaymentStatus.COMPLETED }, driverActor),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.client.dailyPayment.findUnique).not.toHaveBeenCalled();
     });

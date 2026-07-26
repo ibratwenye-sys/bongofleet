@@ -26,18 +26,21 @@ import { UpdateGuarantorDto } from './dto/update-guarantor.dto';
 export class GuarantorController {
   constructor(private readonly guarantorService: GuarantorService) {}
 
-  @Post('riders/:riderId/guarantors')
+  // 'riders/:driverId/guarantors' kept as an alias for one release so an
+  // un-updated dashboard or phone build still calling the old path does not
+  // break. Drop once nothing still calls it.
+  @Post(['drivers/:driverId/guarantors', 'riders/:driverId/guarantors'])
   create(
-    @Param('riderId') riderId: string,
+    @Param('driverId') driverId: string,
     @Body() dto: CreateGuarantorDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.guarantorService.create(riderId, dto, actor);
+    return this.guarantorService.create(driverId, dto, actor);
   }
 
-  @Get('riders/:riderId/guarantors')
-  list(@Param('riderId') riderId: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.guarantorService.list(riderId, actor);
+  @Get(['drivers/:driverId/guarantors', 'riders/:driverId/guarantors'])
+  list(@Param('driverId') driverId: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.guarantorService.list(driverId, actor);
   }
 
   @Patch('guarantors/:id')

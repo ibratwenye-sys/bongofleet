@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import type {
+  DriverRevenue,
   ExpenseCategory,
   MotorcyclePnl,
   PnlSummary,
-  RiderRevenue,
   VehicleType,
 } from '../lib/types';
 import { formatTZS, startOfThisMonth, today } from '../lib/format';
@@ -44,7 +44,7 @@ const BAR_COLORS = [
 interface ReportData {
   pnl: PnlSummary;
   perMotorcycle: MotorcyclePnl[];
-  perRider: RiderRevenue[];
+  perDriver: DriverRevenue[];
   breakdown: ExpenseCategory[];
 }
 
@@ -126,13 +126,13 @@ export function ReportsPage() {
     setError(null);
     const qs = `?from=${from}&to=${to}${category !== 'ALL' ? `&vehicleType=${category}` : ''}`;
     try {
-      const [pnl, perMotorcycle, perRider, breakdown] = await Promise.all([
+      const [pnl, perMotorcycle, perDriver, breakdown] = await Promise.all([
         apiFetch<PnlSummary>(`/analytics/pnl${qs}`),
         apiFetch<MotorcyclePnl[]>(`/analytics/per-motorcycle${qs}`),
-        apiFetch<RiderRevenue[]>(`/analytics/per-rider${qs}`),
+        apiFetch<DriverRevenue[]>(`/analytics/per-driver${qs}`),
         apiFetch<ExpenseCategory[]>(`/analytics/expense-breakdown${qs}`),
       ]);
-      setData({ pnl, perMotorcycle, perRider, breakdown });
+      setData({ pnl, perMotorcycle, perDriver, breakdown });
     } catch {
       setError('Could not load reports. Please try again.');
     } finally {
@@ -234,28 +234,28 @@ export function ReportsPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue per rider</h2>
-              {data.perRider.length === 0 ? (
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue per driver</h2>
+              {data.perDriver.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   {data.pnl.vehicleType === 'CAR' || data.pnl.vehicleType === 'TRUCK'
-                    ? 'Rider revenue comes from daily rentals. Car and truck income is earned per transport job — see the Transport page.'
-                    : 'No rider revenue in this period.'}
+                    ? 'Driver revenue comes from daily rentals. Car and truck income is earned per transport job — see the Transport page.'
+                    : 'No driver revenue in this period.'}
                 </p>
               ) : (
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-500">
-                      <th className="py-1 font-medium">Rider</th>
+                      <th className="py-1 font-medium">Driver</th>
                       <th className="py-1 text-right font-medium">Payments</th>
                       <th className="py-1 text-right font-medium">Revenue</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.perRider.map((r) => (
-                      <tr key={r.riderId}>
-                        <td className="py-1.5 text-gray-900">{r.riderName}</td>
-                        <td className="py-1.5 text-right text-gray-500">{r.paymentCount}</td>
-                        <td className="py-1.5 text-right text-gray-700">{formatTZS(r.revenue)}</td>
+                    {data.perDriver.map((d) => (
+                      <tr key={d.driverId}>
+                        <td className="py-1.5 text-gray-900">{d.driverName}</td>
+                        <td className="py-1.5 text-right text-gray-500">{d.paymentCount}</td>
+                        <td className="py-1.5 text-right text-gray-700">{formatTZS(d.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>

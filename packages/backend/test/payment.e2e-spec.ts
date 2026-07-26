@@ -26,30 +26,30 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
   return { accessToken: res.body.accessToken as string, tenantId: me.body.tenantId as string };
 }
 
-let riderSeedCounter = 0;
+let driverSeedCounter = 0;
 
-async function seedRiderAssignment(
+async function seedDriverAssignment(
   prisma: PrismaService,
   tenantId: string,
-  overrides: { riderEmail?: string; targetAmount?: number } = {},
+  overrides: { driverEmail?: string; targetAmount?: number } = {},
 ) {
-  riderSeedCounter += 1;
-  const riderEmail = overrides.riderEmail ?? `rider${riderSeedCounter}@acme-fleet.test`;
+  driverSeedCounter += 1;
+  const driverEmail = overrides.driverEmail ?? `driver${driverSeedCounter}@acme-fleet.test`;
   const password = 'password123';
 
   const user = await prisma.client.user.create({
     data: {
       tenantId,
-      email: riderEmail,
-      phone: `+25471${String(riderSeedCounter).padStart(7, '0')}`,
+      email: driverEmail,
+      phone: `+25471${String(driverSeedCounter).padStart(7, '0')}`,
       passwordHash: await hashPassword(password),
       role: UserRole.RIDER,
-      firstName: 'Riri',
-      lastName: 'Der',
+      firstName: 'Dara',
+      lastName: 'Ver',
     },
   });
 
-  const rider = await prisma.client.rider.create({
+  const driver = await prisma.client.driver.create({
     data: {
       tenantId,
       userId: user.id,
@@ -67,14 +67,14 @@ async function seedRiderAssignment(
   const assignment = await prisma.client.dailyAssignment.create({
     data: {
       tenantId,
-      riderId: rider.id,
+      driverId: driver.id,
       motorcycleId: motorcycle.id,
       assignedDate: new Date('2026-07-01'),
       targetAmount: overrides.targetAmount ?? 50000,
     },
   });
 
-  return { riderEmail, password, rider, motorcycle, assignment };
+  return { driverEmail, password, driver, motorcycle, assignment };
 }
 
 describe('Payment (e2e)', () => {
@@ -101,18 +101,21 @@ describe('Payment (e2e)', () => {
 
   it('records a payment and reconciles it to COMPLETED, stamping paidAt', async () => {
     const { accessToken: ownerToken, tenantId } = await signupOwner(app);
-    const { riderEmail, password, rider, assignment } = await seedRiderAssignment(prisma, tenantId);
+    const { driverEmail, password, driver, assignment } = await seedDriverAssignment(
+      prisma,
+      tenantId,
+    );
 
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderEmail, password })
+      .send({ email: driverEmail, password })
       .expect(200);
-    const riderToken = riderLogin.body.accessToken as string;
+    const driverToken = driverLogin.body.accessToken as string;
 
     const createRes = await request(app.getHttpServer())
       .post('/payments')
-      .set('Authorization', `Bearer ${riderToken}`)
-      .send({ dailyAssignmentId: assignment.id, riderId: rider.id, amount: 40000 })
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ dailyAssignmentId: assignment.id, driverId: driver.id, amount: 40000 })
       .expect(201);
 
     expect(createRes.body.status).toBe('PENDING');
@@ -128,48 +131,48 @@ describe('Payment (e2e)', () => {
     expect(patchRes.body.paidAt).not.toBeNull();
   });
 
-  it("rejects a RIDER recording a payment for another rider's assignment", async () => {
+  it("rejects a RIDER recording a payment for another driver's assignment", async () => {
     const { tenantId } = await signupOwner(app);
-    const { assignment } = await seedRiderAssignment(prisma, tenantId, {
-      riderEmail: 'owner-of-assignment@acme-fleet.test',
+    const { assignment } = await seedDriverAssignment(prisma, tenantId, {
+      driverEmail: 'owner-of-assignment@acme-fleet.test',
     });
-    const { riderEmail, password } = await seedRiderAssignment(prisma, tenantId, {
-      riderEmail: 'different-rider@acme-fleet.test',
+    const { driverEmail, password } = await seedDriverAssignment(prisma, tenantId, {
+      driverEmail: 'different-driver@acme-fleet.test',
     });
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderEmail, password })
+      .send({ email: driverEmail, password })
       .expect(200);
 
     await request(app.getHttpServer())
       .post('/payments')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ dailyAssignmentId: assignment.id, riderId: assignment.riderId, amount: 1000 })
+      .send({ dailyAssignmentId: assignment.id, driverId: assignment.driverId, amount: 1000 })
       .expect(403);
   });
 
   it('rejects an amount exceeding 150% of the target amount', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
-    const { rider, assignment } = await seedRiderAssignment(prisma, tenantId, {
+    const { driver, assignment } = await seedDriverAssignment(prisma, tenantId, {
       targetAmount: 50000,
     });
 
     await request(app.getHttpServer())
       .post('/payments')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ dailyAssignmentId: assignment.id, riderId: rider.id, amount: 76000 })
+      .send({ dailyAssignmentId: assignment.id, driverId: driver.id, amount: 76000 })
       .expect(400);
   });
 
   it("enforces tenant isolation: a second tenant cannot see or fetch the first tenant's payments", async () => {
     const { accessToken: ownerAToken, tenantId: tenantAId } = await signupOwner(app);
-    const { rider, assignment } = await seedRiderAssignment(prisma, tenantAId);
+    const { driver, assignment } = await seedDriverAssignment(prisma, tenantAId);
 
     const paymentRes = await request(app.getHttpServer())
       .post('/payments')
       .set('Authorization', `Bearer ${ownerAToken}`)
-      .send({ dailyAssignmentId: assignment.id, riderId: rider.id, amount: 30000 })
+      .send({ dailyAssignmentId: assignment.id, driverId: driver.id, amount: 30000 })
       .expect(201);
 
     const { accessToken: ownerBToken } = await signupOwner(app, {
@@ -192,22 +195,25 @@ describe('Payment (e2e)', () => {
 
   it('gets a clean 403 when a RIDER calls PATCH /payments/:id', async () => {
     const { accessToken: ownerToken, tenantId } = await signupOwner(app);
-    const { riderEmail, password, rider, assignment } = await seedRiderAssignment(prisma, tenantId);
+    const { driverEmail, password, driver, assignment } = await seedDriverAssignment(
+      prisma,
+      tenantId,
+    );
 
     const createRes = await request(app.getHttpServer())
       .post('/payments')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ dailyAssignmentId: assignment.id, riderId: rider.id, amount: 20000 })
+      .send({ dailyAssignmentId: assignment.id, driverId: driver.id, amount: 20000 })
       .expect(201);
 
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderEmail, password })
+      .send({ email: driverEmail, password })
       .expect(200);
 
     await request(app.getHttpServer())
       .patch(`/payments/${createRes.body.id}`)
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .send({ status: 'COMPLETED' })
       .expect(403);
   });

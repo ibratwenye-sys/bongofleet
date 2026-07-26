@@ -4,7 +4,7 @@ import { PaymentStatus } from '@prisma/client';
 export class ListPaymentsQueryDto {
   @IsOptional()
   @IsString()
-  riderId?: string;
+  driverId?: string;
 
   @IsOptional()
   @IsEnum(PaymentStatus)

@@ -31,16 +31,16 @@ async function signupOwner(app: INestApplication, email: string, company: string
 }
 
 async function setupFleet(app: INestApplication, token: string, tag: string) {
-  const riderRes = await request(app.getHttpServer())
-    .post('/riders')
+  const driverRes = await request(app.getHttpServer())
+    .post('/drivers')
     .set('Authorization', `Bearer ${token}`)
     .send({
       firstName: 'Juma',
       lastName: tag,
       phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
-      email: `rider-${tag.toLowerCase()}@test.local`,
+      email: `driver-${tag.toLowerCase()}@test.local`,
       licenseNumber: `LIC-${tag}`,
-      initialPassword: 'riderpass123',
+      initialPassword: 'driverpass123',
     })
     .expect(201);
 
@@ -50,13 +50,13 @@ async function setupFleet(app: INestApplication, token: string, tag: string) {
     .send({ registrationNumber: `REG-${tag}` })
     .expect(201);
 
-  return { riderId: riderRes.body.id as string, motorcycleId: motoRes.body.id as string };
+  return { driverId: driverRes.body.id as string, motorcycleId: motoRes.body.id as string };
 }
 
 async function createAssignment(
   app: INestApplication,
   token: string,
-  riderId: string,
+  driverId: string,
   motorcycleId: string,
   assignedDate: string,
   targetAmount: number,
@@ -64,7 +64,7 @@ async function createAssignment(
   const res = await request(app.getHttpServer())
     .post('/assignments')
     .set('Authorization', `Bearer ${token}`)
-    .send({ riderId, motorcycleId, assignedDate, targetAmount })
+    .send({ driverId, motorcycleId, assignedDate, targetAmount })
     .expect(201);
   return res.body.id as string;
 }
@@ -73,13 +73,13 @@ async function recordPayment(
   app: INestApplication,
   token: string,
   dailyAssignmentId: string,
-  riderId: string,
+  driverId: string,
   amount: number,
 ) {
   const res = await request(app.getHttpServer())
     .post('/payments')
     .set('Authorization', `Bearer ${token}`)
-    .send({ dailyAssignmentId, riderId, amount })
+    .send({ dailyAssignmentId, driverId, amount })
     .expect(201);
   return res.body.id as string;
 }
@@ -121,7 +121,7 @@ describe('Missed-payment notifications (e2e)', () => {
     const unpaidId = await createAssignment(
       app,
       a.accessToken,
-      fleetA.riderId,
+      fleetA.driverId,
       fleetA.motorcycleId,
       isoDaysFromNow(-3),
       10000,
@@ -129,28 +129,28 @@ describe('Missed-payment notifications (e2e)', () => {
     const underpaidId = await createAssignment(
       app,
       a.accessToken,
-      fleetA.riderId,
+      fleetA.driverId,
       fleetA.motorcycleId,
       isoDaysFromNow(-2),
       10000,
     );
-    await recordPayment(app, a.accessToken, underpaidId, fleetA.riderId, 6000);
+    await recordPayment(app, a.accessToken, underpaidId, fleetA.driverId, 6000);
 
     const paidId = await createAssignment(
       app,
       a.accessToken,
-      fleetA.riderId,
+      fleetA.driverId,
       fleetA.motorcycleId,
       isoDaysFromNow(-1),
       10000,
     );
-    await recordPayment(app, a.accessToken, paidId, fleetA.riderId, 10000);
+    await recordPayment(app, a.accessToken, paidId, fleetA.driverId, 10000);
 
     // Today's assignment - still in progress, must never alert.
     await createAssignment(
       app,
       a.accessToken,
-      fleetA.riderId,
+      fleetA.driverId,
       fleetA.motorcycleId,
       isoDaysFromNow(0),
       10000,
@@ -162,7 +162,7 @@ describe('Missed-payment notifications (e2e)', () => {
     await createAssignment(
       app,
       b.accessToken,
-      fleetB.riderId,
+      fleetB.driverId,
       fleetB.motorcycleId,
       isoDaysFromNow(-1),
       5000,
@@ -214,13 +214,13 @@ describe('Missed-payment notifications (e2e)', () => {
     const assignmentId = await createAssignment(
       app,
       c.accessToken,
-      fleet.riderId,
+      fleet.driverId,
       fleet.motorcycleId,
       isoDaysFromNow(-1),
       10000,
     );
-    // Rider recorded 7000 but it is still PENDING reconciliation.
-    await recordPayment(app, c.accessToken, assignmentId, fleet.riderId, 7000);
+    // Driver recorded 7000 but it is still PENDING reconciliation.
+    await recordPayment(app, c.accessToken, assignmentId, fleet.driverId, 7000);
 
     const result = await scanner.scanAndNotify();
     expect(result.alertsSent).toBe(1);

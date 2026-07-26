@@ -1,6 +1,6 @@
-# BongoFleet Rider App (Expo / React Native)
+# BongoFleet Driver App (Expo / React Native)
 
-The rider's daily companion: log in, see today's assignment (bike + target),
+The driver's daily companion: log in, see today's assignment (bike + target),
 record payments, and see recent payment history. Payments recorded while
 offline are saved on the phone and synced automatically when the connection
 returns.
@@ -27,8 +27,8 @@ returns.
 
 5. Scan the QR code with Expo Go (Android) or the Camera app (iOS).
 
-Log in with a rider account (created by the owner in the dashboard's Riders
-page - the owner sets the rider's initial password).
+Log in with a driver account (created by the owner in the dashboard's Drivers
+page - the owner sets the driver's initial password).
 
 ## Offline behaviour
 
@@ -36,4 +36,4 @@ page - the owner sets the rider's initial password).
   and shows "saved on this phone".
 - The queue auto-syncs when connectivity returns (or tap the blue banner).
 - If the server rejects a queued payment (e.g. over the daily cap), it is
-  dropped from the queue and the rider is told which one and why.
+  dropped from the queue and the driver is told which one and why.

@@ -1,28 +1,36 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
-export class UpdateRiderDto {
-  @IsOptional()
+export class CreateDriverDto {
   @Transform(trim)
   @IsString()
-  firstName?: string;
+  @IsNotEmpty()
+  firstName: string;
 
-  @IsOptional()
   @Transform(trim)
   @IsString()
-  lastName?: string;
+  @IsNotEmpty()
+  lastName: string;
 
-  @IsOptional()
   @Transform(trim)
   @IsString()
-  phone?: string;
+  @IsNotEmpty()
+  phone: string;
 
-  @IsOptional()
+  @Transform(trim)
+  @IsEmail()
+  email: string;
+
   @Transform(trim)
   @IsString()
-  licenseNumber?: string;
+  @IsNotEmpty()
+  licenseNumber: string;
+
+  @IsString()
+  @MinLength(8)
+  initialPassword: string;
 
   @IsOptional()
   @IsString()

@@ -16,7 +16,7 @@ export interface Me {
 
 export interface Assignment {
   id: string;
-  riderId: string;
+  driverId: string;
   motorcycleId: string;
   assignedDate: string;
   targetAmount: string;
@@ -34,7 +34,7 @@ export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
 export interface Payment {
   id: string;
   dailyAssignmentId: string;
-  riderId: string;
+  driverId: string;
   amount: string;
   status: PaymentStatus;
   paymentMethod: string | null;
@@ -48,7 +48,7 @@ export interface Payment {
 export interface QueuedPayment {
   clientId: string;
   dailyAssignmentId: string;
-  riderId: string;
+  driverId: string;
   amount: number;
   paymentMethod?: string;
   queuedAt: string;

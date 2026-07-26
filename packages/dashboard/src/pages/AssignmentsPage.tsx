@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import type { Assignment, CreateAssignmentPayload, Motorcycle, Payment, Rider } from '../lib/types';
+import type {
+  Assignment,
+  CreateAssignmentPayload,
+  Driver,
+  Motorcycle,
+  Payment,
+} from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { PAYMENT_STATUS_STYLES, StatusBadge } from '../components/StatusBadge';
@@ -20,7 +26,7 @@ function todayDateInput(): string {
 
 interface FormState {
   motorcycleId: string;
-  riderId: string;
+  driverId: string;
   assignedDate: string;
   targetAmount: string;
   notes: string;
@@ -28,18 +34,18 @@ interface FormState {
 
 function AssignmentFormModal({
   motorcycles,
-  riders,
+  drivers,
   onClose,
   onSaved,
 }: {
   motorcycles: Motorcycle[];
-  riders: Rider[];
+  drivers: Driver[];
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const [form, setForm] = useState<FormState>({
     motorcycleId: '',
-    riderId: '',
+    driverId: '',
     assignedDate: todayDateInput(),
     targetAmount: '',
     notes: '',
@@ -51,8 +57,8 @@ function AssignmentFormModal({
     e.preventDefault();
     setError(null);
 
-    if (!form.motorcycleId || !form.riderId || !form.assignedDate) {
-      setError('Rider, vehicle, and date are required.');
+    if (!form.motorcycleId || !form.driverId || !form.assignedDate) {
+      setError('Driver, vehicle, and date are required.');
       return;
     }
     const targetAmount = Number(form.targetAmount);
@@ -65,7 +71,7 @@ function AssignmentFormModal({
     try {
       const payload: CreateAssignmentPayload = {
         motorcycleId: form.motorcycleId,
-        riderId: form.riderId,
+        driverId: form.driverId,
         assignedDate: form.assignedDate,
         targetAmount,
         notes: form.notes.trim() || undefined,
@@ -83,16 +89,16 @@ function AssignmentFormModal({
     <Modal title="Create assignment" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Rider</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
           <select
-            value={form.riderId}
-            onChange={(e) => setForm({ ...form, riderId: e.target.value })}
+            value={form.driverId}
+            onChange={(e) => setForm({ ...form, driverId: e.target.value })}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="">Select a rider…</option>
-            {riders.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.user.firstName} {r.user.lastName} — {r.licenseNumber}
+            <option value="">Select a driver…</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.user.firstName} {d.user.lastName} — {d.licenseNumber}
               </option>
             ))}
           </select>
@@ -172,7 +178,7 @@ function AssignmentFormModal({
 export function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
-  const [riders, setRiders] = useState<Rider[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('');
@@ -183,15 +189,15 @@ export function AssignmentsPage() {
 
   async function load() {
     try {
-      const [assignmentsData, motorcyclesData, ridersData, paymentsData] = await Promise.all([
+      const [assignmentsData, motorcyclesData, driversData, paymentsData] = await Promise.all([
         apiFetch<Assignment[]>('/assignments'),
         apiFetch<Motorcycle[]>('/motorcycles'),
-        apiFetch<Rider[]>('/riders'),
+        apiFetch<Driver[]>('/drivers'),
         apiFetch<Payment[]>('/payments'),
       ]);
       setAssignments(assignmentsData);
       setMotorcycles(motorcyclesData);
-      setRiders(ridersData);
+      setDrivers(driversData);
       setPayments(paymentsData);
     } catch {
       setError('Could not load assignments. Please try again.');
@@ -209,7 +215,7 @@ export function AssignmentsPage() {
   }, [successMessage]);
 
   const motorcycleById = useMemo(() => new Map(motorcycles.map((m) => [m.id, m])), [motorcycles]);
-  const riderById = useMemo(() => new Map(riders.map((r) => [r.id, r])), [riders]);
+  const driverById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
 
   const paymentsByAssignment = useMemo(() => {
     const map = new Map<string, Payment[]>();
@@ -289,7 +295,7 @@ export function AssignmentsPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Rider</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Driver</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Target</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Payments</th>
@@ -311,7 +317,7 @@ export function AssignmentsPage() {
               </tr>
             ) : (
               filtered.map((a) => {
-                const rider = riderById.get(a.riderId);
+                const driver = driverById.get(a.driverId);
                 const motorcycle = motorcycleById.get(a.motorcycleId);
                 const assignmentPayments = paymentsByAssignment.get(a.id) ?? [];
                 const paidTotal = assignmentPayments
@@ -323,7 +329,9 @@ export function AssignmentsPage() {
                   <tr key={a.id}>
                     <td className="px-4 py-2 text-gray-600">{a.assignedDate.slice(0, 10)}</td>
                     <td className="px-4 py-2 text-gray-900">
-                      {rider ? `${rider.user.firstName} ${rider.user.lastName}` : 'Unknown rider'}
+                      {driver
+                        ? `${driver.user.firstName} ${driver.user.lastName}`
+                        : 'Unknown driver'}
                     </td>
                     <td className="px-4 py-2 text-gray-600">
                       {motorcycle?.registrationNumber ?? 'Unknown vehicle'}
@@ -368,7 +376,7 @@ export function AssignmentsPage() {
       {showCreate && (
         <AssignmentFormModal
           motorcycles={motorcycles}
-          riders={riders}
+          drivers={drivers}
           onClose={() => setShowCreate(false)}
           onSaved={handleSaved}
         />
@@ -377,7 +385,7 @@ export function AssignmentsPage() {
       {paymentTarget && (
         <PaymentFormModal
           assignments={assignments ?? []}
-          riders={riders}
+          drivers={drivers}
           motorcycles={motorcycles}
           lockedAssignment={paymentTarget}
           onClose={() => setPaymentTarget(null)}

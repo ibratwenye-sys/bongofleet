@@ -12,7 +12,7 @@ describe('DocumentService', () => {
   let service: DocumentService;
   let prisma: {
     client: {
-      rider: { findUnique: jest.Mock; findMany: jest.Mock };
+      driver: { findUnique: jest.Mock; findMany: jest.Mock };
       motorcycle: { findUnique: jest.Mock; findMany: jest.Mock };
       guarantor: { findUnique: jest.Mock; findMany: jest.Mock };
       document: {
@@ -34,20 +34,20 @@ describe('DocumentService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
   beforeEach(async () => {
     prisma = {
       client: {
-        rider: { findUnique: jest.fn(), findMany: jest.fn() },
+        driver: { findUnique: jest.fn(), findMany: jest.fn() },
         motorcycle: { findUnique: jest.fn(), findMany: jest.fn() },
         guarantor: { findUnique: jest.fn(), findMany: jest.fn() },
         document: {
@@ -73,7 +73,7 @@ describe('DocumentService', () => {
   describe('create', () => {
     const dto = {
       ownerType: DocumentOwnerType.RIDER,
-      ownerId: 'rider-1',
+      ownerId: 'driver-1',
       docType: DocumentType.NATIONAL_ID,
     };
     const file = {
@@ -83,34 +83,36 @@ describe('DocumentService', () => {
       buffer: Buffer.from('fake-image-bytes'),
     } as Express.Multer.File;
 
-    it('throws NotFound when the referenced rider does not exist', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue(null);
+    it('throws NotFound when the referenced driver does not exist', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(null);
 
       await expect(service.create(file, dto, owner)).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.client.document.create).not.toHaveBeenCalled();
     });
 
     it('throws Forbidden when called by a RIDER', async () => {
-      await expect(service.create(file, dto, riderActor)).rejects.toBeInstanceOf(
+      await expect(service.create(file, dto, driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prisma.client.rider.findUnique).not.toHaveBeenCalled();
+      expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
     });
   });
 
   describe('list / remove / listExpiring - role enforcement', () => {
     it('throws Forbidden for RIDER on list', async () => {
       await expect(
-        service.list({ ownerType: DocumentOwnerType.RIDER, ownerId: 'rider-1' }, riderActor),
+        service.list({ ownerType: DocumentOwnerType.RIDER, ownerId: 'driver-1' }, driverActor),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('throws Forbidden for RIDER on remove', async () => {
-      await expect(service.remove('doc-1', riderActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.remove('doc-1', driverActor)).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('throws Forbidden for RIDER on listExpiring', async () => {
-      await expect(service.listExpiring({}, riderActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.listExpiring({}, driverActor)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 });

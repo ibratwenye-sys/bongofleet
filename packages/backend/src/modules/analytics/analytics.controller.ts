@@ -24,9 +24,9 @@ export class AnalyticsController {
     return this.analyticsService.getPerMotorcycle(query, actor);
   }
 
-  @Get('per-rider')
-  perRider(@Query() query: ReportRangeQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.analyticsService.getPerRider(query, actor);
+  @Get('per-driver')
+  perDriver(@Query() query: ReportRangeQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.analyticsService.getPerDriver(query, actor);
   }
 
   @Get('expense-breakdown')

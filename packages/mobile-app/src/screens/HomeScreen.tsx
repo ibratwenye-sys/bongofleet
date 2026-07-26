@@ -136,7 +136,7 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
         method: 'POST',
         body: JSON.stringify({
           dailyAssignmentId: assignment.id,
-          riderId: assignment.riderId,
+          driverId: assignment.driverId,
           amount: value,
           ...(method.trim() ? { paymentMethod: method.trim() } : {}),
         }),
@@ -150,7 +150,7 @@ export function HomeScreen({ onLoggedOut }: { onLoggedOut: () => void }) {
         await enqueuePayment({
           clientId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           dailyAssignmentId: assignment.id,
-          riderId: assignment.riderId,
+          driverId: assignment.driverId,
           amount: value,
           paymentMethod: method.trim() || undefined,
           queuedAt: new Date().toISOString(),

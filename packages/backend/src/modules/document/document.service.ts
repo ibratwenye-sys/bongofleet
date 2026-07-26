@@ -62,7 +62,7 @@ export class DocumentService {
   private async assertOwnerExists(ownerType: DocumentOwnerType, ownerId: string): Promise<void> {
     let found: unknown;
     if (ownerType === DocumentOwnerType.RIDER) {
-      found = await this.prisma.client.rider.findUnique({ where: { id: ownerId } });
+      found = await this.prisma.client.driver.findUnique({ where: { id: ownerId } });
     } else if (ownerType === DocumentOwnerType.MOTORCYCLE) {
       found = await this.prisma.client.motorcycle.findUnique({ where: { id: ownerId } });
     } else {
@@ -185,16 +185,16 @@ export class DocumentService {
       idsByType.set(doc.ownerType, set);
     }
 
-    const riderIds = [...(idsByType.get(DocumentOwnerType.RIDER) ?? [])];
-    if (riderIds.length > 0) {
-      const riders = await this.prisma.client.rider.findMany({
-        where: { id: { in: riderIds } },
+    const driverIds = [...(idsByType.get(DocumentOwnerType.RIDER) ?? [])];
+    if (driverIds.length > 0) {
+      const drivers = await this.prisma.client.driver.findMany({
+        where: { id: { in: driverIds } },
         include: { user: { select: { firstName: true, lastName: true } } },
       });
-      for (const rider of riders) {
+      for (const driver of drivers) {
         labels.set(
-          `${DocumentOwnerType.RIDER}:${rider.id}`,
-          `${rider.user.firstName} ${rider.user.lastName}`,
+          `${DocumentOwnerType.RIDER}:${driver.id}`,
+          `${driver.user.firstName} ${driver.user.lastName}`,
         );
       }
     }

@@ -28,9 +28,9 @@ export class AssignmentService {
       throw new NotFoundException('Motorcycle not found');
     }
 
-    const rider = await this.prisma.client.rider.findUnique({ where: { id: dto.riderId } });
-    if (!rider || !rider.isActive) {
-      throw new NotFoundException('Rider not found');
+    const driver = await this.prisma.client.driver.findUnique({ where: { id: dto.driverId } });
+    if (!driver || !driver.isActive) {
+      throw new NotFoundException('Driver not found');
     }
 
     const assignedDate = new Date(dto.assignedDate);
@@ -42,22 +42,22 @@ export class AssignmentService {
       throw new ConflictException('This motorcycle already has an assignment on this date');
     }
 
-    const riderBooked = await this.prisma.client.dailyAssignment.findFirst({
-      where: { riderId: dto.riderId, assignedDate },
+    const driverBooked = await this.prisma.client.dailyAssignment.findFirst({
+      where: { driverId: dto.driverId, assignedDate },
     });
-    if (riderBooked) {
-      throw new ConflictException('This rider already has an assignment on this date');
+    if (driverBooked) {
+      throw new ConflictException('This driver already has an assignment on this date');
     }
 
     // Retry only on the (astronomically rare) ride-reference collision; a date
-    // conflict on motorcycle/rider is a real ConflictException, not a retry.
+    // conflict on motorcycle/driver is a real ConflictException, not a retry.
     for (let attempt = 0; ; attempt += 1) {
       try {
         return await this.prisma.client.dailyAssignment.create({
           data: {
             tenantId: actor.tenantId,
             motorcycleId: dto.motorcycleId,
-            riderId: dto.riderId,
+            driverId: dto.driverId,
             assignedDate,
             targetAmount: dto.targetAmount,
             notes: dto.notes,
@@ -74,7 +74,7 @@ export class AssignmentService {
             continue;
           }
           throw new ConflictException(
-            'This motorcycle or rider already has an assignment on this date',
+            'This motorcycle or driver already has an assignment on this date',
           );
         }
         throw error;
@@ -86,9 +86,9 @@ export class AssignmentService {
     const where: Prisma.DailyAssignmentWhereInput = {};
 
     if (actor.role === UserRole.RIDER) {
-      where.riderId = await this.getOwnRiderId(actor);
-    } else if (query.riderId) {
-      where.riderId = query.riderId;
+      where.driverId = await this.getOwnDriverId(actor);
+    } else if (query.driverId) {
+      where.driverId = query.driverId;
     }
 
     if (query.motorcycleId) {
@@ -111,7 +111,7 @@ export class AssignmentService {
   async getAssignment(id: string, actor: AuthenticatedUser) {
     const assignment = await this.prisma.client.dailyAssignment.findUnique({
       where: { id },
-      include: { motorcycle: true, rider: true, dailyPayments: true },
+      include: { motorcycle: true, driver: true, dailyPayments: true },
     });
 
     if (!assignment) {
@@ -119,8 +119,8 @@ export class AssignmentService {
     }
 
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (assignment.riderId !== ownRiderId) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (assignment.driverId !== ownDriverId) {
         throw new NotFoundException('Assignment not found');
       }
     }
@@ -159,7 +159,7 @@ export class AssignmentService {
     const where: Prisma.DailyAssignmentWhereInput = { assignedDate };
 
     if (actor.role === UserRole.RIDER) {
-      where.riderId = await this.getOwnRiderId(actor);
+      where.driverId = await this.getOwnDriverId(actor);
     }
 
     return this.prisma.client.dailyAssignment.findMany({
@@ -168,13 +168,13 @@ export class AssignmentService {
     });
   }
 
-  private async getOwnRiderId(actor: AuthenticatedUser): Promise<string> {
-    const rider = await this.prisma.client.rider.findUnique({
+  private async getOwnDriverId(actor: AuthenticatedUser): Promise<string> {
+    const driver = await this.prisma.client.driver.findUnique({
       where: { userId: actor.userId },
     });
-    if (!rider) {
-      throw new ForbiddenException('No rider profile is associated with this account');
+    if (!driver) {
+      throw new ForbiddenException('No driver profile is associated with this account');
     }
-    return rider.id;
+    return driver.id;
   }
 }

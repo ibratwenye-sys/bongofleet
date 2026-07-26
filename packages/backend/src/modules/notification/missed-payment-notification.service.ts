@@ -20,7 +20,7 @@ interface ShortAssignment {
   paidAmount: Prisma.Decimal;
   pendingAmount: Prisma.Decimal;
   kind: PaymentAlertKind;
-  riderName: string;
+  driverName: string;
   registrationNumber: string;
 }
 
@@ -32,15 +32,15 @@ export interface MissedPaymentScanResult {
 
 /**
  * Daily scan that emails each fleet owner about past assignments where the
- * rider paid nothing (NO_PAYMENT) or paid less than the daily target
+ * driver paid nothing (NO_PAYMENT) or paid less than the daily target
  * (SHORTFALL).
  *
  * Design decisions:
  * - Only PAST days are judged (assignedDate strictly before today in UTC) -
  *   today's assignment is still in progress and never alerted.
  * - "Paid" counts PENDING + COMPLETED payments, excluding FAILED. A payment
- *   the rider recorded but the owner hasn't reconciled yet should not accuse
- *   the rider of not paying; the digest shows how much is still pending so
+ *   the driver recorded but the owner hasn't reconciled yet should not accuse
+ *   the driver of not paying; the digest shows how much is still pending so
  *   the owner knows reconciliation is the next step.
  * - One alert EVER per assignment (unique dailyAssignmentId). After the owner
  *   has been told a day came up short, follow-up belongs in the dashboard,
@@ -147,7 +147,7 @@ export class MissedPaymentNotificationService implements OnModuleInit {
           },
           include: {
             dailyPayments: true,
-            rider: { include: { user: { select: { firstName: true, lastName: true } } } },
+            driver: { include: { user: { select: { firstName: true, lastName: true } } } },
             motorcycle: { select: { registrationNumber: true } },
           },
           orderBy: { assignedDate: 'asc' },
@@ -178,7 +178,7 @@ export class MissedPaymentNotificationService implements OnModuleInit {
             paidAmount: paid,
             pendingAmount: pending,
             kind: paid.isZero() ? PaymentAlertKind.NO_PAYMENT : PaymentAlertKind.SHORTFALL,
-            riderName: `${assignment.rider.user.firstName} ${assignment.rider.user.lastName}`,
+            driverName: `${assignment.driver.user.firstName} ${assignment.driver.user.lastName}`,
             registrationNumber: assignment.motorcycle.registrationNumber,
           });
         }
@@ -273,7 +273,7 @@ export class MissedPaymentNotificationService implements OnModuleInit {
       ? ''
       : ` (${item.pendingAmount.toFixed(2)} of this is pending reconciliation)`;
     return (
-      `  - ${date}: ${item.riderName} on ${item.registrationNumber} - ` +
+      `  - ${date}: ${item.driverName} on ${item.registrationNumber} - ` +
       `paid ${item.paidAmount.toFixed(2)} of ${item.targetAmount.toFixed(2)}, ` +
       `short by ${shortfall.toFixed(2)}${pendingNote}`
     );

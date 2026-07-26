@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, ApiError } from '../lib/api';
-import type { CreateRiderPayload, Rider, UpdateRiderPayload } from '../lib/types';
+import type { CreateDriverPayload, Driver, UpdateDriverPayload } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
@@ -17,30 +17,30 @@ interface FormState {
   emergencyContact: string;
 }
 
-function toFormState(rider: Rider | null): FormState {
+function toFormState(driver: Driver | null): FormState {
   return {
-    firstName: rider?.user.firstName ?? '',
-    lastName: rider?.user.lastName ?? '',
-    phone: rider?.user.phone ?? '',
-    email: rider?.user.email ?? '',
-    licenseNumber: rider?.licenseNumber ?? '',
+    firstName: driver?.user.firstName ?? '',
+    lastName: driver?.user.lastName ?? '',
+    phone: driver?.user.phone ?? '',
+    email: driver?.user.email ?? '',
+    licenseNumber: driver?.licenseNumber ?? '',
     initialPassword: '',
-    nationalId: rider?.nationalId ?? '',
-    emergencyContact: rider?.emergencyContact ?? '',
+    nationalId: driver?.nationalId ?? '',
+    emergencyContact: driver?.emergencyContact ?? '',
   };
 }
 
-function RiderFormModal({
-  rider,
+function DriverFormModal({
+  driver,
   onClose,
   onSaved,
 }: {
-  rider: Rider | null;
+  driver: Driver | null;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const isEdit = rider != null;
-  const [form, setForm] = useState<FormState>(() => toFormState(rider));
+  const isEdit = driver != null;
+  const [form, setForm] = useState<FormState>(() => toFormState(driver));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,7 +74,7 @@ function RiderFormModal({
     setSubmitting(true);
     try {
       if (isEdit) {
-        const payload: UpdateRiderPayload = {
+        const payload: UpdateDriverPayload = {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           phone: form.phone.trim(),
@@ -82,10 +82,10 @@ function RiderFormModal({
           nationalId: form.nationalId.trim() || undefined,
           emergencyContact: form.emergencyContact.trim() || undefined,
         };
-        await apiFetch(`/riders/${rider.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        onSaved('Rider updated.');
+        await apiFetch(`/drivers/${driver.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        onSaved('Driver updated.');
       } else {
-        const payload: CreateRiderPayload = {
+        const payload: CreateDriverPayload = {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           phone: form.phone.trim(),
@@ -95,8 +95,8 @@ function RiderFormModal({
           nationalId: form.nationalId.trim() || undefined,
           emergencyContact: form.emergencyContact.trim() || undefined,
         };
-        await apiFetch('/riders', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Rider added.');
+        await apiFetch('/drivers', { method: 'POST', body: JSON.stringify(payload) });
+        onSaved('Driver added.');
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -106,7 +106,7 @@ function RiderFormModal({
   }
 
   return (
-    <Modal title={isEdit ? 'Edit rider' : 'Add rider'} onClose={onClose}>
+    <Modal title={isEdit ? 'Edit driver' : 'Add driver'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -171,7 +171,7 @@ function RiderFormModal({
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
             />
             <p className="mt-1 text-xs text-gray-500">
-              This is the rider's first login password — share it with them directly. At least 8
+              This is the driver's first login password — share it with them directly. At least 8
               characters.
             </p>
           </div>
@@ -223,24 +223,24 @@ function RiderFormModal({
   );
 }
 
-export function RidersPage() {
-  const [riders, setRiders] = useState<Rider[] | null>(null);
+export function DriversPage() {
+  const [drivers, setDrivers] = useState<Driver[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [formTarget, setFormTarget] = useState<'new' | Rider | null>(null);
-  const [deactivating, setDeactivating] = useState<Rider | null>(null);
-  const [reactivating, setReactivating] = useState<Rider | null>(null);
+  const [formTarget, setFormTarget] = useState<'new' | Driver | null>(null);
+  const [deactivating, setDeactivating] = useState<Driver | null>(null);
+  const [reactivating, setReactivating] = useState<Driver | null>(null);
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function load() {
     try {
-      const data = await apiFetch<Rider[]>(
-        `/riders${showDeactivated ? '?includeInactive=true' : ''}`,
+      const data = await apiFetch<Driver[]>(
+        `/drivers${showDeactivated ? '?includeInactive=true' : ''}`,
       );
-      setRiders(data);
+      setDrivers(data);
     } catch {
-      setError('Could not load riders. Please try again.');
+      setError('Could not load drivers. Please try again.');
     }
   }
 
@@ -256,14 +256,14 @@ export function RidersPage() {
   }, [successMessage]);
 
   const filtered = useMemo(() => {
-    if (!riders) return [];
+    if (!drivers) return [];
     const term = search.trim().toLowerCase();
-    if (!term) return riders;
-    return riders.filter((r) => {
-      const name = `${r.user.firstName} ${r.user.lastName}`.toLowerCase();
-      return name.includes(term) || r.licenseNumber.toLowerCase().includes(term);
+    if (!term) return drivers;
+    return drivers.filter((d) => {
+      const name = `${d.user.firstName} ${d.user.lastName}`.toLowerCase();
+      return name.includes(term) || d.licenseNumber.toLowerCase().includes(term);
     });
-  }, [riders, search]);
+  }, [drivers, search]);
 
   function handleSaved(message: string) {
     setFormTarget(null);
@@ -274,12 +274,12 @@ export function RidersPage() {
   async function handleDeactivate() {
     if (!deactivating) return;
     try {
-      await apiFetch(`/riders/${deactivating.id}`, { method: 'DELETE' });
-      setSuccessMessage('Rider deactivated - they can no longer log in.');
+      await apiFetch(`/drivers/${deactivating.id}`, { method: 'DELETE' });
+      setSuccessMessage('Driver deactivated - they can no longer log in.');
       setDeactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not deactivate rider.');
+      setError(err instanceof ApiError ? err.message : 'Could not deactivate driver.');
       setDeactivating(null);
     }
   }
@@ -287,12 +287,12 @@ export function RidersPage() {
   async function handleReactivate() {
     if (!reactivating) return;
     try {
-      await apiFetch(`/riders/${reactivating.id}/reactivate`, { method: 'PATCH' });
-      setSuccessMessage('Rider reactivated - they can log in again.');
+      await apiFetch(`/drivers/${reactivating.id}/reactivate`, { method: 'PATCH' });
+      setSuccessMessage('Driver reactivated - they can log in again.');
       setReactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reactivate rider.');
+      setError(err instanceof ApiError ? err.message : 'Could not reactivate driver.');
       setReactivating(null);
     }
   }
@@ -300,12 +300,12 @@ export function RidersPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Riders</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Drivers</h1>
         <button
           onClick={() => setFormTarget('new')}
           className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          Add rider
+          Add driver
         </button>
       </div>
 
@@ -346,7 +346,7 @@ export function RidersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {riders === null ? (
+            {drivers === null ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                   Loading…
@@ -355,40 +355,40 @@ export function RidersPage() {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
-                  No riders found.
+                  No drivers found.
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
-                <tr key={r.id} className={r.isActive ? undefined : 'bg-gray-50 text-gray-400'}>
+              filtered.map((d) => (
+                <tr key={d.id} className={d.isActive ? undefined : 'bg-gray-50 text-gray-400'}>
                   <td className="px-4 py-2 font-medium text-gray-900">
                     <Link
-                      to={`/riders/${r.id}`}
-                      className={`hover:underline ${r.isActive ? '' : 'text-gray-400'}`}
+                      to={`/drivers/${d.id}`}
+                      className={`hover:underline ${d.isActive ? '' : 'text-gray-400'}`}
                     >
-                      {r.user.firstName} {r.user.lastName}
+                      {d.user.firstName} {d.user.lastName}
                     </Link>
-                    {!r.isActive && (
+                    {!d.isActive && (
                       <span className="ml-2">
                         <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{r.user.phone}</td>
-                  <td className="px-4 py-2 text-gray-600">{r.user.email}</td>
-                  <td className="px-4 py-2 text-gray-600">{r.licenseNumber}</td>
-                  <td className="px-4 py-2 text-gray-600">{r.nationalId ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{d.user.phone}</td>
+                  <td className="px-4 py-2 text-gray-600">{d.user.email}</td>
+                  <td className="px-4 py-2 text-gray-600">{d.licenseNumber}</td>
+                  <td className="px-4 py-2 text-gray-600">{d.nationalId ?? '—'}</td>
                   <td className="px-4 py-2 text-right">
-                    {r.isActive ? (
+                    {d.isActive ? (
                       <>
                         <button
-                          onClick={() => setFormTarget(r)}
+                          onClick={() => setFormTarget(d)}
                           className="mr-3 text-sm font-medium text-gray-700 hover:underline"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => setDeactivating(r)}
+                          onClick={() => setDeactivating(d)}
                           className="text-sm font-medium text-red-600 hover:underline"
                         >
                           Deactivate
@@ -396,7 +396,7 @@ export function RidersPage() {
                       </>
                     ) : (
                       <button
-                        onClick={() => setReactivating(r)}
+                        onClick={() => setReactivating(d)}
                         className="text-sm font-medium text-gray-700 hover:underline"
                       >
                         Reactivate
@@ -411,8 +411,8 @@ export function RidersPage() {
       </div>
 
       {formTarget && (
-        <RiderFormModal
-          rider={formTarget === 'new' ? null : formTarget}
+        <DriverFormModal
+          driver={formTarget === 'new' ? null : formTarget}
           onClose={() => setFormTarget(null)}
           onSaved={handleSaved}
         />
@@ -420,7 +420,7 @@ export function RidersPage() {
 
       {deactivating && (
         <ConfirmDialog
-          title="Deactivate rider"
+          title="Deactivate driver"
           message={`Deactivate ${deactivating.user.firstName} ${deactivating.user.lastName}? They will immediately lose the ability to log in. Their assignment/payment history is kept.`}
           confirmLabel="Deactivate"
           danger
@@ -431,7 +431,7 @@ export function RidersPage() {
 
       {reactivating && (
         <ConfirmDialog
-          title="Reactivate rider"
+          title="Reactivate driver"
           message={`Reactivate ${reactivating.user.firstName} ${reactivating.user.lastName}? This restores their ability to log in.`}
           confirmLabel="Reactivate"
           onConfirm={handleReactivate}

@@ -11,7 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
 import { MotorcycleModule } from './modules/motorcycle/motorcycle.module';
-import { RiderModule } from './modules/rider/rider.module';
+import { DriverModule } from './modules/driver/driver.module';
 import { DocumentModule } from './modules/document/document.module';
 import { GuarantorModule } from './modules/guarantor/guarantor.module';
 import { NotificationModule } from './modules/notification/notification.module';
@@ -37,7 +37,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     PaymentModule,
     AssignmentModule,
     MotorcycleModule,
-    RiderModule,
+    DriverModule,
     DocumentModule,
     GuarantorModule,
     NotificationModule,

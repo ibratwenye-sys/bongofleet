@@ -23,7 +23,7 @@ export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
 export interface Payment {
   id: string;
   dailyAssignmentId: string;
-  riderId: string;
+  driverId: string;
   amount: string; // Prisma Decimal serializes as a string, not a number
   status: PaymentStatus;
   paymentMethod: string | null;
@@ -33,7 +33,7 @@ export interface Payment {
 
 export interface Assignment {
   id: string;
-  riderId: string;
+  driverId: string;
   motorcycleId: string;
   assignedDate: string;
   targetAmount: string; // Prisma Decimal serializes as a string, not a number
@@ -42,7 +42,7 @@ export interface Assignment {
 
 export interface CreateAssignmentPayload {
   motorcycleId: string;
-  riderId: string;
+  driverId: string;
   assignedDate: string;
   targetAmount: number;
   notes?: string;
@@ -50,7 +50,7 @@ export interface CreateAssignmentPayload {
 
 export interface CreatePaymentPayload {
   dailyAssignmentId: string;
-  riderId: string;
+  driverId: string;
   amount: number;
   paymentMethod?: string;
 }
@@ -96,9 +96,9 @@ export interface UpdateMotorcyclePayload {
   status?: MotorcycleStatus;
 }
 
-// A rider's name/email/phone live on the linked User, not flat on the Rider record
-// (see rider.service.ts's SAFE_USER_SELECT) - passwordHash is never included.
-export interface RiderUser {
+// A driver's name/email/phone live on the linked User, not flat on the Driver record
+// (see driver.service.ts's SAFE_USER_SELECT) - passwordHash is never included.
+export interface DriverUser {
   id: string;
   email: string;
   firstName: string;
@@ -107,16 +107,16 @@ export interface RiderUser {
   isActive: boolean;
 }
 
-export interface Rider {
+export interface Driver {
   id: string;
   licenseNumber: string;
   nationalId: string | null;
   emergencyContact: string | null;
   isActive: boolean;
-  user: RiderUser;
+  user: DriverUser;
 }
 
-export interface CreateRiderPayload {
+export interface CreateDriverPayload {
   firstName: string;
   lastName: string;
   phone: string;
@@ -127,9 +127,9 @@ export interface CreateRiderPayload {
   emergencyContact?: string;
 }
 
-// No email/initialPassword - UpdateRiderDto deliberately doesn't allow changing
-// either (see rider.service.ts).
-export interface UpdateRiderPayload {
+// No email/initialPassword - UpdateDriverDto deliberately doesn't allow changing
+// either (see driver.service.ts).
+export interface UpdateDriverPayload {
   firstName?: string;
   lastName?: string;
   phone?: string;
@@ -177,7 +177,7 @@ export interface ExpiringDocument extends Document {
 
 export interface Guarantor {
   id: string;
-  riderId: string;
+  driverId: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -254,9 +254,9 @@ export interface MotorcyclePnl {
   netProfit: string;
 }
 
-export interface RiderRevenue {
-  riderId: string;
-  riderName: string;
+export interface DriverRevenue {
+  driverId: string;
+  driverName: string;
   revenue: string;
   paymentCount: number;
 }
@@ -269,8 +269,8 @@ export interface TransportJob {
   id: string;
   motorcycleId: string;
   motorcycle: { registrationNumber: string; vehicleType: VehicleType } | null;
-  riderId: string | null;
-  rider: { user: { firstName: string; lastName: string } } | null;
+  driverId: string | null;
+  driver: { user: { firstName: string; lastName: string } } | null;
   ownerDriven: boolean;
   reference: string | null;
   origin: string;
@@ -297,7 +297,7 @@ export interface VehicleTransportSummary {
 
 export interface CreateTransportJobPayload {
   motorcycleId: string;
-  riderId?: string;
+  driverId?: string;
   ownerDriven?: boolean;
   origin: string;
   destination: string;
@@ -307,7 +307,7 @@ export interface CreateTransportJobPayload {
 }
 
 export interface UpdateTransportJobPayload {
-  riderId?: string;
+  driverId?: string;
   ownerDriven?: boolean;
   origin?: string;
   destination?: string;

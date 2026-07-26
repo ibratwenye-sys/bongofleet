@@ -24,16 +24,16 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
   return { accessToken: res.body.accessToken as string, tenantId: me.body.tenantId as string };
 }
 
-const riderBody = {
-  firstName: 'Riri',
-  lastName: 'Der',
+const driverBody = {
+  firstName: 'Dara',
+  lastName: 'Ver',
   phone: '+254711111111',
-  email: 'newrider@acme-fleet.test',
+  email: 'newdriver@acme-fleet.test',
   licenseNumber: 'LIC-001',
   initialPassword: 'password123',
 };
 
-describe('Rider (e2e)', () => {
+describe('Driver (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -55,13 +55,13 @@ describe('Rider (e2e)', () => {
     await app.close();
   });
 
-  it('creates a rider who can log in, lists them, then deactivates so login fails', async () => {
+  it('creates a driver who can log in, lists them, then deactivates so login fails', async () => {
     const { accessToken } = await signupOwner(app);
 
     const createRes = await request(app.getHttpServer())
-      .post('/riders')
+      .post('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send(riderBody)
+      .send(driverBody)
       .expect(201);
 
     expect(createRes.body.user).toBeDefined();
@@ -69,37 +69,37 @@ describe('Rider (e2e)', () => {
     expect(createRes.body.passwordHash).toBeUndefined();
 
     // end-to-end proof the account actually works, not just that a row exists
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderBody.email, password: riderBody.initialPassword })
+      .send({ email: driverBody.email, password: driverBody.initialPassword })
       .expect(200);
-    expect(riderLogin.body.accessToken).toBeDefined();
+    expect(driverLogin.body.accessToken).toBeDefined();
 
     const listRes = await request(app.getHttpServer())
-      .get('/riders')
+      .get('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listRes.body).toHaveLength(1);
-    expect(listRes.body[0].user.email).toBe(riderBody.email);
+    expect(listRes.body[0].user.email).toBe(driverBody.email);
 
     await request(app.getHttpServer())
-      .delete(`/riders/${createRes.body.id}`)
+      .delete(`/drivers/${createRes.body.id}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(204);
 
     await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderBody.email, password: riderBody.initialPassword })
+      .send({ email: driverBody.email, password: driverBody.initialPassword })
       .expect(401);
 
     const listAfterDeactivate = await request(app.getHttpServer())
-      .get('/riders')
+      .get('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listAfterDeactivate.body).toHaveLength(0);
 
     const listIncludingInactive = await request(app.getHttpServer())
-      .get('/riders')
+      .get('/drivers')
       .query({ includeInactive: 'true' })
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
@@ -107,7 +107,7 @@ describe('Rider (e2e)', () => {
     expect(listIncludingInactive.body[0].isActive).toBe(false);
 
     const reactivateRes = await request(app.getHttpServer())
-      .patch(`/riders/${createRes.body.id}/reactivate`)
+      .patch(`/drivers/${createRes.body.id}/reactivate`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(reactivateRes.body.isActive).toBe(true);
@@ -115,28 +115,28 @@ describe('Rider (e2e)', () => {
     // end-to-end proof reactivation actually restores login, not just a flag flip
     const loginAfterReactivate = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderBody.email, password: riderBody.initialPassword })
+      .send({ email: driverBody.email, password: driverBody.initialPassword })
       .expect(200);
     expect(loginAfterReactivate.body.accessToken).toBeDefined();
 
     const listAfterReactivate = await request(app.getHttpServer())
-      .get('/riders')
+      .get('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listAfterReactivate.body).toHaveLength(1);
   });
 
-  it("enforces tenant isolation on reactivate: a second tenant cannot reactivate the first tenant's rider", async () => {
+  it("enforces tenant isolation on reactivate: a second tenant cannot reactivate the first tenant's driver", async () => {
     const { accessToken: ownerAToken } = await signupOwner(app);
 
     const createRes = await request(app.getHttpServer())
-      .post('/riders')
+      .post('/drivers')
       .set('Authorization', `Bearer ${ownerAToken}`)
-      .send(riderBody)
+      .send(driverBody)
       .expect(201);
 
     await request(app.getHttpServer())
-      .delete(`/riders/${createRes.body.id}`)
+      .delete(`/drivers/${createRes.body.id}`)
       .set('Authorization', `Bearer ${ownerAToken}`)
       .expect(204);
 
@@ -147,7 +147,7 @@ describe('Rider (e2e)', () => {
     });
 
     await request(app.getHttpServer())
-      .patch(`/riders/${createRes.body.id}/reactivate`)
+      .patch(`/drivers/${createRes.body.id}/reactivate`)
       .set('Authorization', `Bearer ${ownerBToken}`)
       .expect(404);
   });
@@ -156,25 +156,25 @@ describe('Rider (e2e)', () => {
     const { accessToken } = await signupOwner(app);
 
     await request(app.getHttpServer())
-      .post('/riders')
+      .post('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send(riderBody)
+      .send(driverBody)
       .expect(201);
 
     await request(app.getHttpServer())
-      .post('/riders')
+      .post('/drivers')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ ...riderBody, licenseNumber: 'LIC-002', phone: '+254722222222' })
+      .send({ ...driverBody, licenseNumber: 'LIC-002', phone: '+254722222222' })
       .expect(409);
   });
 
-  it("enforces tenant isolation: a second tenant cannot see or fetch the first tenant's riders", async () => {
+  it("enforces tenant isolation: a second tenant cannot see or fetch the first tenant's drivers", async () => {
     const { accessToken: ownerAToken } = await signupOwner(app);
 
     const createRes = await request(app.getHttpServer())
-      .post('/riders')
+      .post('/drivers')
       .set('Authorization', `Bearer ${ownerAToken}`)
-      .send(riderBody)
+      .send(driverBody)
       .expect(201);
 
     const { accessToken: ownerBToken } = await signupOwner(app, {
@@ -184,35 +184,52 @@ describe('Rider (e2e)', () => {
     });
 
     const listRes = await request(app.getHttpServer())
-      .get('/riders')
+      .get('/drivers')
       .set('Authorization', `Bearer ${ownerBToken}`)
       .expect(200);
     expect(listRes.body).toHaveLength(0);
 
     await request(app.getHttpServer())
-      .get(`/riders/${createRes.body.id}`)
+      .get(`/drivers/${createRes.body.id}`)
       .set('Authorization', `Bearer ${ownerBToken}`)
       .expect(404);
   });
 
-  it('gets a clean 403 when a RIDER attempts to create a rider', async () => {
+  it('gets a clean 403 when a RIDER attempts to create a driver', async () => {
+    const { accessToken } = await signupOwner(app);
+
+    await request(app.getHttpServer())
+      .post('/drivers')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(driverBody)
+      .expect(201);
+
+    const driverLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: driverBody.email, password: driverBody.initialPassword })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/drivers')
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .send({ ...driverBody, licenseNumber: 'LIC-003', phone: '+254733333333', email: 'x@y.test' })
+      .expect(403);
+  });
+
+  it('still serves the /riders alias for one release', async () => {
     const { accessToken } = await signupOwner(app);
 
     await request(app.getHttpServer())
       .post('/riders')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send(riderBody)
+      .send(driverBody)
       .expect(201);
 
-    const riderLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: riderBody.email, password: riderBody.initialPassword })
+    const listRes = await request(app.getHttpServer())
+      .get('/riders')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
-
-    await request(app.getHttpServer())
-      .post('/riders')
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
-      .send({ ...riderBody, licenseNumber: 'LIC-003', phone: '+254733333333', email: 'x@y.test' })
-      .expect(403);
+    expect(listRes.body).toHaveLength(1);
+    expect(listRes.body[0].user.email).toBe(driverBody.email);
   });
 });

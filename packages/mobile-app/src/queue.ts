@@ -3,12 +3,12 @@ import { getQueue, setQueue } from './storage';
 import type { Payment, QueuedPayment } from './types';
 
 /**
- * Offline payment queue. A payment the rider records while the phone has no
+ * Offline payment queue. A payment the driver records while the phone has no
  * signal is stored locally and pushed to the server later. Flushing is
  * sequential and conservative:
  * - success -> item removed from the queue;
  * - a 4xx from the server (validation/conflict) -> item removed too, and the
- *   message is reported so the rider knows that one didn't count;
+ *   message is reported so the driver knows that one didn't count;
  * - a network failure -> flushing stops, everything left stays queued for the
  *   next attempt.
  */
@@ -46,7 +46,7 @@ export async function flushQueue(): Promise<FlushResult> {
           method: 'POST',
           body: JSON.stringify({
             dailyAssignmentId: item.dailyAssignmentId,
-            riderId: item.riderId,
+            driverId: item.driverId,
             amount: item.amount,
             ...(item.paymentMethod ? { paymentMethod: item.paymentMethod } : {}),
           }),

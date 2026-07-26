@@ -45,12 +45,12 @@ export class TransportService {
     }
 
     const ownerDriven = dto.ownerDriven ?? false;
-    let riderId: string | null = dto.riderId ?? null;
+    let driverId: string | null = dto.driverId ?? null;
     if (ownerDriven) {
-      riderId = null; // owner-driven jobs carry no assigned driver
-    } else if (riderId) {
-      const rider = await this.prisma.client.rider.findUnique({ where: { id: riderId } });
-      if (!rider || !rider.isActive) {
+      driverId = null; // owner-driven jobs carry no assigned driver
+    } else if (driverId) {
+      const driver = await this.prisma.client.driver.findUnique({ where: { id: driverId } });
+      if (!driver || !driver.isActive) {
         throw new NotFoundException('Driver not found');
       }
     }
@@ -62,7 +62,7 @@ export class TransportService {
           data: {
             tenantId: actor.tenantId,
             motorcycleId: dto.motorcycleId,
-            riderId,
+            driverId,
             ownerDriven,
             reference: generateRideReference(),
             origin: dto.origin,
@@ -105,7 +105,7 @@ export class TransportService {
     const jobs = await this.prisma.client.transportJob.findMany({
       where,
       orderBy: { scheduledDate: 'desc' },
-      include: { motorcycle: true, rider: { include: { user: true } } },
+      include: { motorcycle: true, driver: { include: { user: true } } },
     });
 
     const expenseByJob = await this.sumExpensesByJob(jobs.map((j) => j.id));
@@ -120,7 +120,7 @@ export class TransportService {
       where: { id },
       include: {
         motorcycle: true,
-        rider: { include: { user: true } },
+        driver: { include: { user: true } },
         expenses: { orderBy: { incurredAt: 'desc' } },
       },
     });
@@ -149,15 +149,15 @@ export class TransportService {
     if (dto.ownerDriven !== undefined) {
       data.ownerDriven = dto.ownerDriven;
       if (dto.ownerDriven) {
-        data.rider = { disconnect: true };
+        data.driver = { disconnect: true };
       }
     }
-    if (dto.riderId !== undefined && !(dto.ownerDriven ?? existing.ownerDriven)) {
-      const rider = await this.prisma.client.rider.findUnique({ where: { id: dto.riderId } });
-      if (!rider || !rider.isActive) {
+    if (dto.driverId !== undefined && !(dto.ownerDriven ?? existing.ownerDriven)) {
+      const driver = await this.prisma.client.driver.findUnique({ where: { id: dto.driverId } });
+      if (!driver || !driver.isActive) {
         throw new NotFoundException('Driver not found');
       }
-      data.rider = { connect: { id: dto.riderId } };
+      data.driver = { connect: { id: dto.driverId } };
     }
     if (dto.origin !== undefined) data.origin = dto.origin;
     if (dto.destination !== undefined) data.destination = dto.destination;

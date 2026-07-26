@@ -53,7 +53,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
     >
       <View style={styles.card}>
         <Text style={styles.brand}>BongoFleet</Text>
-        <Text style={styles.subtitle}>Rider login</Text>
+        <Text style={styles.subtitle}>Driver login</Text>
 
         <TextInput
           style={styles.input}

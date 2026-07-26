@@ -71,7 +71,7 @@ export async function apiFetch<T>(
       refreshed = await refreshTokens();
     } catch {
       // Refresh failed because we're offline - surface as a network error so
-      // callers can queue the work instead of logging the rider out.
+      // callers can queue the work instead of logging the driver out.
       throw new NetworkError();
     }
     if (refreshed) {

@@ -4,8 +4,8 @@ import { apiFetch, ApiError } from '../lib/api';
 import type {
   CreateGuarantorPayload,
   Document,
+  Driver,
   Guarantor,
-  Rider,
   UpdateGuarantorPayload,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
@@ -13,12 +13,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DocumentSlot } from '../components/DocumentSlot';
 
 function GuarantorFormModal({
-  riderId,
+  driverId,
   guarantor,
   onClose,
   onSaved,
 }: {
-  riderId: string;
+  driverId: string;
   guarantor: Guarantor | null;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -64,7 +64,7 @@ function GuarantorFormModal({
           relationship: form.relationship.trim() || undefined,
           nationalId: form.nationalId.trim() || undefined,
         };
-        await apiFetch(`/riders/${riderId}/guarantors`, {
+        await apiFetch(`/drivers/${driverId}/guarantors`, {
           method: 'POST',
           body: JSON.stringify(payload),
         });
@@ -216,9 +216,9 @@ function GuarantorRow({
   );
 }
 
-export function RiderDetailPage() {
-  const { riderId } = useParams<{ riderId: string }>();
-  const [rider, setRider] = useState<Rider | null>(null);
+export function DriverDetailPage() {
+  const { driverId } = useParams<{ driverId: string }>();
+  const [driver, setDriver] = useState<Driver | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [guarantors, setGuarantors] = useState<Guarantor[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -227,25 +227,25 @@ export function RiderDetailPage() {
   const [removing, setRemoving] = useState<Guarantor | null>(null);
 
   async function load() {
-    if (!riderId) return;
+    if (!driverId) return;
     try {
-      const [riderData, documentsData, guarantorsData] = await Promise.all([
-        apiFetch<Rider>(`/riders/${riderId}`),
-        apiFetch<Document[]>(`/documents?ownerType=RIDER&ownerId=${encodeURIComponent(riderId)}`),
-        apiFetch<Guarantor[]>(`/riders/${riderId}/guarantors`),
+      const [driverData, documentsData, guarantorsData] = await Promise.all([
+        apiFetch<Driver>(`/drivers/${driverId}`),
+        apiFetch<Document[]>(`/documents?ownerType=RIDER&ownerId=${encodeURIComponent(driverId)}`),
+        apiFetch<Guarantor[]>(`/drivers/${driverId}/guarantors`),
       ]);
-      setRider(riderData);
+      setDriver(driverData);
       setDocuments(documentsData);
       setGuarantors(guarantorsData);
     } catch {
-      setError('Could not load rider. Please try again.');
+      setError('Could not load driver. Please try again.');
     }
   }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [riderId]);
+  }, [driverId]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -272,17 +272,17 @@ export function RiderDetailPage() {
     }
   }
 
-  if (!riderId) return null;
+  if (!driverId) return null;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!rider) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (!driver) return <p className="text-sm text-gray-500">Loading…</p>;
 
   return (
     <div>
-      <Link to="/riders" className="mb-4 inline-block text-sm text-gray-600 hover:underline">
-        ← Back to riders
+      <Link to="/drivers" className="mb-4 inline-block text-sm text-gray-600 hover:underline">
+        ← Back to drivers
       </Link>
       <h1 className="mb-4 text-xl font-semibold text-gray-900">
-        {rider.user.firstName} {rider.user.lastName}
+        {driver.user.firstName} {driver.user.lastName}
       </h1>
 
       {successMessage && (
@@ -296,7 +296,7 @@ export function RiderDetailPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <DocumentSlot
             ownerType="RIDER"
-            ownerId={riderId}
+            ownerId={driverId}
             docType="NATIONAL_ID"
             label="National ID"
             documents={documents}
@@ -304,7 +304,7 @@ export function RiderDetailPage() {
           />
           <DocumentSlot
             ownerType="RIDER"
-            ownerId={riderId}
+            ownerId={driverId}
             docType="DRIVERS_LICENSE"
             label="Driver's License"
             documents={documents}
@@ -344,7 +344,7 @@ export function RiderDetailPage() {
 
       {formTarget && (
         <GuarantorFormModal
-          riderId={riderId}
+          driverId={driverId}
           guarantor={formTarget === 'new' ? null : formTarget}
           onClose={() => setFormTarget(null)}
           onSaved={handleGuarantorSaved}

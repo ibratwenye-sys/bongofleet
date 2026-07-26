@@ -17,49 +17,52 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { RiderService } from './rider.service';
-import { CreateRiderDto } from './dto/create-rider.dto';
-import { UpdateRiderDto } from './dto/update-rider.dto';
-import { ListRidersQueryDto } from './dto/list-riders-query.dto';
+import { DriverService } from './driver.service';
+import { CreateDriverDto } from './dto/create-driver.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
+import { ListDriversQueryDto } from './dto/list-drivers-query.dto';
 
-@Controller('riders')
+// 'riders' kept as an alias for one release so an un-updated dashboard or
+// phone build still calling the old path does not break. Drop once nothing
+// still calls /riders.
+@Controller(['drivers', 'riders'])
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
-export class RiderController {
-  constructor(private readonly riderService: RiderService) {}
+export class DriverController {
+  constructor(private readonly driverService: DriverService) {}
 
   @Post()
-  create(@Body() dto: CreateRiderDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.riderService.create(dto, actor);
+  create(@Body() dto: CreateDriverDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.driverService.create(dto, actor);
   }
 
   @Get()
-  list(@Query() query: ListRidersQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.riderService.list(query, actor);
+  list(@Query() query: ListDriversQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.driverService.list(query, actor);
   }
 
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.riderService.get(id, actor);
+    return this.driverService.get(id, actor);
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() dto: UpdateRiderDto,
+    @Body() dto: UpdateDriverDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.riderService.update(id, dto, actor);
+    return this.driverService.update(id, dto, actor);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
-    await this.riderService.deactivate(id, actor);
+    await this.driverService.deactivate(id, actor);
   }
 
   @Patch(':id/reactivate')
   reactivate(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.riderService.reactivate(id, actor);
+    return this.driverService.reactivate(id, actor);
   }
 }

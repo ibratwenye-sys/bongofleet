@@ -1,17 +1,17 @@
 import { Test } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { RiderService } from './rider.service';
+import { DriverService } from './driver.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import * as passwordUtil from '../auth/utils/password.util';
 
-describe('RiderService', () => {
-  let service: RiderService;
+describe('DriverService', () => {
+  let service: DriverService;
   let prisma: {
     client: {
       user: { findFirst: jest.Mock };
-      rider: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
+      driver: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
       $transaction: jest.Mock;
     };
   };
@@ -26,21 +26,21 @@ describe('RiderService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
   const dto = {
     firstName: 'New',
-    lastName: 'Rider',
+    lastName: 'Driver',
     phone: '+254711111111',
-    email: 'newrider@example.com',
+    email: 'newdriver@example.com',
     licenseNumber: 'LIC-999',
     initialPassword: 'password123',
   };
@@ -49,24 +49,24 @@ describe('RiderService', () => {
     prisma = {
       client: {
         user: { findFirst: jest.fn() },
-        rider: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+        driver: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
         $transaction: jest.fn(),
       },
     };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [RiderService, { provide: PrismaService, useValue: prisma }],
+      providers: [DriverService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
-    service = moduleRef.get(RiderService);
+    service = moduleRef.get(DriverService);
   });
 
   afterEach(() => jest.restoreAllMocks());
 
   describe('create', () => {
-    it('creates a User and Rider in a transaction, leaking no passwordHash', async () => {
+    it('creates a User and Driver in a transaction, leaking no passwordHash', async () => {
       prisma.client.user.findFirst.mockResolvedValue(null);
-      prisma.client.rider.findFirst.mockResolvedValue(null);
+      prisma.client.driver.findFirst.mockResolvedValue(null);
       jest.spyOn(passwordUtil, 'hashPassword').mockResolvedValue('hashed');
 
       const userCreate = jest.fn().mockResolvedValue({
@@ -77,9 +77,9 @@ describe('RiderService', () => {
         phone: dto.phone,
         isActive: true,
       });
-      const riderCreate = jest.fn().mockResolvedValue({ id: 'rider-1', userId: 'user-1' });
+      const driverCreate = jest.fn().mockResolvedValue({ id: 'driver-1', userId: 'user-1' });
       prisma.client.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
-        fn({ user: { create: userCreate }, rider: { create: riderCreate } }),
+        fn({ user: { create: userCreate }, driver: { create: driverCreate } }),
       );
 
       const result = await service.create(dto, owner);
@@ -102,33 +102,33 @@ describe('RiderService', () => {
 
     it('throws Conflict on a duplicate license number', async () => {
       prisma.client.user.findFirst.mockResolvedValue(null);
-      prisma.client.rider.findFirst.mockResolvedValueOnce({ id: 'existing' });
+      prisma.client.driver.findFirst.mockResolvedValueOnce({ id: 'existing' });
 
       await expect(service.create(dto, owner)).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('throws Forbidden when a RIDER attempts to create, with no Prisma calls made', async () => {
-      await expect(service.create(dto, riderActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.create(dto, driverActor)).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.client.user.findFirst).not.toHaveBeenCalled();
       expect(prisma.client.$transaction).not.toHaveBeenCalled();
     });
   });
 
   describe('deactivate', () => {
-    it('sets both rider.isActive and user.isActive to false', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue({ id: 'rider-1', userId: 'user-1' });
+    it('sets both driver.isActive and user.isActive to false', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-1', userId: 'user-1' });
 
-      const riderUpdate = jest.fn();
+      const driverUpdate = jest.fn();
       const userUpdate = jest.fn();
       prisma.client.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
-        fn({ rider: { update: riderUpdate }, user: { update: userUpdate } }),
+        fn({ driver: { update: driverUpdate }, user: { update: userUpdate } }),
       );
 
-      await service.deactivate('rider-1', owner);
+      await service.deactivate('driver-1', owner);
 
-      expect(riderUpdate).toHaveBeenCalledWith(
+      expect(driverUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'rider-1' },
+          where: { id: 'driver-1' },
           data: expect.objectContaining({ isActive: false }),
         }),
       );
@@ -142,41 +142,41 @@ describe('RiderService', () => {
   });
 
   describe('list', () => {
-    it('defaults to active-only riders', async () => {
-      prisma.client.rider.findMany.mockResolvedValue([]);
+    it('defaults to active-only drivers', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
 
       await service.list({}, owner);
 
-      expect(prisma.client.rider.findMany).toHaveBeenCalledWith(
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { isActive: true } }),
       );
     });
 
     it('omits the isActive filter when includeInactive is true', async () => {
-      prisma.client.rider.findMany.mockResolvedValue([]);
+      prisma.client.driver.findMany.mockResolvedValue([]);
 
       await service.list({ includeInactive: true }, owner);
 
-      expect(prisma.client.rider.findMany).toHaveBeenCalledWith(
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: {} }),
       );
     });
   });
 
   describe('reactivate', () => {
-    it('sets both rider.isActive and user.isActive to true and clears deletedAt', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue({ id: 'rider-1', userId: 'user-1' });
+    it('sets both driver.isActive and user.isActive to true and clears deletedAt', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-1', userId: 'user-1' });
 
-      const riderUpdate = jest.fn().mockResolvedValue({ id: 'rider-1', isActive: true });
+      const driverUpdate = jest.fn().mockResolvedValue({ id: 'driver-1', isActive: true });
       const userUpdate = jest.fn().mockResolvedValue({ id: 'user-1', isActive: true });
       prisma.client.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
-        fn({ rider: { update: riderUpdate }, user: { update: userUpdate } }),
+        fn({ driver: { update: driverUpdate }, user: { update: userUpdate } }),
       );
 
-      await service.reactivate('rider-1', owner);
+      await service.reactivate('driver-1', owner);
 
-      expect(riderUpdate).toHaveBeenCalledWith({
-        where: { id: 'rider-1' },
+      expect(driverUpdate).toHaveBeenCalledWith({
+        where: { id: 'driver-1' },
         data: { isActive: true, deletedAt: null },
       });
       expect(userUpdate).toHaveBeenCalledWith(
@@ -187,17 +187,17 @@ describe('RiderService', () => {
       );
     });
 
-    it('throws NotFound when the rider does not exist', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue(null);
+    it('throws NotFound when the driver does not exist', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(null);
 
       await expect(service.reactivate('missing', owner)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws Forbidden when called by a RIDER', async () => {
-      await expect(service.reactivate('rider-1', riderActor)).rejects.toBeInstanceOf(
+      await expect(service.reactivate('driver-1', driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prisma.client.rider.findUnique).not.toHaveBeenCalled();
+      expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
     });
   });
 });

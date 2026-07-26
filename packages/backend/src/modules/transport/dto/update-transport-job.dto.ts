@@ -17,7 +17,7 @@ export class UpdateTransportJobDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  riderId?: string;
+  driverId?: string;
 
   @IsOptional()
   @IsBoolean()

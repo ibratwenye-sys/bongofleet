@@ -55,18 +55,18 @@ export class PaymentService {
       throw new NotFoundException('Assignment not found');
     }
 
-    const rider = await this.prisma.client.rider.findUnique({ where: { id: dto.riderId } });
-    if (!rider) {
-      throw new NotFoundException('Rider not found');
+    const driver = await this.prisma.client.driver.findUnique({ where: { id: dto.driverId } });
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
     }
 
-    if (dto.riderId !== assignment.riderId) {
-      throw new BadRequestException("riderId does not match the assignment's rider");
+    if (dto.driverId !== assignment.driverId) {
+      throw new BadRequestException("driverId does not match the assignment's driver");
     }
 
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (ownRiderId !== assignment.riderId) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (ownDriverId !== assignment.driverId) {
         throw new ForbiddenException('You may only record payments for your own assignments');
       }
     }
@@ -82,7 +82,7 @@ export class PaymentService {
       data: {
         tenantId: actor.tenantId,
         dailyAssignmentId: dto.dailyAssignmentId,
-        riderId: dto.riderId,
+        driverId: dto.driverId,
         amount: dto.amount,
         paymentMethod: dto.paymentMethod,
         status: PaymentStatus.PENDING,
@@ -94,9 +94,9 @@ export class PaymentService {
     const where: Prisma.DailyPaymentWhereInput = {};
 
     if (actor.role === UserRole.RIDER) {
-      where.riderId = await this.getOwnRiderId(actor);
-    } else if (query.riderId) {
-      where.riderId = query.riderId;
+      where.driverId = await this.getOwnDriverId(actor);
+    } else if (query.driverId) {
+      where.driverId = query.driverId;
     }
 
     if (query.status) {
@@ -116,7 +116,7 @@ export class PaymentService {
   async getPayment(id: string, actor: AuthenticatedUser) {
     const payment = await this.prisma.client.dailyPayment.findUnique({
       where: { id },
-      include: { rider: true, dailyAssignment: true },
+      include: { driver: true, dailyAssignment: true },
     });
 
     if (!payment) {
@@ -124,8 +124,8 @@ export class PaymentService {
     }
 
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (payment.riderId !== ownRiderId) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (payment.driverId !== ownDriverId) {
         throw new NotFoundException('Payment not found');
       }
     }
@@ -168,8 +168,8 @@ export class PaymentService {
     }
 
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (assignment.riderId !== ownRiderId) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (assignment.driverId !== ownDriverId) {
         throw new NotFoundException('Assignment not found');
       }
     }
@@ -186,9 +186,9 @@ export class PaymentService {
       throw new NotFoundException('Payment not found');
     }
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (payment.riderId !== ownRiderId) {
-        // Same "not found" as an unknown id, so a rider can't probe others' ids.
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (payment.driverId !== ownDriverId) {
+        // Same "not found" as an unknown id, so a driver can't probe others' ids.
         throw new NotFoundException('Payment not found');
       }
     }
@@ -230,8 +230,8 @@ export class PaymentService {
       throw new NotFoundException('Payment not found');
     }
     if (actor.role === UserRole.RIDER) {
-      const ownRiderId = await this.getOwnRiderId(actor);
-      if (payment.riderId !== ownRiderId) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (payment.driverId !== ownDriverId) {
         throw new NotFoundException('Payment not found');
       }
     }
@@ -247,13 +247,13 @@ export class PaymentService {
     return { payment, absolutePath };
   }
 
-  private async getOwnRiderId(actor: AuthenticatedUser): Promise<string> {
-    const rider = await this.prisma.client.rider.findUnique({
+  private async getOwnDriverId(actor: AuthenticatedUser): Promise<string> {
+    const driver = await this.prisma.client.driver.findUnique({
       where: { userId: actor.userId },
     });
-    if (!rider) {
-      throw new ForbiddenException('No rider profile is associated with this account');
+    if (!driver) {
+      throw new ForbiddenException('No driver profile is associated with this account');
     }
-    return rider.id;
+    return driver.id;
   }
 }

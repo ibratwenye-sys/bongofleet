@@ -7,7 +7,7 @@ import { IdleLogoutModal } from './IdleLogoutModal';
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/fleet', label: 'Fleet' },
-  { to: '/riders', label: 'Riders' },
+  { to: '/drivers', label: 'Drivers' },
   { to: '/assignments', label: 'Assignments' },
   { to: '/transport', label: 'Transport' },
   { to: '/payments', label: 'Payments' },

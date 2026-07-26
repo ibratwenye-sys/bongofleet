@@ -24,7 +24,7 @@ function tzs(value: string | number): string {
   return `TZS ${Math.round(Number.isFinite(n) ? n : 0).toLocaleString()}`;
 }
 
-interface RiderOption {
+interface DriverOption {
   id: string;
   user: { firstName: string; lastName: string };
 }
@@ -34,7 +34,7 @@ interface RiderOption {
 interface JobFormState {
   motorcycleId: string;
   ownerDriven: boolean;
-  riderId: string;
+  driverId: string;
   origin: string;
   destination: string;
   cargo: string;
@@ -48,7 +48,7 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
   return {
     motorcycleId: job?.motorcycleId ?? firstTransport?.id ?? '',
     ownerDriven: job?.ownerDriven ?? false,
-    riderId: job?.riderId ?? '',
+    driverId: job?.driverId ?? '',
     origin: job?.origin ?? '',
     destination: job?.destination ?? '',
     cargo: job?.cargo ?? '',
@@ -60,13 +60,13 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
 function JobFormModal({
   job,
   vehicles,
-  riders,
+  drivers,
   onClose,
   onSaved,
 }: {
   job: TransportJob | null;
   vehicles: Motorcycle[];
-  riders: RiderOption[];
+  drivers: DriverOption[];
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -90,7 +90,7 @@ function JobFormModal({
       if (isEdit) {
         const payload: UpdateTransportJobPayload = {
           ownerDriven: form.ownerDriven,
-          riderId: form.ownerDriven ? undefined : form.riderId || undefined,
+          driverId: form.ownerDriven ? undefined : form.driverId || undefined,
           origin: form.origin.trim(),
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
@@ -106,7 +106,7 @@ function JobFormModal({
         const payload: CreateTransportJobPayload = {
           motorcycleId: form.motorcycleId,
           ownerDriven: form.ownerDriven,
-          riderId: form.ownerDriven ? undefined : form.riderId || undefined,
+          driverId: form.ownerDriven ? undefined : form.driverId || undefined,
           origin: form.origin.trim(),
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
@@ -203,14 +203,14 @@ function JobFormModal({
           </label>
           {!form.ownerDriven && (
             <select
-              value={form.riderId}
-              onChange={(e) => setForm({ ...form, riderId: e.target.value })}
+              value={form.driverId}
+              onChange={(e) => setForm({ ...form, driverId: e.target.value })}
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">Driver (optional)…</option>
-              {riders.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.user.firstName} {r.user.lastName}
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.user.firstName} {d.user.lastName}
                 </option>
               ))}
             </select>
@@ -353,7 +353,7 @@ export function TransportPage() {
   const [jobs, setJobs] = useState<TransportJob[] | null>(null);
   const [summary, setSummary] = useState<VehicleTransportSummary[]>([]);
   const [vehicles, setVehicles] = useState<Motorcycle[]>([]);
-  const [riders, setRiders] = useState<RiderOption[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [formTarget, setFormTarget] = useState<'new' | TransportJob | null>(null);
@@ -362,16 +362,16 @@ export function TransportPage() {
 
   async function load() {
     try {
-      const [jobList, summaryList, vehicleList, riderList] = await Promise.all([
+      const [jobList, summaryList, vehicleList, driverList] = await Promise.all([
         apiFetch<TransportJob[]>('/transport-jobs'),
         apiFetch<VehicleTransportSummary[]>('/transport-jobs/summary'),
         apiFetch<Motorcycle[]>('/motorcycles'),
-        apiFetch<RiderOption[]>('/riders'),
+        apiFetch<DriverOption[]>('/drivers'),
       ]);
       setJobs(jobList);
       setSummary(summaryList);
       setVehicles(vehicleList);
-      setRiders(riderList);
+      setDrivers(driverList);
     } catch {
       setError('Could not load transport jobs. Please try again.');
     }
@@ -546,8 +546,8 @@ export function TransportPage() {
                     <td className="px-4 py-2 text-gray-600">
                       {job.ownerDriven
                         ? 'Owner-driven'
-                        : job.rider
-                          ? `${job.rider.user.firstName} ${job.rider.user.lastName}`
+                        : job.driver
+                          ? `${job.driver.user.firstName} ${job.driver.user.lastName}`
                           : '—'}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-800">{tzs(job.revenue)}</td>
@@ -604,7 +604,7 @@ export function TransportPage() {
         <JobFormModal
           job={formTarget === 'new' ? null : formTarget}
           vehicles={vehicles}
-          riders={riders}
+          drivers={drivers}
           onClose={() => setFormTarget(null)}
           onSaved={handleSaved}
         />

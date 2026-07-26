@@ -16,7 +16,7 @@ export class CreateAssignmentDto {
 
   @IsString()
   @IsNotEmpty()
-  riderId: string;
+  driverId: string;
 
   @IsDateString()
   assignedDate: string;

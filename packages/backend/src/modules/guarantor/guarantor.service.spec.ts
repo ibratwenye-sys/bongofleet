@@ -9,7 +9,7 @@ describe('GuarantorService', () => {
   let service: GuarantorService;
   let prisma: {
     client: {
-      rider: { findUnique: jest.Mock };
+      driver: { findUnique: jest.Mock };
       guarantor: {
         findUnique: jest.Mock;
         findMany: jest.Mock;
@@ -29,23 +29,23 @@ describe('GuarantorService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
-  const rider = { id: 'rider-1', tenantId: 'tenant-1' };
+  const driver = { id: 'driver-1', tenantId: 'tenant-1' };
   const dto = { firstName: 'Grace', lastName: 'Guarantor', phone: '+254700000123' };
 
   beforeEach(async () => {
     prisma = {
       client: {
-        rider: { findUnique: jest.fn() },
+        driver: { findUnique: jest.fn() },
         guarantor: {
           findUnique: jest.fn(),
           findMany: jest.fn(),
@@ -64,31 +64,33 @@ describe('GuarantorService', () => {
 
   describe('create', () => {
     it('succeeds for a valid OWNER request', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.guarantor.create.mockResolvedValue({ id: 'guarantor-1', ...dto });
 
-      const result = await service.create('rider-1', dto, owner);
+      const result = await service.create('driver-1', dto, owner);
 
       expect(prisma.client.guarantor.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ tenantId: owner.tenantId, riderId: 'rider-1' }),
+          data: expect.objectContaining({ tenantId: owner.tenantId, driverId: 'driver-1' }),
         }),
       );
       expect(result).toEqual({ id: 'guarantor-1', ...dto });
     });
 
-    it('throws NotFound when the rider does not exist', async () => {
-      prisma.client.rider.findUnique.mockResolvedValue(null);
+    it('throws NotFound when the driver does not exist', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(null);
 
-      await expect(service.create('rider-1', dto, owner)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.create('driver-1', dto, owner)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       expect(prisma.client.guarantor.create).not.toHaveBeenCalled();
     });
 
     it('throws Forbidden when called by a RIDER', async () => {
-      await expect(service.create('rider-1', dto, riderActor)).rejects.toBeInstanceOf(
+      await expect(service.create('driver-1', dto, driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prisma.client.rider.findUnique).not.toHaveBeenCalled();
+      expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
     });
   });
 });

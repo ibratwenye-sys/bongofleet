@@ -42,9 +42,9 @@ export interface MotorcyclePnl {
   netProfit: string;
 }
 
-export interface RiderRevenue {
-  riderId: string;
-  riderName: string;
+export interface DriverRevenue {
+  driverId: string;
+  driverName: string;
   revenue: string;
   paymentCount: number;
 }
@@ -222,12 +222,15 @@ export class AnalyticsService {
     return rows;
   }
 
-  async getPerRider(query: ReportRangeQueryDto, actor: AuthenticatedUser): Promise<RiderRevenue[]> {
+  async getPerDriver(
+    query: ReportRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<DriverRevenue[]> {
     assertOwnerOrManager(actor);
     const range = buildDateRangeFilter(query.from, query.to);
 
     const grouped = await this.prisma.client.dailyPayment.groupBy({
-      by: ['riderId'],
+      by: ['driverId'],
       where: this.paymentWhere(range, query.vehicleType),
       _sum: { amount: true },
       _count: true,
@@ -237,15 +240,15 @@ export class AnalyticsService {
       return [];
     }
 
-    const riders = await this.prisma.client.rider.findMany({
-      where: { id: { in: grouped.map((g) => g.riderId) } },
+    const drivers = await this.prisma.client.driver.findMany({
+      where: { id: { in: grouped.map((g) => g.driverId) } },
       select: { id: true, user: { select: { firstName: true, lastName: true } } },
     });
-    const nameById = new Map(riders.map((r) => [r.id, `${r.user.firstName} ${r.user.lastName}`]));
+    const nameById = new Map(drivers.map((d) => [d.id, `${d.user.firstName} ${d.user.lastName}`]));
 
-    const rows: RiderRevenue[] = grouped.map((g) => ({
-      riderId: g.riderId,
-      riderName: nameById.get(g.riderId) ?? 'Unknown',
+    const rows: DriverRevenue[] = grouped.map((g) => ({
+      driverId: g.driverId,
+      driverName: nameById.get(g.driverId) ?? 'Unknown',
       revenue: money(g._sum.amount),
       paymentCount: g._count,
     }));

@@ -29,14 +29,14 @@ describe('MotorcycleService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
   const dto = { registrationNumber: 'KDA-001A' };
@@ -91,7 +91,7 @@ describe('MotorcycleService', () => {
     });
 
     it('throws Forbidden when a RIDER attempts to create, with no Prisma calls made', async () => {
-      await expect(service.create(dto, riderActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.create(dto, driverActor)).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.client.motorcycle.findFirst).not.toHaveBeenCalled();
       expect(prisma.client.motorcycle.create).not.toHaveBeenCalled();
     });
@@ -198,7 +198,7 @@ describe('MotorcycleService', () => {
     });
 
     it('throws Forbidden when called by a RIDER', async () => {
-      await expect(service.reactivate('moto-1', riderActor)).rejects.toBeInstanceOf(
+      await expect(service.reactivate('moto-1', driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();

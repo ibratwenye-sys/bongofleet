@@ -15,7 +15,7 @@ describe('AssignmentService', () => {
   let prisma: {
     client: {
       motorcycle: { findUnique: jest.Mock };
-      rider: { findUnique: jest.Mock };
+      driver: { findUnique: jest.Mock };
       dailyAssignment: {
         findFirst: jest.Mock;
         findUnique: jest.Mock;
@@ -35,22 +35,22 @@ describe('AssignmentService', () => {
     jti: 'jti-owner',
   };
 
-  const riderActor: AuthenticatedUser = {
-    userId: 'user-rider',
+  const driverActor: AuthenticatedUser = {
+    userId: 'user-driver',
     tenantId: 'tenant-1',
     role: UserRole.RIDER,
-    email: 'rider@example.com',
-    firstName: 'R',
-    lastName: 'Ider',
-    jti: 'jti-rider',
+    email: 'driver@example.com',
+    firstName: 'D',
+    lastName: 'River',
+    jti: 'jti-driver',
   };
 
   const motorcycle = { id: 'moto-1', tenantId: 'tenant-1', isActive: true };
-  const rider = { id: 'rider-1', tenantId: 'tenant-1', userId: 'user-rider', isActive: true };
+  const driver = { id: 'driver-1', tenantId: 'tenant-1', userId: 'user-driver', isActive: true };
 
   const dto = {
     motorcycleId: 'moto-1',
-    riderId: 'rider-1',
+    driverId: 'driver-1',
     assignedDate: '2026-07-01',
     targetAmount: 50000,
   };
@@ -59,7 +59,7 @@ describe('AssignmentService', () => {
     prisma = {
       client: {
         motorcycle: { findUnique: jest.fn() },
-        rider: { findUnique: jest.fn() },
+        driver: { findUnique: jest.fn() },
         dailyAssignment: {
           findFirst: jest.fn(),
           findUnique: jest.fn(),
@@ -79,7 +79,7 @@ describe('AssignmentService', () => {
   describe('createAssignment', () => {
     it('succeeds for a valid owner request', async () => {
       prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.dailyAssignment.findFirst.mockResolvedValue(null);
       prisma.client.dailyAssignment.create.mockResolvedValue({ id: 'assignment-1', ...dto });
 
@@ -97,37 +97,37 @@ describe('AssignmentService', () => {
       await expect(service.createAssignment(dto, owner)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('throws NotFound when the rider does not exist', async () => {
+    it('throws NotFound when the driver does not exist', async () => {
       prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
-      prisma.client.rider.findUnique.mockResolvedValue(null);
+      prisma.client.driver.findUnique.mockResolvedValue(null);
 
       await expect(service.createAssignment(dto, owner)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws Conflict when the motorcycle is already booked that date', async () => {
       prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.dailyAssignment.findFirst.mockResolvedValueOnce({ id: 'existing' });
 
       await expect(service.createAssignment(dto, owner)).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('throws Conflict when the rider is already booked that date', async () => {
+    it('throws Conflict when the driver is already booked that date', async () => {
       prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
-      prisma.client.rider.findUnique.mockResolvedValue(rider);
+      prisma.client.driver.findUnique.mockResolvedValue(driver);
       prisma.client.dailyAssignment.findFirst
         .mockResolvedValueOnce(null) // bike check passes
-        .mockResolvedValueOnce({ id: 'existing' }); // rider check fails
+        .mockResolvedValueOnce({ id: 'existing' }); // driver check fails
 
       await expect(service.createAssignment(dto, owner)).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('throws Forbidden when a RIDER attempts to create an assignment, with no Prisma calls made', async () => {
-      await expect(service.createAssignment(dto, riderActor)).rejects.toBeInstanceOf(
+      await expect(service.createAssignment(dto, driverActor)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();
-      expect(prisma.client.rider.findUnique).not.toHaveBeenCalled();
+      expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
       expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
     });
   });

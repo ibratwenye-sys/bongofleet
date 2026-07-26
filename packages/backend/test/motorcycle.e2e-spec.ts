@@ -26,19 +26,19 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
   return { accessToken: res.body.accessToken as string, tenantId: me.body.tenantId as string };
 }
 
-async function seedRider(prisma: PrismaService, tenantId: string) {
+async function seedDriver(prisma: PrismaService, tenantId: string) {
   const user = await prisma.client.user.create({
     data: {
       tenantId,
-      email: 'rider1@acme-fleet.test',
+      email: 'driver1@acme-fleet.test',
       phone: '+254710000001',
       passwordHash: await hashPassword('password123'),
       role: UserRole.RIDER,
-      firstName: 'Riri',
-      lastName: 'Der',
+      firstName: 'Dara',
+      lastName: 'Ver',
     },
   });
-  return { email: 'rider1@acme-fleet.test', password: 'password123', userId: user.id };
+  return { email: 'driver1@acme-fleet.test', password: 'password123', userId: user.id };
 }
 
 describe('Motorcycle (e2e)', () => {
@@ -197,16 +197,16 @@ describe('Motorcycle (e2e)', () => {
 
   it('gets a clean 403 when a RIDER attempts to create a motorcycle', async () => {
     const { tenantId } = await signupOwner(app);
-    const { email, password } = await seedRider(prisma, tenantId);
+    const { email, password } = await seedDriver(prisma, tenantId);
 
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email, password })
       .expect(200);
 
     await request(app.getHttpServer())
       .post('/motorcycles')
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .send({ registrationNumber: 'KDA-004D' })
       .expect(403);
   });

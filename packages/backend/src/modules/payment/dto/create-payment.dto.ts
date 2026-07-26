@@ -16,7 +16,7 @@ export class CreatePaymentDto {
 
   @IsString()
   @IsNotEmpty()
-  riderId: string;
+  driverId: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()

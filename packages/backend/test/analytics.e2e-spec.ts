@@ -30,16 +30,16 @@ async function signupOwner(app: INestApplication, email: string, company: string
 }
 
 async function setupFleet(app: INestApplication, token: string, tag: string) {
-  const riderRes = await request(app.getHttpServer())
-    .post('/riders')
+  const driverRes = await request(app.getHttpServer())
+    .post('/drivers')
     .set('Authorization', `Bearer ${token}`)
     .send({
       firstName: 'Juma',
       lastName: tag,
       phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
-      email: `rider-${tag.toLowerCase()}@test.local`,
+      email: `driver-${tag.toLowerCase()}@test.local`,
       licenseNumber: `LIC-${tag}`,
-      initialPassword: 'riderpass123',
+      initialPassword: 'driverpass123',
     })
     .expect(201);
   const motoRes = await request(app.getHttpServer())
@@ -47,14 +47,14 @@ async function setupFleet(app: INestApplication, token: string, tag: string) {
     .set('Authorization', `Bearer ${token}`)
     .send({ registrationNumber: `REG-${tag}` })
     .expect(201);
-  return { riderId: riderRes.body.id as string, motorcycleId: motoRes.body.id as string };
+  return { driverId: driverRes.body.id as string, motorcycleId: motoRes.body.id as string };
 }
 
 /** Create an assignment and a COMPLETED payment for a past day, returning nothing. */
 async function earn(
   app: INestApplication,
   token: string,
-  riderId: string,
+  driverId: string,
   motorcycleId: string,
   date: string,
   target: number,
@@ -63,12 +63,12 @@ async function earn(
   const assignmentRes = await request(app.getHttpServer())
     .post('/assignments')
     .set('Authorization', `Bearer ${token}`)
-    .send({ riderId, motorcycleId, assignedDate: date, targetAmount: target })
+    .send({ driverId, motorcycleId, assignedDate: date, targetAmount: target })
     .expect(201);
   const paymentRes = await request(app.getHttpServer())
     .post('/payments')
     .set('Authorization', `Bearer ${token}`)
-    .send({ dailyAssignmentId: assignmentRes.body.id, riderId, amount })
+    .send({ dailyAssignmentId: assignmentRes.body.id, driverId, amount })
     .expect(201);
   await request(app.getHttpServer())
     .patch(`/payments/${paymentRes.body.id}`)
@@ -100,11 +100,11 @@ describe('Analytics & expenses (e2e)', () => {
 
   it('records expenses and reports a correct tenant-isolated P&L', async () => {
     const token = await signupOwner(app, 'owner-a@fleet-a.test', 'Fleet A');
-    const { riderId, motorcycleId } = await setupFleet(app, token, 'A1');
+    const { driverId, motorcycleId } = await setupFleet(app, token, 'A1');
 
     // Revenue: two completed payments totalling 15000.
-    await earn(app, token, riderId, motorcycleId, isoDaysAgo(2), 10000, 10000);
-    await earn(app, token, riderId, motorcycleId, isoDaysAgo(1), 10000, 5000);
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(2), 10000, 10000);
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(1), 10000, 5000);
 
     // Expenses: 3000 fuel + 2000 repairs, both attributed to the bike.
     await request(app.getHttpServer())
@@ -154,12 +154,12 @@ describe('Analytics & expenses (e2e)', () => {
       netProfit: '7500.00',
     });
 
-    const perRider = await request(app.getHttpServer())
-      .get('/analytics/per-rider')
+    const perDriver = await request(app.getHttpServer())
+      .get('/analytics/per-driver')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(perRider.body).toHaveLength(1);
-    expect(perRider.body[0]).toMatchObject({ revenue: '15000.00', paymentCount: 2 });
+    expect(perDriver.body).toHaveLength(1);
+    expect(perDriver.body[0]).toMatchObject({ revenue: '15000.00', paymentCount: 2 });
 
     const breakdown = await request(app.getHttpServer())
       .get('/analytics/expense-breakdown')
@@ -174,10 +174,10 @@ describe('Analytics & expenses (e2e)', () => {
 
   it('honours the date-range filter', async () => {
     const token = await signupOwner(app, 'owner-b@fleet-b.test', 'Fleet B');
-    const { riderId, motorcycleId } = await setupFleet(app, token, 'B1');
+    const { driverId, motorcycleId } = await setupFleet(app, token, 'B1');
 
-    await earn(app, token, riderId, motorcycleId, isoDaysAgo(20), 10000, 8000); // outside window
-    await earn(app, token, riderId, motorcycleId, isoDaysAgo(2), 10000, 6000); // inside window
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(20), 10000, 8000); // outside window
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(2), 10000, 6000); // inside window
 
     const pnl = await request(app.getHttpServer())
       .get('/analytics/pnl')
@@ -188,10 +188,10 @@ describe('Analytics & expenses (e2e)', () => {
     expect(pnl.body.paymentCount).toBe(1);
   });
 
-  it('keeps each tenant to its own numbers and forbids riders', async () => {
+  it('keeps each tenant to its own numbers and forbids drivers', async () => {
     const tokenA = await signupOwner(app, 'owner-c@fleet-c.test', 'Fleet C');
     const fleetA = await setupFleet(app, tokenA, 'C1');
-    await earn(app, tokenA, fleetA.riderId, fleetA.motorcycleId, isoDaysAgo(1), 10000, 10000);
+    await earn(app, tokenA, fleetA.driverId, fleetA.motorcycleId, isoDaysAgo(1), 10000, 10000);
 
     const tokenB = await signupOwner(app, 'owner-d@fleet-d.test', 'Fleet D');
 
@@ -202,14 +202,14 @@ describe('Analytics & expenses (e2e)', () => {
       .expect(200);
     expect(pnlB.body.revenue).toBe('0.00');
 
-    // A rider is forbidden from analytics.
-    const riderLogin = await request(app.getHttpServer())
+    // A driver is forbidden from analytics.
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: 'rider-c1@test.local', password: 'riderpass123' })
+      .send({ email: 'driver-c1@test.local', password: 'driverpass123' })
       .expect(200);
     await request(app.getHttpServer())
       .get('/analytics/pnl')
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .expect(403);
   });
 });

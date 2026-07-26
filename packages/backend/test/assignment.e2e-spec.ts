@@ -26,30 +26,30 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
   return { accessToken: res.body.accessToken as string, tenantId: me.body.tenantId as string };
 }
 
-let riderSeedCounter = 0;
+let driverSeedCounter = 0;
 
-async function seedRiderAndMotorcycle(
+async function seedDriverAndMotorcycle(
   prisma: PrismaService,
   tenantId: string,
-  overrides: { riderEmail?: string } = {},
+  overrides: { driverEmail?: string } = {},
 ) {
-  riderSeedCounter += 1;
-  const riderEmail = overrides.riderEmail ?? `rider${riderSeedCounter}@acme-fleet.test`;
+  driverSeedCounter += 1;
+  const driverEmail = overrides.driverEmail ?? `driver${driverSeedCounter}@acme-fleet.test`;
   const password = 'password123';
 
   const user = await prisma.client.user.create({
     data: {
       tenantId,
-      email: riderEmail,
-      phone: `+25471${String(riderSeedCounter).padStart(7, '0')}`,
+      email: driverEmail,
+      phone: `+25471${String(driverSeedCounter).padStart(7, '0')}`,
       passwordHash: await hashPassword(password),
       role: UserRole.RIDER,
-      firstName: 'Riri',
-      lastName: 'Der',
+      firstName: 'Dara',
+      lastName: 'Ver',
     },
   });
 
-  const rider = await prisma.client.rider.create({
+  const driver = await prisma.client.driver.create({
     data: { tenantId, userId: user.id, licenseNumber: `LIC-${user.id}` },
   });
 
@@ -57,7 +57,7 @@ async function seedRiderAndMotorcycle(
     data: { tenantId, registrationNumber: `KDA-${user.id}` },
   });
 
-  return { riderEmail, password, rider, motorcycle };
+  return { driverEmail, password, driver, motorcycle };
 }
 
 describe('Assignment (e2e)', () => {
@@ -84,14 +84,14 @@ describe('Assignment (e2e)', () => {
 
   it('creates an assignment, refuses delete once a payment exists', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
-    const { rider, motorcycle } = await seedRiderAndMotorcycle(prisma, tenantId);
+    const { driver, motorcycle } = await seedDriverAndMotorcycle(prisma, tenantId);
 
     const createRes = await request(app.getHttpServer())
       .post('/assignments')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         motorcycleId: motorcycle.id,
-        riderId: rider.id,
+        driverId: driver.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
@@ -102,7 +102,7 @@ describe('Assignment (e2e)', () => {
     await request(app.getHttpServer())
       .post('/payments')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ dailyAssignmentId: createRes.body.id, riderId: rider.id, amount: 20000 })
+      .send({ dailyAssignmentId: createRes.body.id, driverId: driver.id, amount: 20000 })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -113,15 +113,15 @@ describe('Assignment (e2e)', () => {
 
   it('rejects double-booking the same motorcycle on the same date', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
-    const { rider, motorcycle } = await seedRiderAndMotorcycle(prisma, tenantId);
-    const { rider: otherRider } = await seedRiderAndMotorcycle(prisma, tenantId);
+    const { driver, motorcycle } = await seedDriverAndMotorcycle(prisma, tenantId);
+    const { driver: otherDriver } = await seedDriverAndMotorcycle(prisma, tenantId);
 
     await request(app.getHttpServer())
       .post('/assignments')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         motorcycleId: motorcycle.id,
-        riderId: rider.id,
+        driverId: driver.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
@@ -132,7 +132,7 @@ describe('Assignment (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         motorcycleId: motorcycle.id,
-        riderId: otherRider.id,
+        driverId: otherDriver.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
@@ -141,14 +141,14 @@ describe('Assignment (e2e)', () => {
 
   it("enforces tenant isolation: a second tenant cannot see or fetch the first tenant's assignments", async () => {
     const { accessToken: ownerAToken, tenantId: tenantAId } = await signupOwner(app);
-    const { rider, motorcycle } = await seedRiderAndMotorcycle(prisma, tenantAId);
+    const { driver, motorcycle } = await seedDriverAndMotorcycle(prisma, tenantAId);
 
     const createRes = await request(app.getHttpServer())
       .post('/assignments')
       .set('Authorization', `Bearer ${ownerAToken}`)
       .send({
         motorcycleId: motorcycle.id,
-        riderId: rider.id,
+        driverId: driver.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
@@ -175,12 +175,12 @@ describe('Assignment (e2e)', () => {
   it("a RIDER's GET /assignments only returns their own", async () => {
     const { accessToken, tenantId } = await signupOwner(app);
     const {
-      rider: riderA,
+      driver: driverA,
       motorcycle: motorcycleA,
-      riderEmail,
+      driverEmail,
       password,
-    } = await seedRiderAndMotorcycle(prisma, tenantId);
-    const { rider: riderB, motorcycle: motorcycleB } = await seedRiderAndMotorcycle(
+    } = await seedDriverAndMotorcycle(prisma, tenantId);
+    const { driver: driverB, motorcycle: motorcycleB } = await seedDriverAndMotorcycle(
       prisma,
       tenantId,
     );
@@ -190,7 +190,7 @@ describe('Assignment (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         motorcycleId: motorcycleA.id,
-        riderId: riderA.id,
+        driverId: driverA.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
@@ -201,41 +201,41 @@ describe('Assignment (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         motorcycleId: motorcycleB.id,
-        riderId: riderB.id,
+        driverId: driverB.id,
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })
       .expect(201);
 
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderEmail, password })
+      .send({ email: driverEmail, password })
       .expect(200);
 
     const listRes = await request(app.getHttpServer())
       .get('/assignments')
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .expect(200);
 
     expect(listRes.body).toHaveLength(1);
-    expect(listRes.body[0].riderId).toBe(riderA.id);
+    expect(listRes.body[0].driverId).toBe(driverA.id);
   });
 
   it('gets a clean 403 when a RIDER attempts to create an assignment', async () => {
     const { tenantId } = await signupOwner(app);
-    const { riderEmail, password } = await seedRiderAndMotorcycle(prisma, tenantId);
+    const { driverEmail, password } = await seedDriverAndMotorcycle(prisma, tenantId);
 
-    const riderLogin = await request(app.getHttpServer())
+    const driverLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: riderEmail, password })
+      .send({ email: driverEmail, password })
       .expect(200);
 
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${riderLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .send({
         motorcycleId: 'irrelevant',
-        riderId: 'irrelevant',
+        driverId: 'irrelevant',
         assignedDate: '2026-07-01',
         targetAmount: 50000,
       })

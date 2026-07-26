@@ -94,7 +94,7 @@ model Tenant {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   users             User[]
-  riders            Rider[]
+  drivers           Driver[]
   motorcycles       Motorcycle[]
   dailyAssignments  DailyAssignment[]
   dailyPayments     DailyPayment[]
@@ -111,8 +111,8 @@ model Tenant {
   @@map("tenants")
 }
 
-/// Anyone who logs in: owner, manager, rider, or mechanic. Riders get an
-/// additional Rider profile (1:1) holding rider-specific fields.
+/// Anyone who logs in: owner, manager, driver, or mechanic. Drivers get an
+/// additional Driver profile (1:1) holding driver-specific fields.
 model User {
   id           String   @id @default(cuid())
   tenantId     String   @map("tenant_id")
@@ -127,7 +127,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  riderProfile             Rider?
+  driverProfile            Driver?
   maintenanceLogsPerformed MaintenanceLog[]
 
   @@unique([tenantId, email])
@@ -136,10 +136,10 @@ model User {
   @@map("users")
 }
 
-/// Rider-specific profile, 1:1 with a User whose role is RIDER.
+/// Driver-specific profile, 1:1 with a User whose role is RIDER.
 /// Soft-deleted (isActive/deletedAt) rather than hard-deleted so that
 /// DailyAssignment/DailyPayment history stays intact.
-model Rider {
+model Driver {
   id                String    @id @default(cuid())
   tenantId          String    @map("tenant_id")
   tenant            Tenant    @relation(fields: [tenantId], references: [id])
@@ -163,15 +163,15 @@ model Rider {
   @@map("riders")
 }
 
-/// A rider's named guarantor (a person who vouches for them), e.g. for a
-/// bike-financing arrangement. A rider can have any number of guarantors -
+/// A driver's named guarantor (a person who vouches for them), e.g. for a
+/// bike-financing arrangement. A driver can have any number of guarantors -
 /// no minimum is enforced here (the UI will encourage at least two).
 model Guarantor {
   id           String    @id @default(cuid())
   tenantId     String    @map("tenant_id")
   tenant       Tenant    @relation(fields: [tenantId], references: [id])
-  riderId      String    @map("rider_id")
-  rider        Rider     @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  driverId     String    @map("rider_id")
+  driver       Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
   firstName    String    @map("first_name")
   lastName     String    @map("last_name")
   phone        String
@@ -183,11 +183,11 @@ model Guarantor {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@index([tenantId])
-  @@index([riderId])
+  @@index([driverId])
   @@map("guarantors")
 }
 
-/// An uploaded document (ID, license, insurance, etc.) belonging to a rider,
+/// An uploaded document (ID, license, insurance, etc.) belonging to a driver,
 /// motorcycle, or guarantor. Polymorphic by ownerType/ownerId rather than a
 /// Prisma relation, since it can point at three different tables. File bytes
 /// live on disk (see UPLOADS_DIR); only metadata + the storage path live here.
@@ -269,15 +269,15 @@ model Motorcycle {
   @@map("motorcycles")
 }
 
-/// One rider assigned to one motorcycle for one calendar date. A motorcycle
-/// can only be assigned to one rider per day, and vice versa (see the two
+/// One driver assigned to one motorcycle for one calendar date. A motorcycle
+/// can only be assigned to one driver per day, and vice versa (see the two
 /// @@unique constraints below).
 model DailyAssignment {
   id            String     @id @default(cuid())
   tenantId      String     @map("tenant_id")
   tenant        Tenant     @relation(fields: [tenantId], references: [id])
-  riderId       String     @map("rider_id")
-  rider         Rider      @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  driverId      String     @map("rider_id")
+  driver        Driver     @relation(fields: [driverId], references: [id], onDelete: Restrict)
   motorcycleId  String     @map("motorcycle_id")
   motorcycle    Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
   assignedDate  DateTime   @map("assigned_date") @db.Date
@@ -294,12 +294,12 @@ model DailyAssignment {
   alert         AssignmentAlert?
 
   @@unique([tenantId, motorcycleId, assignedDate])
-  @@unique([tenantId, riderId, assignedDate])
+  @@unique([tenantId, driverId, assignedDate])
   @@index([tenantId])
   @@map("daily_assignments")
 }
 
-/// A rider's remittance towards a DailyAssignment's targetAmount. One
+/// A driver's remittance towards a DailyAssignment's targetAmount. One
 /// assignment can have multiple payment rows (e.g. a FAILED attempt
 /// followed by a successful retry), so this is many-to-one, not 1:1.
 model DailyPayment {
@@ -308,8 +308,8 @@ model DailyPayment {
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
   dailyAssignmentId String          @map("daily_assignment_id")
   dailyAssignment   DailyAssignment @relation(fields: [dailyAssignmentId], references: [id], onDelete: Restrict)
-  riderId           String          @map("rider_id")
-  rider             Rider           @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  driverId          String          @map("rider_id")
+  driver            Driver          @relation(fields: [driverId], references: [id], onDelete: Restrict)
   amount            Decimal         @db.Decimal(10, 2)
   status            PaymentStatus   @default(PENDING)
   paymentMethod     String?         @map("payment_method")
@@ -456,8 +456,8 @@ model TransportJob {
   tenant        Tenant             @relation(fields: [tenantId], references: [id])
   motorcycleId  String             @map("motorcycle_id")
   motorcycle    Motorcycle         @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
-  riderId       String?            @map("rider_id")
-  rider         Rider?             @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  driverId      String?            @map("rider_id")
+  driver        Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
   ownerDriven   Boolean            @default(false) @map("owner_driven")
   reference     String?            @unique
   origin        String

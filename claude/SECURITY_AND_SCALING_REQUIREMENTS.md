@@ -29,12 +29,12 @@ the feature exists.
   - RIDER: only their own assignments/payments (validate ownership, not just role).
   - MECHANIC: maintenance endpoints only.
 - Never trust an ID from the request body as proof of ownership — cross-check it
-  against `requestContext` (e.g. a rider recording a payment must match the
-  assignment's rider).
+  against `requestContext` (e.g. a driver recording a payment must match the
+  assignment's driver).
 
 ### 1.3 Business logic abuse (PARTIAL)
 - Enforce invariants in the service: amount caps, valid state transitions, "can't
-  delete records with history," uniqueness (one bike ↔ one rider per day).
+  delete records with history," uniqueness (one bike ↔ one driver per day).
 - Assume every input is hostile: negative amounts, future/past dates, duplicate
   submissions, replayed requests.
 
@@ -88,7 +88,7 @@ the feature exists.
 - Redis is already connected (currently only for refresh tokens). Add
   `@nestjs/cache-manager` with the Redis store and cache read-heavy, rarely-changing
   data instead of hitting Postgres every time:
-  - Cache: motorcycle list, rider list, tenant/config lookups, dashboard KPI counts
+  - Cache: motorcycle list, driver list, tenant/config lookups, dashboard KPI counts
     (short TTL, e.g. 30–60s).
   - Do NOT cache: anything transactional or per-request that must be exact at read
     time (a specific payment's current status during reconciliation).

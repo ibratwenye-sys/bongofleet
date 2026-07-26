@@ -111,7 +111,7 @@ describe('DocumentExpiryNotificationService', () => {
       makeDocument({
         id: 'doc-soon',
         ownerType: DocumentOwnerType.RIDER,
-        ownerId: 'rider-1',
+        ownerId: 'driver-1',
         docType: DocumentType.DRIVERS_LICENSE,
         expiryDate: daysFromNow(10),
       }),
@@ -119,7 +119,7 @@ describe('DocumentExpiryNotificationService', () => {
     documentService.buildOwnerLabels.mockResolvedValue(
       new Map([
         ['MOTORCYCLE:moto-1', 'KDA-123'],
-        ['RIDER:rider-1', 'Juma Rider'],
+        ['RIDER:driver-1', 'Juma Driver'],
       ]),
     );
 
@@ -134,7 +134,7 @@ describe('DocumentExpiryNotificationService', () => {
     expect(message.text).toContain('EXPIRED:');
     expect(message.text).toContain('KDA-123');
     expect(message.text).toContain('EXPIRING WITHIN 30 DAYS:');
-    expect(message.text).toContain('Juma Rider');
+    expect(message.text).toContain('Juma Driver');
 
     expect(prisma.client.documentAlert.createMany).toHaveBeenCalledWith({
       data: [

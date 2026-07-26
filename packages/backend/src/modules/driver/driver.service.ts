@@ -8,9 +8,9 @@ import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { hashPassword } from '../auth/utils/password.util';
-import { CreateRiderDto } from './dto/create-rider.dto';
-import { UpdateRiderDto } from './dto/update-rider.dto';
-import { ListRidersQueryDto } from './dto/list-riders-query.dto';
+import { CreateDriverDto } from './dto/create-driver.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
+import { ListDriversQueryDto } from './dto/list-drivers-query.dto';
 
 const SAFE_USER_SELECT = {
   id: true,
@@ -23,15 +23,15 @@ const SAFE_USER_SELECT = {
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
-    throw new ForbiddenException('Only OWNER or MANAGER may manage riders');
+    throw new ForbiddenException('Only OWNER or MANAGER may manage drivers');
   }
 }
 
 @Injectable()
-export class RiderService {
+export class DriverService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateRiderDto, actor: AuthenticatedUser) {
+  async create(dto: CreateDriverDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
     const duplicateEmail = await this.prisma.client.user.findFirst({
@@ -48,17 +48,17 @@ export class RiderService {
       throw new ConflictException('A user with this phone number already exists');
     }
 
-    const duplicateLicense = await this.prisma.client.rider.findFirst({
+    const duplicateLicense = await this.prisma.client.driver.findFirst({
       where: { licenseNumber: dto.licenseNumber },
     });
     if (duplicateLicense) {
-      throw new ConflictException('A rider with this license number already exists');
+      throw new ConflictException('A driver with this license number already exists');
     }
 
     const passwordHash = await hashPassword(dto.initialPassword);
 
     try {
-      const { rider, user } = await this.prisma.client.$transaction(async (tx) => {
+      const { driver, user } = await this.prisma.client.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             tenantId: actor.tenantId,
@@ -73,7 +73,7 @@ export class RiderService {
           select: SAFE_USER_SELECT,
         });
 
-        const rider = await tx.rider.create({
+        const driver = await tx.driver.create({
           data: {
             tenantId: actor.tenantId,
             userId: user.id,
@@ -83,24 +83,24 @@ export class RiderService {
           },
         });
 
-        return { rider, user };
+        return { driver, user };
       });
 
-      return { ...rider, user };
+      return { ...driver, user };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException(
-          'A user or rider with this email, phone, or license number already exists',
+          'A user or driver with this email, phone, or license number already exists',
         );
       }
       throw error;
     }
   }
 
-  async list(query: ListRidersQueryDto, actor: AuthenticatedUser) {
+  async list(query: ListDriversQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const where: Prisma.RiderWhereInput = query.includeInactive ? {} : { isActive: true };
+    const where: Prisma.DriverWhereInput = query.includeInactive ? {} : { isActive: true };
 
     if (query.search) {
       where.OR = [
@@ -110,7 +110,7 @@ export class RiderService {
       ];
     }
 
-    return this.prisma.client.rider.findMany({
+    return this.prisma.client.driver.findMany({
       where,
       include: { user: { select: SAFE_USER_SELECT } },
       orderBy: { createdAt: 'desc' },
@@ -120,26 +120,26 @@ export class RiderService {
   async get(id: string, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const rider = await this.prisma.client.rider.findUnique({
+    const driver = await this.prisma.client.driver.findUnique({
       where: { id },
       include: { user: { select: SAFE_USER_SELECT } },
     });
-    if (!rider) {
-      throw new NotFoundException('Rider not found');
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
     }
 
-    return rider;
+    return driver;
   }
 
-  async update(id: string, dto: UpdateRiderDto, actor: AuthenticatedUser) {
+  async update(id: string, dto: UpdateDriverDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const existing = await this.prisma.client.rider.findUnique({
+    const existing = await this.prisma.client.driver.findUnique({
       where: { id },
       include: { user: { select: SAFE_USER_SELECT } },
     });
     if (!existing) {
-      throw new NotFoundException('Rider not found');
+      throw new NotFoundException('Driver not found');
     }
 
     if (dto.phone && dto.phone !== existing.user.phone) {
@@ -150,16 +150,16 @@ export class RiderService {
     }
 
     if (dto.licenseNumber && dto.licenseNumber !== existing.licenseNumber) {
-      const duplicate = await this.prisma.client.rider.findFirst({
+      const duplicate = await this.prisma.client.driver.findFirst({
         where: { licenseNumber: dto.licenseNumber },
       });
       if (duplicate) {
-        throw new ConflictException('A rider with this license number already exists');
+        throw new ConflictException('A driver with this license number already exists');
       }
     }
 
     try {
-      const { rider, user } = await this.prisma.client.$transaction(async (tx) => {
+      const { driver, user } = await this.prisma.client.$transaction(async (tx) => {
         const user = await tx.user.update({
           where: { id: existing.userId },
           data: {
@@ -170,7 +170,7 @@ export class RiderService {
           select: SAFE_USER_SELECT,
         });
 
-        const rider = await tx.rider.update({
+        const driver = await tx.driver.update({
           where: { id },
           data: {
             licenseNumber: dto.licenseNumber,
@@ -179,14 +179,14 @@ export class RiderService {
           },
         });
 
-        return { rider, user };
+        return { driver, user };
       });
 
-      return { ...rider, user };
+      return { ...driver, user };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException(
-          'A user or rider with this phone number or license number already exists',
+          'A user or driver with this phone number or license number already exists',
         );
       }
       throw error;
@@ -196,13 +196,13 @@ export class RiderService {
   async deactivate(id: string, actor: AuthenticatedUser): Promise<void> {
     assertOwnerOrManager(actor);
 
-    const existing = await this.prisma.client.rider.findUnique({ where: { id } });
+    const existing = await this.prisma.client.driver.findUnique({ where: { id } });
     if (!existing) {
-      throw new NotFoundException('Rider not found');
+      throw new NotFoundException('Driver not found');
     }
 
     await this.prisma.client.$transaction(async (tx) => {
-      await tx.rider.update({
+      await tx.driver.update({
         where: { id },
         data: { isActive: false, deletedAt: new Date() },
       });
@@ -216,13 +216,13 @@ export class RiderService {
   async reactivate(id: string, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
-    const existing = await this.prisma.client.rider.findUnique({ where: { id } });
+    const existing = await this.prisma.client.driver.findUnique({ where: { id } });
     if (!existing) {
-      throw new NotFoundException('Rider not found');
+      throw new NotFoundException('Driver not found');
     }
 
-    const { rider, user } = await this.prisma.client.$transaction(async (tx) => {
-      const rider = await tx.rider.update({
+    const { driver, user } = await this.prisma.client.$transaction(async (tx) => {
+      const driver = await tx.driver.update({
         where: { id },
         data: { isActive: true, deletedAt: null },
       });
@@ -231,9 +231,9 @@ export class RiderService {
         data: { isActive: true },
         select: SAFE_USER_SELECT,
       });
-      return { rider, user };
+      return { driver, user };
     });
 
-    return { ...rider, user };
+    return { ...driver, user };
   }
 }

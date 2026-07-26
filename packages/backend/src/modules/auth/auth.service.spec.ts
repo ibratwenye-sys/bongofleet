@@ -64,16 +64,16 @@ describe('AuthService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('signup', () => {
-    it('creates a Tenant and a User with role OWNER, never a Rider', async () => {
+    it('creates a Tenant and a User with role OWNER, never a Driver', async () => {
       prisma.client.user.findFirst.mockResolvedValue(null);
       const tenantCreate = jest.fn().mockResolvedValue({ id: 'tenant-1' });
       const userCreate = jest.fn().mockResolvedValue(baseUser);
-      const riderCreate = jest.fn();
+      const driverCreate = jest.fn();
       prisma.client.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
         fn({
           tenant: { create: tenantCreate },
           user: { create: userCreate },
-          rider: { create: riderCreate },
+          driver: { create: driverCreate },
         }),
       );
       jest.spyOn(passwordUtil, 'hashPassword').mockResolvedValue('hashed');
@@ -91,7 +91,7 @@ describe('AuthService', () => {
       expect(userCreate).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ role: UserRole.OWNER }) }),
       );
-      expect(riderCreate).not.toHaveBeenCalled();
+      expect(driverCreate).not.toHaveBeenCalled();
       expect(result.accessToken).toBe('signed.jwt.token');
       expect(redis.set).toHaveBeenCalled();
     });

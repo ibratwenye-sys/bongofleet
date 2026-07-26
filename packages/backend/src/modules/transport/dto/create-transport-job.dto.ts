@@ -19,7 +19,7 @@ export class CreateTransportJobDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  riderId?: string;
+  driverId?: string;
 
   @IsOptional()
   @IsBoolean()

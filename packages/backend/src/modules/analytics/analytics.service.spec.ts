@@ -17,7 +17,7 @@ describe('AnalyticsService', () => {
       expense: { aggregate: jest.Mock; findMany: jest.Mock; groupBy: jest.Mock };
       maintenanceLog: { aggregate: jest.Mock; findMany: jest.Mock };
       motorcycle: { findMany: jest.Mock };
-      rider: { findMany: jest.Mock };
+      driver: { findMany: jest.Mock };
     };
   };
 
@@ -31,7 +31,7 @@ describe('AnalyticsService', () => {
     jti: 'jti-owner',
   };
 
-  const rider: AuthenticatedUser = { ...owner, role: UserRole.RIDER };
+  const driver: AuthenticatedUser = { ...owner, role: UserRole.RIDER };
 
   beforeEach(() => {
     prisma = {
@@ -41,7 +41,7 @@ describe('AnalyticsService', () => {
         expense: { aggregate: jest.fn(), findMany: jest.fn(), groupBy: jest.fn() },
         maintenanceLog: { aggregate: jest.fn(), findMany: jest.fn() },
         motorcycle: { findMany: jest.fn() },
-        rider: { findMany: jest.fn() },
+        driver: { findMany: jest.fn() },
       },
     };
     // Sensible transport defaults; individual tests override.
@@ -51,8 +51,8 @@ describe('AnalyticsService', () => {
   });
 
   describe('getSummary', () => {
-    it('rejects a rider', async () => {
-      await expect(service.getSummary({}, rider)).rejects.toBeInstanceOf(ForbiddenException);
+    it('rejects a driver', async () => {
+      await expect(service.getSummary({}, driver)).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('combines rental + transport revenue, minus expenses + maintenance', async () => {
@@ -212,22 +212,22 @@ describe('AnalyticsService', () => {
     });
   });
 
-  describe('getPerRider', () => {
-    it('sums completed payments per rider, names them, and sorts by revenue desc', async () => {
+  describe('getPerDriver', () => {
+    it('sums completed payments per driver, names them, and sorts by revenue desc', async () => {
       prisma.client.dailyPayment.groupBy.mockResolvedValue([
-        { riderId: 'rider-1', _sum: { amount: dec(5000) }, _count: 2 },
-        { riderId: 'rider-2', _sum: { amount: dec(9000) }, _count: 3 },
+        { driverId: 'driver-1', _sum: { amount: dec(5000) }, _count: 2 },
+        { driverId: 'driver-2', _sum: { amount: dec(9000) }, _count: 3 },
       ]);
-      prisma.client.rider.findMany.mockResolvedValue([
-        { id: 'rider-1', user: { firstName: 'Ali', lastName: 'One' } },
-        { id: 'rider-2', user: { firstName: 'Bea', lastName: 'Two' } },
+      prisma.client.driver.findMany.mockResolvedValue([
+        { id: 'driver-1', user: { firstName: 'Ali', lastName: 'One' } },
+        { id: 'driver-2', user: { firstName: 'Bea', lastName: 'Two' } },
       ]);
 
-      const rows = await service.getPerRider({}, owner);
+      const rows = await service.getPerDriver({}, owner);
 
       expect(rows).toEqual([
-        { riderId: 'rider-2', riderName: 'Bea Two', revenue: '9000.00', paymentCount: 3 },
-        { riderId: 'rider-1', riderName: 'Ali One', revenue: '5000.00', paymentCount: 2 },
+        { driverId: 'driver-2', driverName: 'Bea Two', revenue: '9000.00', paymentCount: 3 },
+        { driverId: 'driver-1', driverName: 'Ali One', revenue: '5000.00', paymentCount: 2 },
       ]);
     });
   });
