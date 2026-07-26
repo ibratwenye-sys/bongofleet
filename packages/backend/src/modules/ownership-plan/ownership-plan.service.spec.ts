@@ -228,8 +228,18 @@ describe('OwnershipPlanService', () => {
       ];
       prisma.client.ownershipPlan.findMany.mockResolvedValue(plans);
       prisma.client.dailyAssignment.findMany.mockResolvedValue([
-        { id: 'a1', ownershipPlanId: 'plan-1', targetAmount: new Prisma.Decimal(24000) },
-        { id: 'a2', ownershipPlanId: 'plan-2', targetAmount: new Prisma.Decimal(30000) },
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(24000),
+          assignedDate: new Date('2026-07-01'),
+        },
+        {
+          id: 'a2',
+          ownershipPlanId: 'plan-2',
+          targetAmount: new Prisma.Decimal(30000),
+          assignedDate: new Date('2026-07-01'),
+        },
       ]);
       prisma.client.dailyPayment.groupBy.mockResolvedValue([
         { dailyAssignmentId: 'a1', _sum: { amount: new Prisma.Decimal(12000) } },
@@ -271,8 +281,18 @@ describe('OwnershipPlanService', () => {
         },
       ]);
       prisma.client.dailyAssignment.findMany.mockResolvedValue([
-        { id: 'a1', ownershipPlanId: 'plan-a-lot-behind', targetAmount: new Prisma.Decimal(60000) },
-        { id: 'a2', ownershipPlanId: 'plan-current', targetAmount: new Prisma.Decimal(12000) },
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-a-lot-behind',
+          targetAmount: new Prisma.Decimal(60000),
+          assignedDate: new Date('2026-07-01'),
+        },
+        {
+          id: 'a2',
+          ownershipPlanId: 'plan-current',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
       ]);
       prisma.client.dailyPayment.groupBy.mockResolvedValue([
         { dailyAssignmentId: 'a2', _sum: { amount: new Prisma.Decimal(12000) } },
@@ -340,7 +360,12 @@ describe('OwnershipPlanService', () => {
 
     it('excludes a FAILED/PENDING payment from amountPaid by filtering the query to COMPLETED', async () => {
       prisma.client.dailyAssignment.findMany.mockResolvedValue([
-        { id: 'a1', ownershipPlanId: 'plan-1', targetAmount: new Prisma.Decimal(12000) },
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
       ]);
       prisma.client.dailyPayment.groupBy.mockResolvedValue([]);
 
@@ -356,7 +381,12 @@ describe('OwnershipPlanService', () => {
 
     it('leaves contractEndDate unchanged across calls even as amountPaid changes', async () => {
       prisma.client.dailyAssignment.findMany.mockResolvedValue([
-        { id: 'a1', ownershipPlanId: 'plan-1', targetAmount: new Prisma.Decimal(12000) },
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
       ]);
       prisma.client.dailyPayment.groupBy.mockResolvedValueOnce([]);
 

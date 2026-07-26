@@ -9,6 +9,12 @@ function utc(y: number, m: number, d: number): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
 interface FakePlan {
   id: string;
   tenantId: string;
@@ -226,7 +232,10 @@ describe('OwnershipPlanGeneratorService', () => {
       driverId: 'driver-1',
       motorcycleId: plan.motorcycleId,
       assignedDate: utc(2026, 8, 3),
-      targetAmount: new Prisma.Decimal(12000),
+      // amountBilled (Part 1) is the sum of targetAmount over ALL assignments,
+      // so a fully-current driver's billed history must match what's paid -
+      // 1,796,000 billed and paid, 4,000 of the 1,800,000 price left either way.
+      targetAmount: new Prisma.Decimal(1_796_000),
       ownershipPlanId: 'plan-1',
       reference: 'BF-SEED0001',
     };
@@ -292,6 +301,115 @@ describe('OwnershipPlanGeneratorService', () => {
     const again = await service.generate(utc(2026, 8, 5));
     expect(again.plansScanned).toBe(0);
     expect(state.assignments).toHaveLength(1);
+  });
+
+  describe('Part 1: remainingToBill caps arrears at the price of the vehicle', () => {
+    it('4,000 remaining, 12,000/day, driver pays nothing: 10 consecutive days bill 4,000 total in ONE assignment', async () => {
+      const plan = makePlan({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        totalPrice: new Prisma.Decimal(4000),
+        downPayment: new Prisma.Decimal(0),
+        startDate: utc(2026, 8, 3),
+      });
+      const { client, state } = createFakePrisma({ plans: [plan] });
+      const service = await buildService({ client });
+
+      let totalCreated = 0;
+      for (let day = 0; day < 10; day += 1) {
+        const result = await service.generate(addDays(utc(2026, 8, 3), day));
+        totalCreated += result.assignmentsCreated;
+      }
+
+      expect(state.assignments).toHaveLength(1);
+      const totalBilled = state.assignments.reduce(
+        (sum, a) => sum.plus(a.targetAmount),
+        new Prisma.Decimal(0),
+      );
+      expect(totalBilled.toFixed(2)).toBe('4000.00');
+      expect(totalCreated).toBe(1);
+      // The plan stays ACTIVE throughout - it is unpaid, not finished.
+      expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE);
+    });
+
+    it('arrears (daysBehind) stop growing once billing is capped, rather than climbing forever', async () => {
+      const plan = makePlan({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        totalPrice: new Prisma.Decimal(4000),
+        downPayment: new Prisma.Decimal(0),
+        startDate: utc(2026, 8, 3),
+      });
+      const { client, state } = createFakePrisma({ plans: [plan] });
+      const service = await buildService({ client });
+
+      for (let day = 0; day < 10; day += 1) {
+        await service.generate(addDays(utc(2026, 8, 3), day));
+      }
+
+      // netPosition = amountPaid(0) - amountDue(sum of targetAmount to date).
+      // amountDue is capped at 4,000 forever (only one row was ever billed),
+      // so daysBehind = ceil(4000/12000) = 1, not 10 and not climbing.
+      const amountDue = state.assignments.reduce(
+        (sum, a) => sum.plus(a.targetAmount),
+        new Prisma.Decimal(0),
+      );
+      expect(amountDue.toFixed(2)).toBe('4000.00');
+    });
+
+    it('backfill of 3 days on a 20,000-remaining, 12,000/day plan bills 12,000 then 8,000 then nothing, in one run', async () => {
+      const plan = makePlan({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        totalPrice: new Prisma.Decimal(20000),
+        downPayment: new Prisma.Decimal(0),
+        startDate: utc(2026, 8, 3), // Mon
+      });
+      const { client, state } = createFakePrisma({ plans: [plan] });
+      const service = await buildService({ client });
+
+      // Server "down" until 2026-08-05 (Wed) - 3 missed active weekdays in one run.
+      const result = await service.generate(utc(2026, 8, 5));
+
+      expect(result.assignmentsCreated).toBe(2);
+      const byDate = new Map(
+        state.assignments.map((a) => [a.assignedDate.toISOString().slice(0, 10), a.targetAmount]),
+      );
+      expect(byDate.get('2026-08-03')?.toFixed(2)).toBe('12000.00');
+      expect(byDate.get('2026-08-04')?.toFixed(2)).toBe('8000.00');
+      expect(byDate.has('2026-08-05')).toBe(false); // "then nothing" - the third day is not created.
+      expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE); // billed out, not paid off.
+    });
+
+    it('fully billed but unpaid stays ACTIVE, and paying it off then marks it COMPLETED', async () => {
+      const plan = makePlan({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        totalPrice: new Prisma.Decimal(20000),
+        downPayment: new Prisma.Decimal(0),
+        startDate: utc(2026, 8, 3),
+      });
+      const { client, state } = createFakePrisma({ plans: [plan] });
+      const service = await buildService({ client });
+
+      await service.generate(utc(2026, 8, 5)); // bills 12,000 + 8,000 = fully billed.
+      expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE);
+      expect(state.assignments).toHaveLength(2);
+
+      // Driver pays it all off.
+      for (const a of state.assignments) {
+        state.payments.push({
+          dailyAssignmentId: a.id,
+          amount: a.targetAmount,
+          status: PaymentStatus.COMPLETED,
+        });
+      }
+
+      const result = await service.generate(utc(2026, 8, 6));
+      expect(result.plansCompleted).toBe(1);
+      expect(plan.status).toBe(OwnershipPlanStatus.COMPLETED);
+      expect(plan.completedAt).toEqual(utc(2026, 8, 6));
+    });
   });
 
   it('SUNDAY: a plan excluding Sunday generates nothing on Sunday and generates normally on Monday', async () => {

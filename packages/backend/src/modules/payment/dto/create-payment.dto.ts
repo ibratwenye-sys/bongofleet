@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -26,4 +27,11 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  // Plan assignments only: required to accept an amount above
+  // PLAN_PAYMENT_CAP_DAYS worth of the plan's daily amount, so a typo'd extra
+  // zero (120,000 vs 1,200,000) needs a deliberate second tap, not just luck.
+  @IsOptional()
+  @IsBoolean()
+  confirmLargeAmount?: boolean;
 }

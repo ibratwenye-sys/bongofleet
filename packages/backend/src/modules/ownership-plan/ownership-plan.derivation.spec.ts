@@ -10,6 +10,7 @@ function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
     downPayment: new Prisma.Decimal(0),
     amountDue: new Prisma.Decimal(0),
     amountPaid: new Prisma.Decimal(0),
+    amountBilled: new Prisma.Decimal(0),
     contractEndDate: null,
     activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
     ...overrides,
@@ -108,5 +109,40 @@ describe('derivePlanFigures', () => {
     );
     expect(result.remainingToOwn).toBe('1600000.00');
     expect(result.daysBehind).toBe(3);
+  });
+
+  describe('Part 1: remainingToOwn vs remainingToBill', () => {
+    it('a fully current plan (amountPaid === amountBilled) has remainingToOwn === remainingToBill', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          amountDue: new Prisma.Decimal(12000),
+          amountPaid: new Prisma.Decimal(12000),
+          amountBilled: new Prisma.Decimal(12000),
+        }),
+        TODAY,
+      );
+      expect(result.remainingToOwn).toBe(result.remainingToBill);
+      expect(result.remainingToOwn).toBe('1788000.00');
+    });
+
+    it('a non-paying driver: remainingToOwn stays at the arrears while remainingToBill tracks what has been billed', () => {
+      // 4,000 remaining, only 4,000 ever billed (the generator capped it there),
+      // nothing paid - remainingToOwn reflects the debt, remainingToBill is
+      // exhausted (the generator must not create more).
+      const result = derivePlanFigures(
+        basePosition({
+          totalPrice: new Prisma.Decimal(4000),
+          downPayment: new Prisma.Decimal(0),
+          amountDue: new Prisma.Decimal(4000),
+          amountPaid: new Prisma.Decimal(0),
+          amountBilled: new Prisma.Decimal(4000),
+        }),
+        TODAY,
+      );
+      expect(result.remainingToOwn).toBe('4000.00');
+      expect(result.remainingToBill).toBe('0.00');
+    });
   });
 });

@@ -260,20 +260,31 @@ export class OwnershipPlanService {
     const today = dateOnly();
     const planIds = plans.map((p) => p.id);
 
+    // No date filter here: amountBilled asks what has been committed across
+    // the plan's whole life, not what has come due (see
+    // ownership-plan.derivation.ts). amountDue is split out from the same
+    // rows in memory rather than queried separately.
     const assignments = await this.prisma.client.dailyAssignment.findMany({
-      where: { ownershipPlanId: { in: planIds }, assignedDate: { lte: today } },
-      select: { id: true, ownershipPlanId: true, targetAmount: true },
+      where: { ownershipPlanId: { in: planIds } },
+      select: { id: true, ownershipPlanId: true, targetAmount: true, assignedDate: true },
     });
 
     const amountDueByPlan = new Map<string, Prisma.Decimal>();
+    const amountBilledByPlan = new Map<string, Prisma.Decimal>();
     const planIdByAssignment = new Map<string, string>();
     for (const a of assignments) {
       const planId = a.ownershipPlanId as string;
       planIdByAssignment.set(a.id, planId);
-      amountDueByPlan.set(
+      amountBilledByPlan.set(
         planId,
-        (amountDueByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(a.targetAmount),
+        (amountBilledByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(a.targetAmount),
       );
+      if (a.assignedDate.getTime() <= today.getTime()) {
+        amountDueByPlan.set(
+          planId,
+          (amountDueByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(a.targetAmount),
+        );
+      }
     }
 
     const amountPaidByPlan = new Map<string, Prisma.Decimal>();
@@ -305,6 +316,7 @@ export class OwnershipPlanService {
             downPayment: plan.downPayment,
             amountDue: amountDueByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             amountPaid: amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0),
+            amountBilled: amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             contractEndDate: plan.contractEndDate,
             activeWeekdays: plan.activeWeekdays,
           },

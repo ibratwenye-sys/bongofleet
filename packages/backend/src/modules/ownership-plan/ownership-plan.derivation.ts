@@ -11,6 +11,10 @@ export interface PlanPosition {
   downPayment: Prisma.Decimal;
   amountDue: Prisma.Decimal;
   amountPaid: Prisma.Decimal;
+  /** Sum of targetAmount over ALL of the plan's assignments, not just up to
+   * today - what has been committed, not what has come due. See
+   * computeRemainingToBill. */
+  amountBilled: Prisma.Decimal;
   contractEndDate: Date | null;
   activeWeekdays: number[];
 }
@@ -18,10 +22,12 @@ export interface PlanPosition {
 export interface DerivedPlanFigures {
   amountDue: string;
   amountPaid: string;
+  amountBilled: string;
   netPosition: string;
   daysBehind: number;
   daysAhead: number;
   remainingToOwn: string;
+  remainingToBill: string;
   daysLeft: number | null;
   projectedCompletion: string;
 }
@@ -71,19 +77,48 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decimal): Prisma.Decimal {
+  return totalPrice.minus(downPayment);
+}
+
 /**
- * How much more the driver still has to pay in total, based on what has
- * actually been paid - never on how many instalments have been billed. The
- * nightly generator (ownership-plan-generator.service.ts) reuses this exact
- * function for its own completion check and final-instalment clamp, so there
- * is only ever one way this number gets computed.
+ * How much more the driver still has to PAY in total - based on what has
+ * actually been paid, never on how many instalments have been billed. Reads:
+ * the progress bar, daysLeft, projectedCompletion, and the generator's
+ * COMPLETION check (mark COMPLETED only when this hits zero - the driver has
+ * actually paid for the vehicle).
+ *
+ * This is a genuinely different quantity from computeRemainingToBill, not a
+ * second implementation of the same one: a driver who stops paying keeps
+ * remainingToOwn frozen at their arrears forever, while remainingToBill is
+ * what caps the generator from billing past the price of the vehicle. Both
+ * are computed exactly once, here and in computeRemainingToBill respectively,
+ * and reused everywhere (ownership-plan.service.ts, the nightly generator,
+ * payment.service.ts's overpayment guard) rather than re-derived.
  */
 export function computeRemainingToOwn(
   totalPrice: Prisma.Decimal,
   downPayment: Prisma.Decimal,
   amountPaid: Prisma.Decimal,
 ): Prisma.Decimal {
-  return totalPrice.minus(downPayment).minus(amountPaid);
+  return totalOwed(totalPrice, downPayment).minus(amountPaid);
+}
+
+/**
+ * How much more the generator may still create OBLIGATIONS for - based on
+ * what has already been billed (all assignments ever created for the plan),
+ * never on what has been paid. This is the cap that stops a non-paying
+ * driver's arrears from billing past the price of the vehicle: once
+ * amountBilled reaches totalOwed, this hits zero and the generator stops,
+ * even though the plan stays ACTIVE (remainingToOwn is still positive - the
+ * debt just stops growing).
+ */
+export function computeRemainingToBill(
+  totalPrice: Prisma.Decimal,
+  downPayment: Prisma.Decimal,
+  amountBilled: Prisma.Decimal,
+): Prisma.Decimal {
+  return totalOwed(totalPrice, downPayment).minus(amountBilled);
 }
 
 /**
@@ -110,6 +145,11 @@ export function derivePlanFigures(
     input.downPayment,
     input.amountPaid,
   );
+  const remainingToBill = computeRemainingToBill(
+    input.totalPrice,
+    input.downPayment,
+    input.amountBilled,
+  );
 
   const todayOnly = dateOnly(today);
 
@@ -130,10 +170,12 @@ export function derivePlanFigures(
   return {
     amountDue: input.amountDue.toFixed(2),
     amountPaid: input.amountPaid.toFixed(2),
+    amountBilled: input.amountBilled.toFixed(2),
     netPosition: netPosition.toFixed(2),
     daysBehind,
     daysAhead,
     remainingToOwn: remainingToOwn.toFixed(2),
+    remainingToBill: remainingToBill.toFixed(2),
     daysLeft,
     projectedCompletion: isoDate(projectedCompletion),
   };

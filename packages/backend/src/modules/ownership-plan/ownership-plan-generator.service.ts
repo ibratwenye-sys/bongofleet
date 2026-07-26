@@ -7,7 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { requestContext } from '../../common/context/request-context';
 import { generateRideReference } from '../../common/reference.util';
-import { computeRemainingToOwn } from './ownership-plan.derivation';
+import { computeRemainingToBill, computeRemainingToOwn } from './ownership-plan.derivation';
 
 export const OWNERSHIP_PLAN_GENERATOR_CRON_JOB = 'ownership-plan-generator';
 
@@ -237,15 +237,17 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
     const driverIds = plans.map((p) => p.driverId);
 
     // Existing assignments already generated for these plans (any date) -
-    // gives amountPaid inputs and each plan's most recent generated date in
-    // one query, never one per plan.
+    // gives amountPaid inputs, amountBilled (Part 1: what has been committed,
+    // not what has come due), and each plan's most recent generated date, all
+    // in one query, never one per plan.
     const planAssignments = await this.prisma.client.dailyAssignment.findMany({
       where: { ownershipPlanId: { in: planIds } },
-      select: { id: true, ownershipPlanId: true, assignedDate: true },
+      select: { id: true, ownershipPlanId: true, assignedDate: true, targetAmount: true },
     });
 
     const lastAssignedDateByPlan = new Map<string, Date>();
     const planIdByAssignmentId = new Map<string, string>();
+    const amountBilledByPlan = new Map<string, Prisma.Decimal>();
     for (const a of planAssignments) {
       const planId = a.ownershipPlanId as string;
       planIdByAssignmentId.set(a.id, planId);
@@ -253,6 +255,10 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
       if (!prev || a.assignedDate.getTime() > prev.getTime()) {
         lastAssignedDateByPlan.set(planId, a.assignedDate);
       }
+      amountBilledByPlan.set(
+        planId,
+        (amountBilledByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(a.targetAmount),
+      );
     }
 
     const amountPaidByPlan = new Map<string, Prisma.Decimal>();
@@ -297,17 +303,29 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
 
     for (const plan of plans) {
       const amountPaid = amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0);
+      const amountBilled = amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0);
       const remainingToOwn = computeRemainingToOwn(plan.totalPrice, plan.downPayment, amountPaid);
 
-      // Completion check comes before any creation for this plan: a fully
-      // paid driver must never be billed again, backfill included.
+      // Two separate checks with two separate outcomes (Part 1). Paid off
+      // (remainingToOwn <= 0) -> COMPLETED, stop entirely: a fully paid
+      // driver must never be billed again, backfill included. This is
+      // invariant for the rest of this run (no payment happens mid-run), so
+      // checking it once here is equivalent to checking it on every date.
       if (remainingToOwn.lessThanOrEqualTo(0)) {
         completedPlanIds.push(plan.id);
         result.plansCompleted += 1;
         continue;
       }
 
-      const targetAmount = Prisma.Decimal.min(plan.dailyAmount, remainingToOwn);
+      // Fully billed but not yet paid off -> stay ACTIVE, stop generating.
+      // Unlike remainingToOwn, this DOES change within the run: it is a
+      // running counter that decrements by each row this run creates, which
+      // is what caps a non-paying driver's arrears at the price of the
+      // vehicle instead of billing them forever.
+      let remainingToBill = computeRemainingToBill(plan.totalPrice, plan.downPayment, amountBilled);
+      if (remainingToBill.lessThanOrEqualTo(0)) {
+        continue;
+      }
 
       const lastAssignedDate = lastAssignedDateByPlan.get(plan.id);
       const naturalStart = lastAssignedDate
@@ -367,6 +385,14 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
           continue; // either this plan's own row (idempotent) or blocked.
         }
 
+        // Fully billed partway through this run's own backfill - stop here,
+        // stay ACTIVE. remainingToOwn was already confirmed positive above
+        // and does not change mid-run, so this is never a completion.
+        if (remainingToBill.lessThanOrEqualTo(0)) {
+          break;
+        }
+
+        const targetAmount = Prisma.Decimal.min(plan.dailyAmount, remainingToBill);
         toCreate.push({
           tenantId,
           driverId: plan.driverId,
@@ -376,6 +402,7 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
           ownershipPlanId: plan.id,
           reference: generateRideReference(),
         });
+        remainingToBill = remainingToBill.minus(targetAmount);
         // Mark it taken immediately so nothing else in this same run can
         // double-book this driver+date.
         existingByDriverDate.set(key, plan.id);
