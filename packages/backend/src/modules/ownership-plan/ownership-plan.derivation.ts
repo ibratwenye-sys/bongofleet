@@ -72,6 +72,21 @@ function isoDate(date: Date): string {
 }
 
 /**
+ * How much more the driver still has to pay in total, based on what has
+ * actually been paid - never on how many instalments have been billed. The
+ * nightly generator (ownership-plan-generator.service.ts) reuses this exact
+ * function for its own completion check and final-instalment clamp, so there
+ * is only ever one way this number gets computed.
+ */
+export function computeRemainingToOwn(
+  totalPrice: Prisma.Decimal,
+  downPayment: Prisma.Decimal,
+  amountPaid: Prisma.Decimal,
+): Prisma.Decimal {
+  return totalPrice.minus(downPayment).minus(amountPaid);
+}
+
+/**
  * netPosition = amountPaid - amountDue is the single signed number everything
  * else reads from. daysBehind and daysAhead are two directions of the same
  * read - never compute them independently, or a driver ends up "2 days
@@ -90,7 +105,11 @@ export function derivePlanFigures(
     ? netPosition.dividedBy(input.dailyAmount).floor().toNumber()
     : 0;
 
-  const remainingToOwn = input.totalPrice.minus(input.downPayment).minus(input.amountPaid);
+  const remainingToOwn = computeRemainingToOwn(
+    input.totalPrice,
+    input.downPayment,
+    input.amountPaid,
+  );
 
   const todayOnly = dateOnly(today);
 

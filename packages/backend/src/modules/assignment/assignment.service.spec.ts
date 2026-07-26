@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { validate } from 'class-validator';
-import { DriverType, UserRole, VehicleType } from '@prisma/client';
+import { DriverType, OwnershipPlanStatus, UserRole, VehicleType } from '@prisma/client';
 import { AssignmentService } from './assignment.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -18,6 +18,7 @@ describe('AssignmentService', () => {
     client: {
       motorcycle: { findUnique: jest.Mock };
       driver: { findUnique: jest.Mock };
+      ownershipPlan: { findFirst: jest.Mock };
       dailyAssignment: {
         findFirst: jest.Mock;
         findUnique: jest.Mock;
@@ -90,6 +91,7 @@ describe('AssignmentService', () => {
       client: {
         motorcycle: { findUnique: jest.fn() },
         driver: { findUnique: jest.fn() },
+        ownershipPlan: { findFirst: jest.fn().mockResolvedValue(null) },
         dailyAssignment: {
           findFirst: jest.fn(),
           findUnique: jest.fn(),
@@ -159,6 +161,73 @@ describe('AssignmentService', () => {
       expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();
       expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
       expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("createAssignment - vehicle on another driver's active ownership plan", () => {
+    const otherDriver = {
+      ...driver,
+      id: 'driver-2',
+      user: { firstName: 'Asha', lastName: 'Mbwana' },
+    };
+
+    beforeEach(() => {
+      prisma.client.dailyAssignment.findFirst.mockResolvedValue(null);
+      prisma.client.dailyAssignment.create.mockImplementation(({ data }) => ({
+        id: 'assignment-1',
+        ...data,
+      }));
+      prisma.client.driver.findUnique.mockImplementation(({ where }) =>
+        Promise.resolve(where.id === 'driver-2' ? otherDriver : driver),
+      );
+    });
+
+    it("assigning the vehicle to the plan's own driver succeeds", async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      const result = await service.createAssignment(dto, owner);
+
+      expect(result).toBeDefined();
+      expect(prisma.client.dailyAssignment.create).toHaveBeenCalled();
+    });
+
+    it('assigning the vehicle to a different driver is rejected, hard, with no override', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-2', // Asha Mbwana's plan
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      await expect(service.createAssignment(dto, owner)).rejects.toThrow(
+        'T123 ABC is on an active ownership plan for Asha Mbwana and cannot be assigned to Juma Hassan.',
+      );
+      expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+
+      // Not even an OWNER-supplied reason overrides this - it isn't offered.
+      await expect(
+        service.createAssignment({ ...dto, categoryOverrideReason: 'Owner insists.' }, owner),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it.each([
+      OwnershipPlanStatus.COMPLETED,
+      OwnershipPlanStatus.CANCELLED,
+      OwnershipPlanStatus.DEFAULTED,
+    ])('a vehicle whose plan is %s is freely assignable to a different driver', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(motorcycle);
+      // A non-ACTIVE plan never matches the findFirst({ status: ACTIVE }) query.
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue(null);
+
+      const result = await service.createAssignment(dto, owner);
+
+      expect(result).toBeDefined();
+      expect(prisma.client.dailyAssignment.create).toHaveBeenCalled();
     });
   });
 

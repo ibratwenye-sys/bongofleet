@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OwnershipPlanService } from './ownership-plan.service';
+import { OwnershipPlanGeneratorService } from './ownership-plan-generator.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 
@@ -14,12 +15,24 @@ import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 @Controller('ownership-plans')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OwnershipPlanController {
-  constructor(private readonly ownershipPlanService: OwnershipPlanService) {}
+  constructor(
+    private readonly ownershipPlanService: OwnershipPlanService,
+    private readonly generatorService: OwnershipPlanGeneratorService,
+  ) {}
 
   @Post()
   @Roles(UserRole.OWNER)
   create(@Body() dto: CreateOwnershipPlanDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.ownershipPlanService.create(dto, actor);
+  }
+
+  // Same code path as the cron (OwnershipPlanGeneratorService.generate), so a
+  // missed night is fixable without waiting until tomorrow - and so the
+  // idempotency guarantee actually holds regardless of who/what triggers it.
+  @Post('generate')
+  @Roles(UserRole.OWNER)
+  generate(@CurrentUser() actor: AuthenticatedUser) {
+    return this.generatorService.runManual(actor);
   }
 
   @Get()

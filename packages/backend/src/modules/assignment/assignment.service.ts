@@ -6,11 +6,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { OwnershipPlanStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { generateRideReference } from '../../common/reference.util';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
+import { describeOwnershipConflict } from '../../common/ownership-plan-conflict';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
@@ -40,6 +41,15 @@ export class AssignmentService {
       throw new NotFoundException('Driver not found');
     }
 
+    const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+    await this.assertVehicleNotOnAnotherDriversPlan(
+      actor.tenantId,
+      dto.motorcycleId,
+      dto.driverId,
+      driverName,
+      motorcycle.registrationNumber,
+    );
+
     let categoryOverride: {
       categoryOverrideReason: string;
       categoryOverrideByUserId: string;
@@ -47,7 +57,6 @@ export class AssignmentService {
     } | null = null;
 
     if (!isCompatible(driver.driverType, motorcycle.vehicleType)) {
-      const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
       const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
       if (!authorized) {
         throw new BadRequestException(
@@ -216,5 +225,39 @@ export class AssignmentService {
       throw new ForbiddenException('No driver profile is associated with this account');
     }
     return driver.id;
+  }
+
+  /**
+   * A vehicle part-way through an ownership plan is someone else's property
+   * interest, not a competence judgement call like a category mismatch - so
+   * this is hard, with no OWNER override. Moving the vehicle requires
+   * cancelling or defaulting the plan first, which is a deliberate act with
+   * a record.
+   */
+  private async assertVehicleNotOnAnotherDriversPlan(
+    tenantId: string,
+    motorcycleId: string,
+    driverId: string,
+    driverName: string,
+    registrationNumber: string,
+  ): Promise<void> {
+    const activePlan = await this.prisma.client.ownershipPlan.findFirst({
+      where: { tenantId, motorcycleId, status: OwnershipPlanStatus.ACTIVE },
+    });
+    if (!activePlan || activePlan.driverId === driverId) {
+      return;
+    }
+
+    const planDriver = await this.prisma.client.driver.findUnique({
+      where: { id: activePlan.driverId },
+      include: { user: { select: { firstName: true, lastName: true } } },
+    });
+    const planDriverName = planDriver
+      ? `${planDriver.user.firstName} ${planDriver.user.lastName}`
+      : 'another driver';
+
+    throw new ConflictException(
+      describeOwnershipConflict({ registrationNumber }, planDriverName, driverName),
+    );
   }
 }

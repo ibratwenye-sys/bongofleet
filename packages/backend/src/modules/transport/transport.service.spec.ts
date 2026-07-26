@@ -1,7 +1,12 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { validate } from 'class-validator';
-import { DriverType, TransportJobStatus, UserRole } from '@prisma/client';
+import { DriverType, OwnershipPlanStatus, TransportJobStatus, UserRole } from '@prisma/client';
 import { TransportService } from './transport.service';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -13,6 +18,7 @@ describe('TransportService', () => {
     client: {
       motorcycle: { findUnique: jest.Mock; findMany: jest.Mock };
       driver: { findUnique: jest.Mock };
+      ownershipPlan: { findFirst: jest.Mock };
       transportJob: {
         create: jest.Mock;
         findMany: jest.Mock;
@@ -67,6 +73,7 @@ describe('TransportService', () => {
       client: {
         motorcycle: { findUnique: jest.fn(), findMany: jest.fn() },
         driver: { findUnique: jest.fn() },
+        ownershipPlan: { findFirst: jest.fn().mockResolvedValue(null) },
         transportJob: {
           create: jest.fn(),
           findMany: jest.fn(),
@@ -190,6 +197,69 @@ describe('TransportService', () => {
       expect(data.categoryOverrideReason).toBeUndefined();
       expect(data.categoryOverrideByUserId).toBeUndefined();
       expect(data.categoryOverrideAt).toBeUndefined();
+    });
+  });
+
+  describe("createJob - vehicle on another driver's active ownership plan", () => {
+    const jobDto = { ...dto, driverId: 'driver-1' };
+    const otherDriver = makeDriver(DriverType.TRUCK_DRIVER);
+    otherDriver.id = 'driver-2';
+    otherDriver.user = { firstName: 'Asha', lastName: 'Mbwana' };
+
+    beforeEach(() => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(truck);
+      prisma.client.transportJob.create.mockImplementation(({ data }) => ({
+        id: 'job-1',
+        ...data,
+      }));
+      prisma.client.driver.findUnique.mockImplementation(({ where }) =>
+        Promise.resolve(
+          where.id === 'driver-2' ? otherDriver : makeDriver(DriverType.TRUCK_DRIVER),
+        ),
+      );
+    });
+
+    it("assigning the vehicle to the plan's own driver succeeds", async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      const result = await service.createJob(jobDto, owner);
+
+      expect(result).toBeDefined();
+      expect(prisma.client.transportJob.create).toHaveBeenCalled();
+    });
+
+    it('assigning the vehicle to a different driver is rejected, hard, with no override', async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-2', // Asha Mbwana's plan
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      await expect(service.createJob(jobDto, owner)).rejects.toThrow(
+        'T123 ABC is on an active ownership plan for Asha Mbwana and cannot be assigned to Juma Hassan.',
+      );
+      expect(prisma.client.transportJob.create).not.toHaveBeenCalled();
+
+      await expect(
+        service.createJob({ ...jobDto, categoryOverrideReason: 'Owner insists.' }, owner),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it.each([
+      OwnershipPlanStatus.COMPLETED,
+      OwnershipPlanStatus.CANCELLED,
+      OwnershipPlanStatus.DEFAULTED,
+    ])('a vehicle whose plan is %s is freely assignable to a different driver', async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue(null);
+
+      const result = await service.createJob(jobDto, owner);
+
+      expect(result).toBeDefined();
+      expect(prisma.client.transportJob.create).toHaveBeenCalled();
     });
   });
 
@@ -329,6 +399,78 @@ describe('TransportService', () => {
       expect(data.categoryOverrideReason).toBeUndefined();
       expect(data.categoryOverrideByUserId).toBeUndefined();
       expect(data.categoryOverrideAt).toBeUndefined();
+    });
+  });
+
+  describe("updateJob - vehicle on another driver's active ownership plan", () => {
+    const existingJob = {
+      id: 'job-1',
+      status: 'SCHEDULED',
+      ownerDriven: false,
+      motorcycleId: 'veh-1',
+      pickedUpAt: null,
+      deliveredAt: null,
+    };
+    const otherDriver = makeDriver(DriverType.TRUCK_DRIVER);
+    otherDriver.id = 'driver-2';
+    otherDriver.user = { firstName: 'Asha', lastName: 'Mbwana' };
+
+    beforeEach(() => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(existingJob);
+      prisma.client.motorcycle.findUnique.mockResolvedValue(truck);
+      prisma.client.transportJob.update.mockImplementation(({ data }) => data);
+      prisma.client.driver.findUnique.mockImplementation(({ where }) =>
+        Promise.resolve(
+          where.id === 'driver-2' ? otherDriver : makeDriver(DriverType.TRUCK_DRIVER),
+        ),
+      );
+    });
+
+    it("reassigning to the plan's own driver succeeds", async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-1',
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      const data = await service.updateJob('job-1', { driverId: 'driver-1' }, owner);
+
+      expect(data).toBeDefined();
+      expect(prisma.client.transportJob.update).toHaveBeenCalled();
+    });
+
+    it('reassigning to a different driver is rejected, hard, with no override', async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue({
+        id: 'plan-1',
+        driverId: 'driver-2',
+        status: OwnershipPlanStatus.ACTIVE,
+      });
+
+      await expect(service.updateJob('job-1', { driverId: 'driver-1' }, owner)).rejects.toThrow(
+        'T123 ABC is on an active ownership plan for Asha Mbwana and cannot be assigned to Juma Hassan.',
+      );
+      expect(prisma.client.transportJob.update).not.toHaveBeenCalled();
+
+      await expect(
+        service.updateJob(
+          'job-1',
+          { driverId: 'driver-1', categoryOverrideReason: 'Owner insists.' },
+          owner,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it.each([
+      OwnershipPlanStatus.COMPLETED,
+      OwnershipPlanStatus.CANCELLED,
+      OwnershipPlanStatus.DEFAULTED,
+    ])('a vehicle whose plan is %s is freely reassignable to a different driver', async () => {
+      prisma.client.ownershipPlan.findFirst.mockResolvedValue(null);
+
+      const data = await service.updateJob('job-1', { driverId: 'driver-1' }, owner);
+
+      expect(data).toBeDefined();
+      expect(prisma.client.transportJob.update).toHaveBeenCalled();
     });
   });
 

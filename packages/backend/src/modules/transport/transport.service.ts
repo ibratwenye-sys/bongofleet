@@ -1,15 +1,17 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TransportJobStatus, UserRole } from '@prisma/client';
+import { OwnershipPlanStatus, Prisma, TransportJobStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { generateRideReference } from '../../common/reference.util';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
+import { describeOwnershipConflict } from '../../common/ownership-plan-conflict';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
@@ -67,8 +69,16 @@ export class TransportService {
         throw new NotFoundException('Driver not found');
       }
 
+      const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+      await this.assertVehicleNotOnAnotherDriversPlan(
+        actor.tenantId,
+        dto.motorcycleId,
+        driverId,
+        driverName,
+        vehicle.registrationNumber,
+      );
+
       if (!isCompatible(driver.driverType, vehicle.vehicleType)) {
-        const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
         const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
         if (!authorized) {
           throw new BadRequestException(
@@ -208,8 +218,16 @@ export class TransportService {
         throw new NotFoundException('Vehicle not found');
       }
 
+      const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
+      await this.assertVehicleNotOnAnotherDriversPlan(
+        actor.tenantId,
+        existing.motorcycleId,
+        dto.driverId,
+        driverName,
+        vehicle.registrationNumber,
+      );
+
       if (!isCompatible(driver.driverType, vehicle.vehicleType)) {
-        const driverName = `${driver.user.firstName} ${driver.user.lastName}`;
         const authorized = actor.role === UserRole.OWNER && Boolean(dto.categoryOverrideReason);
         if (!authorized) {
           throw new BadRequestException(
@@ -346,6 +364,40 @@ export class TransportService {
       }
     }
     return map;
+  }
+
+  /**
+   * A vehicle part-way through an ownership plan is someone else's property
+   * interest, not a competence judgement call like a category mismatch - so
+   * this is hard, with no OWNER override. Moving the vehicle requires
+   * cancelling or defaulting the plan first, which is a deliberate act with
+   * a record.
+   */
+  private async assertVehicleNotOnAnotherDriversPlan(
+    tenantId: string,
+    motorcycleId: string,
+    driverId: string,
+    driverName: string,
+    registrationNumber: string,
+  ): Promise<void> {
+    const activePlan = await this.prisma.client.ownershipPlan.findFirst({
+      where: { tenantId, motorcycleId, status: OwnershipPlanStatus.ACTIVE },
+    });
+    if (!activePlan || activePlan.driverId === driverId) {
+      return;
+    }
+
+    const planDriver = await this.prisma.client.driver.findUnique({
+      where: { id: activePlan.driverId },
+      include: { user: { select: { firstName: true, lastName: true } } },
+    });
+    const planDriverName = planDriver
+      ? `${planDriver.user.firstName} ${planDriver.user.lastName}`
+      : 'another driver';
+
+    throw new ConflictException(
+      describeOwnershipConflict({ registrationNumber }, planDriverName, driverName),
+    );
   }
 
   private withPnl<T extends { revenue: Prisma.Decimal }>(
