@@ -132,6 +132,14 @@ function moneyWithWords(value: Prisma.Decimal): string {
   return words ? `${words} (${digits})` : digits;
 }
 
+/** Strips the "/=" suffix - for the one spot (Clause 1's daily amount, in
+ *  both languages) where the source's own "TZS" immediately follows and
+ *  "/= TZS" together would be redundant (Stage F3a Part 5b). Every other
+ *  amount in the document keeps "/=". */
+function withoutShillingSuffix(formatted: string): string {
+  return formatted.replace('/=', '');
+}
+
 /** "tarehe {day} mwezi {month} {year}" - the long form used for the
  *  agreement date and the contract term's start/end dates. Null-safe. */
 function longDateSw(date: Date | null): string {
@@ -341,8 +349,8 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   // declared value in the recital above is a SEPARATE figure and is never
   // reconciled against this one.
   {
-    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${moneyWithWords(ctx.plan.dailyAmount)} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(instalments)} mfululizo.`;
-    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${money(ctx.plan.dailyAmount)} TZS every day after the date of this agreement, for ${instalments} consecutive days.`;
+    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${withoutShillingSuffix(moneyWithWords(ctx.plan.dailyAmount))} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(instalments)} mfululizo.`;
+    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${withoutShillingSuffix(money(ctx.plan.dailyAmount))} TZS every day after the date of this agreement, for ${instalments} consecutive days.`;
     const paymentSw = `Malipo yote yatafanyika ${destination.sw}`;
     const paymentEn = `All payments shall be made ${destination.en}`;
 

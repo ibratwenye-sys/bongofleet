@@ -219,12 +219,24 @@ describe('buildContractContent / contractTextPairs', () => {
 
     // Declared value (recital): 1,800,000.
     expect(text).toContain('milioni moja na laki nane (1,800,000/=)');
-    // Daily amount (clause 1): 12,000.
-    expect(text).toContain('elfu kumi na mbili (12,000/=)');
     // Late fee (clause 2): 2,000.
     expect(text).toContain('elfu mbili (2,000/=)');
+    // Daily amount reappears with "/=" in the Part 4 total sentence (see
+    // below) - clause 1's own mention of it is the one exception, next test.
+    expect(text).toContain('elfu kumi na mbili (12,000/=)');
     // English lines never spell out words - digits and "/=" only.
     expect(text).toContain('Tanzanian shillings 1,800,000/=');
+  });
+
+  it('drops "/=" only where "TZS" already marks the currency (Clause 1\'s daily amount), keeping it everywhere else (Stage F3a Part 5b)', () => {
+    const text = allText(fullContext());
+
+    expect(text).toContain('shilingi elfu kumi na mbili (12,000) TZS kila siku');
+    expect(text).toContain('proceeds of shillings 12,000 TZS every day');
+    expect(text).not.toContain('12,000/= TZS');
+    // The same daily amount still carries "/=" in the Part 4 total sentence.
+    expect(text).toContain('kwa shilingi elfu kumi na mbili (12,000/=) kila siku');
+    expect(text).toContain('at 12,000/= each day');
   });
 
   describe('Part 4 - total repayment sentence', () => {

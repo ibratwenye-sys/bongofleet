@@ -45,6 +45,18 @@ describe('toSwahiliWords - fallback (mandatory per Stage F3 Part 3)', () => {
   });
 });
 
+describe('toSwahiliWords - all four groups plus a non-zero sub-1000 remainder (Stage F3a Part 5c)', () => {
+  // 1,654,230 - a real possibility (12,345/day x 134 days lands nearby) that
+  // the golden table never exercised: milioni, laki, elfu AND remainder all
+  // non-zero at once. Documented here, not silently special-cased - see the
+  // Stage F3a report for the open question this raises.
+  it('renders with three "na"s, applying rule (b) once between groups and rule (a) twice within compound counts', () => {
+    expect(toSwahiliWords(1_654_230)).toBe(
+      'milioni moja laki sita elfu hamsini na nne na mia mbili na thelathini',
+    );
+  });
+});
+
 describe('numberWithWords', () => {
   it('renders "{words} ({digits})" when words are available', () => {
     expect(numberWithWords(134)).toBe('mia moja thelathini na nne (134)');
