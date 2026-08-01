@@ -2,6 +2,7 @@ import { Prisma, PaymentAccountKind } from '@prisma/client';
 import {
   buildContractContent,
   contractTextPairs,
+  ordinal,
   renderContractPdf,
   ContractContext,
 } from './ownership-plan-contract.pdf';
@@ -78,8 +79,8 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).toContain('Dar es Salaam');
     expect(text).toContain('MH1JF5011KK012345');
     expect(text).toContain('Nyekundu');
-    expect(text).toContain('2000.00');
-    expect(text).toContain('siku 5 mfululizo');
+    expect(text).toContain('2,000/=');
+    expect(text).toContain('siku tano (5) mfululizo');
     expect(text).toContain('0000000000');
     expect(text).toContain('000000');
   });
@@ -93,8 +94,8 @@ describe('buildContractContent / contractTextPairs', () => {
 
     expect(firstPrint).toContain('tarehe 1 mwezi Machi 2026'); // plan.agreementDate, unchanged
     expect(laterReprint).toContain('tarehe 1 mwezi Machi 2026'); // still the same, on reprint
-    expect(firstPrint).toContain('Imechapishwa 2026-03-05');
-    expect(laterReprint).toContain('Imechapishwa 2026-06-01');
+    expect(firstPrint).toContain('Imechapishwa 5 Machi 2026');
+    expect(laterReprint).toContain('Imechapishwa 1 Juni 2026');
   });
 
   it('renders "Haijajazwa / Not on file" for null fields, never "undefined", "null", or "NaN"', () => {
@@ -128,6 +129,13 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).not.toMatch(/\bNaN\b/);
   });
 
+  it('renders "Haijajazwa / Not on file" for a null contractEndDate in the Swahili term line, not an ISO date', () => {
+    const text = allText(fullContext({ plan: { ...fullContext().plan, contractEndDate: null } }));
+
+    expect(text).toContain('na utaisha Haijajazwa / Not on file');
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/); // no ISO dates anywhere
+  });
+
   it('renders "Haijajazwa / Not on file" for the guarantor block when the driver has no guarantor at all, rather than omitting it', () => {
     const text = allText(fullContext({ guarantor: null }));
 
@@ -147,14 +155,20 @@ describe('buildContractContent / contractTextPairs', () => {
 
     expect(withoutFine).not.toContain('atalazimika kulipa faini');
     expect(withFine).toContain('atalazimika kulipa faini');
-    expect(withoutFine).toContain('kutofanya malipo kwa siku 5 mfululizo');
+    expect(withoutFine).toContain('kutofanya malipo kwa siku tano (5) mfululizo');
   });
 
-  it('renders the source-given fallback when the tenant has no payment account configured', () => {
-    const text = allText(fullContext({ paymentAccounts: [] }));
+  it('renders the source-given fallback as two sentences when the tenant has no payment account configured, and leaves the populated path unchanged', () => {
+    const empty = allText(fullContext({ paymentAccounts: [] }));
+    const populated = allText(fullContext());
 
-    expect(text).toContain('Hakuna akaunti ya malipo iliyowekwa');
-    expect(text).toContain('No payment account configured');
+    expect(empty).toContain(
+      'Malipo yote yatafanyika kila siku. Hakuna akaunti ya malipo iliyowekwa.',
+    );
+    expect(empty).toContain('All payments shall be made daily. No payment account configured.');
+    expect(populated).toContain(
+      'Malipo yote yatafanyika kila siku kupitia nambari ya akaunti ya NMB 0000000000 Acme Fleet Ltd au Lipa namba 000000 (Azam Pesa).',
+    );
   });
 
   it('joins more than one active payment account with "au"/"or"', () => {
@@ -191,27 +205,82 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).not.toMatch(/MMLIKI\b/);
     expect(text).toContain('hayuko hewani ambayo');
     expect(text).not.toContain('hewaniambayo');
-    // "Mia nne ishirini na tano" only appears if spelling out numbers in
-    // words, which this renderer deliberately does not do (see below) - so
-    // neither the typo'd nor corrected form appears at all.
-    expect(text).not.toContain('Mianne');
   });
 
-  it('renders the instalment count as digits only, not spelled out in Swahili words', () => {
-    // The source spells "425" as "Mia nne ishirini na tano (425)" as well.
-    // Generating arbitrary Swahili number words reliably is not attempted
-    // here (see the comment in buildContractContent) - digits only, flagged
-    // in the Stage F2 report per the source's own explicit fallback.
+  it('spells the instalment count in Swahili words beside the digits (Stage F3 Part 3)', () => {
     // totalOwed = 1,800,000 - 200,000 = 1,600,000; ceil(1,600,000 / 12,000) = 134.
-    // Not a generic "no Swahili word contains these letters" check - ordinary
-    // vocabulary elsewhere in the document (e.g. "kusimamia") legitimately
-    // contains "mia" as a substring, so this checks specifically for the
-    // source's own spelled-number pattern: a number word followed by the
-    // digit in parentheses, which this renderer never produces.
     const text = allText(fullContext());
 
-    expect(text).toContain('kwa siku 134 mfululizo');
-    expect(text).not.toContain('(134)');
+    expect(text).toContain('kwa siku mia moja thelathini na nne (134) mfululizo');
+  });
+
+  it('formats every shilling amount as Tanzanian "/=" notation with Swahili words beside it', () => {
+    const text = allText(fullContext());
+
+    // Declared value (recital): 1,800,000.
+    expect(text).toContain('milioni moja na laki nane (1,800,000/=)');
+    // Daily amount (clause 1): 12,000.
+    expect(text).toContain('elfu kumi na mbili (12,000/=)');
+    // Late fee (clause 2): 2,000.
+    expect(text).toContain('elfu mbili (2,000/=)');
+    // English lines never spell out words - digits and "/=" only.
+    expect(text).toContain('Tanzanian shillings 1,800,000/=');
+  });
+
+  describe('Part 4 - total repayment sentence', () => {
+    it('states the total as dailyAmount x instalmentCount, computed fresh, with its own working shown', () => {
+      // dailyAmount 12,000 x instalments 134 = 1,608,000.
+      const text = allText(fullContext());
+
+      expect(text).toContain(
+        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja laki sita na elfu nane (1,608,000/=), yaani siku mia moja thelathini na nne (134) kwa shilingi elfu kumi na mbili (12,000/=) kila siku.',
+      );
+      expect(text).toContain(
+        'The total of all remittances is Tanzanian shillings 1,608,000/=, being 134 days at 12,000/= each day.',
+      );
+    });
+
+    it('drops the sentence entirely when instalmentCount is unavailable, rather than printing a partial or zero total', () => {
+      // downPayment === totalPrice => totalOwed = 0 => instalments = 0 (unavailable).
+      const ctx = fullContext({
+        plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(1_800_000) },
+      });
+      const text = allText(ctx);
+
+      expect(text).not.toContain('Jumla ya marejesho yote');
+      expect(text).not.toContain('The total of all remittances');
+    });
+  });
+});
+
+describe('ordinal (Stage F3 Part 7)', () => {
+  it.each<[number, string]>([
+    [1, '1st'],
+    [2, '2nd'],
+    [3, '3rd'],
+    [4, '4th'],
+    [11, '11th'],
+    [12, '12th'],
+    [13, '13th'],
+    [21, '21st'],
+    [22, '22nd'],
+    [23, '23rd'],
+    [24, '24th'],
+    [111, '111th'],
+    [112, '112th'],
+    [113, '113th'],
+    [121, '121st'],
+  ])('%i -> %s', (n, expected) => {
+    expect(ordinal(n)).toBe(expected);
+  });
+
+  it('is applied to the top agreement-date line in English, not the term dates or footer', () => {
+    const text = allText(fullContext());
+
+    expect(text).toContain('This agreement was made today, the 1st day of March 2026');
+    // The term-dates and footer lines use the short "N Month Year" form, no ordinal.
+    expect(text).toContain('shall officially begin on 3 March 2026');
+    expect(text).toContain('Printed 1 August 2026');
   });
 });
 

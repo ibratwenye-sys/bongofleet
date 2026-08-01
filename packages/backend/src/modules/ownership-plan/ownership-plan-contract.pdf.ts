@@ -5,6 +5,8 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
 import { Prisma, PaymentAccountKind } from '@prisma/client';
+import { formatShillings } from '@bongofleet/shared-lib';
+import { numberWithWords, toSwahiliWords } from './swahili-numbers';
 
 const NOT_ON_FILE = 'Haijajazwa / Not on file';
 
@@ -94,38 +96,87 @@ export interface ContractContext {
  * translation beneath, transcribed from Ibrahim's real Cafrika contract (see
  * CONTRACT_SOURCE_SWAHILI.md, Stage F2 Part A). This is the ONLY thing that
  * produces text in the document: renderContractPdf below does nothing but
- * lay these items out with pdfkit, and CONTRACT_SWAHILI_STRINGS.txt (Part
- * 0b) and the unit tests (Part 4) both read this exact list rather than a
- * second hand-maintained copy. No clause, heading, label, or signature line
- * may call doc.text() with its own literal string outside this function -
- * if something isn't expressible as a 'text' or 'space' item, it belongs as
- * a new item kind here (see `indent`, added for Clause 8's sub-points), not
- * as an escape hatch in the renderer.
+ * lay these items out with pdfkit, and CONTRACT_SWAHILI_STRINGS.txt and the
+ * unit tests both read this exact list rather than a second hand-maintained
+ * copy. No clause, heading, label, or signature line may call doc.text()
+ * with its own literal string outside this function - if something isn't
+ * expressible as an existing item kind, it belongs as a new kind here (see
+ * `indent`, added for Clause 8's sub-points, and `group`, added in Stage F3
+ * Part 6 for signature/witness blocks that must not split across a page),
+ * not as an escape hatch in the renderer.
  */
 export type ContractItem =
   | { kind: 'text'; style: 'title' | 'heading' | 'body'; sw: string; en: string; indent?: boolean }
-  | { kind: 'space'; size?: number };
+  | { kind: 'space'; size?: number }
+  | { kind: 'group'; items: ContractItem[] };
 
 function notOnFile(value: string | null | undefined): string {
   return value && value.trim() !== '' ? value : NOT_ON_FILE;
 }
 
+/** Digits only, Tanzanian "/=" notation - see formatShillings in shared-lib. */
 function money(value: Prisma.Decimal): string {
-  return value.toFixed(2);
+  return formatShillings(value.toFixed(2));
 }
 
-function isoDate(date: Date | null): string {
-  return date ? date.toISOString().slice(0, 10) : NOT_ON_FILE;
+/** "{Swahili number words} ({digits/=})" - falls back to digits only when
+ *  the amount has cents or the words can't be generated (see
+ *  swahili-numbers.ts's own fallback rules). Never used for anything but
+ *  whole-shilling amounts printed in the contract body. */
+function moneyWithWords(value: Prisma.Decimal): string {
+  const digits = money(value);
+  if (!value.isInteger()) {
+    return digits;
+  }
+  const words = toSwahiliWords(value.toNumber());
+  return words ? `${words} (${digits})` : digits;
 }
 
-/** "leo tarehe {day} mwezi {month} {year}" - the source's date-of-agreement
- *  line spells day/month/year out separately rather than as one ISO string,
- *  so this is its own formatter, used nowhere else in the document. */
-function agreementDayPhraseSw(date: Date): string {
+/** "tarehe {day} mwezi {month} {year}" - the long form used for the
+ *  agreement date and the contract term's start/end dates. Null-safe. */
+function longDateSw(date: Date | null): string {
+  if (!date) return NOT_ON_FILE;
   return `tarehe ${date.getUTCDate()} mwezi ${MONTH_LABELS_SW[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
-function agreementDayPhraseEn(date: Date): string {
-  return `the ${date.getUTCDate()} day of ${MONTH_LABELS_EN[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+
+/** "{day} {Month} {year}" - the short form used for the term dates'
+ *  English rendering and the printed/footer timestamp in both languages.
+ *  Distinct from longDateSw/the ordinal form below because the source
+ *  genuinely uses three different date shapes in three different places -
+ *  see Stage F3 Part 2. Null-safe. */
+function shortDateSw(date: Date | null): string {
+  if (!date) return NOT_ON_FILE;
+  return `${date.getUTCDate()} ${MONTH_LABELS_SW[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+function shortDateEn(date: Date | null): string {
+  if (!date) return NOT_ON_FILE;
+  return `${date.getUTCDate()} ${MONTH_LABELS_EN[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/** Standard English ordinal suffix: 1st, 2nd, 3rd, 4th ... 11th/12th/13th
+ *  (the -teen exceptions), 21st, 22nd, 23rd, 24th, etc. */
+export function ordinal(n: number): string {
+  const remainder100 = n % 100;
+  if (remainder100 >= 11 && remainder100 <= 13) {
+    return `${n}th`;
+  }
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** "the {N}{st/nd/rd/th} day of {Month} {year}" - the top agreement-date
+ *  line's English form only. Always called with a real date -
+ *  OwnershipPlan.createdAt is never null. */
+function longDateEnOrdinal(date: Date): string {
+  return `the ${ordinal(date.getUTCDate())} day of ${MONTH_LABELS_EN[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function paymentAccountLine(account: ContractContext['paymentAccounts'][number]): {
@@ -151,15 +202,24 @@ function paymentAccountLine(account: ContractContext['paymentAccounts'][number])
   }
 }
 
-/** Multiple active accounts join with "au" ("or"), matching how the source
- *  names a single specific destination rather than a generic channel word -
- *  see the note on {{paymentChannelPhrase}} in buildContractContent below. */
+/**
+ * Multiple active accounts join with "au" ("or"), matching how the source
+ * names a single specific destination rather than a generic channel word -
+ * see the note on {{paymentChannelPhrase}} in buildContractContent below.
+ * The caller always prefixes this with "Malipo yote yatafanyika " / "All
+ * payments shall be made ", so the zero-accounts branch below is careful to
+ * still read as two complete sentences once that prefix is applied (Stage
+ * F3 Part 5) rather than running the verb straight into the fallback notice.
+ */
 function paymentDestinationPhrase(accounts: ContractContext['paymentAccounts']): {
   sw: string;
   en: string;
 } {
   if (accounts.length === 0) {
-    return { sw: 'Hakuna akaunti ya malipo iliyowekwa.', en: 'No payment account configured.' };
+    return {
+      sw: 'kila siku. Hakuna akaunti ya malipo iliyowekwa.',
+      en: 'daily. No payment account configured.',
+    };
   }
   const lines = accounts.map(paymentAccountLine);
   return {
@@ -181,6 +241,13 @@ function space(size?: number): ContractItem {
   return { kind: 'space', size };
 }
 
+/** An atomic unit for pagination purposes (Stage F3 Part 6) - the renderer
+ *  measures a group's total height before drawing it and starts a new page
+ *  first if it would otherwise be split. */
+function group(items: ContractItem[]): ContractItem {
+  return { kind: 'group', items };
+}
+
 /**
  * The full MKATABA WA MAKABIDHIANO YA PIKIPIKI content, transcribed clause by
  * clause from CONTRACT_SOURCE_SWAHILI.md (Ibrahim's real Cafrika contract).
@@ -197,6 +264,7 @@ function space(size?: number): ContractItem {
 export function buildContractContent(ctx: ContractContext): ContractItem[] {
   const totalOwed = ctx.plan.totalPrice.minus(ctx.plan.downPayment);
   const instalments = totalOwed.dividedBy(ctx.plan.dailyAmount).ceil().toNumber();
+  const hasValidInstalments = Number.isFinite(instalments) && instalments > 0;
   const destination = paymentDestinationPhrase(ctx.paymentAccounts);
 
   const items: ContractItem[] = [];
@@ -209,8 +277,8 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   items.push(
     text(
       'body',
-      `Makubaliano haya yameafikiwa leo ${agreementDayPhraseSw(ctx.plan.agreementDate)}`,
-      `This agreement was made today, ${agreementDayPhraseEn(ctx.plan.agreementDate)}`,
+      `Makubaliano haya yameafikiwa leo ${longDateSw(ctx.plan.agreementDate)}`,
+      `This agreement was made today, ${longDateEnOrdinal(ctx.plan.agreementDate)}`,
     ),
   );
   items.push(space());
@@ -238,7 +306,7 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   items.push(
     text(
       'body',
-      `KWA KUWA MMILIKI ni Mmiliki halali wa ${notOnFile(ctx.vehicle.make)} iliyosajiliwa kwa namba ${ctx.vehicle.registrationNumber} yenye chasisi namba ${notOnFile(ctx.vehicle.chassisNumber)} aina ya ${notOnFile(ctx.vehicle.model)} yenye rangi ya ${notOnFile(ctx.vehicle.colour)} yenye thamani ya shilingi za kitanzania ${money(ctx.plan.totalPrice)}`,
+      `KWA KUWA MMILIKI ni Mmiliki halali wa ${notOnFile(ctx.vehicle.make)} iliyosajiliwa kwa namba ${ctx.vehicle.registrationNumber} yenye chasisi namba ${notOnFile(ctx.vehicle.chassisNumber)} aina ya ${notOnFile(ctx.vehicle.model)} yenye rangi ya ${notOnFile(ctx.vehicle.colour)} yenye thamani ya shilingi za kitanzania ${moneyWithWords(ctx.plan.totalPrice)}`,
       `WHEREAS THE OWNER is the lawful Owner of a ${notOnFile(ctx.vehicle.make)} registered under number ${ctx.vehicle.registrationNumber}, with chassis number ${notOnFile(ctx.vehicle.chassisNumber)}, model ${notOnFile(ctx.vehicle.model)}, colour ${notOnFile(ctx.vehicle.colour)}, with a value of Tanzanian shillings ${money(ctx.plan.totalPrice)}`,
     ),
   );
@@ -251,12 +319,14 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   );
   items.push(space());
 
-  // Start date and end date.
+  // Start date and end date - long Swahili form (reused from the top line),
+  // short English form (matching the footer's shape, not the ordinal
+  // "day of" form used only for the top line).
   items.push(
     text(
       'body',
-      `MKATABA huu utaanza rasmi tarehe ${isoDate(ctx.plan.startDate)} na utaisha tarehe ${isoDate(ctx.plan.contractEndDate)}`,
-      `This AGREEMENT shall officially begin on ${isoDate(ctx.plan.startDate)} and shall end on ${isoDate(ctx.plan.contractEndDate)}`,
+      `MKATABA huu utaanza rasmi ${longDateSw(ctx.plan.startDate)} na utaisha ${longDateSw(ctx.plan.contractEndDate)}`,
+      `This AGREEMENT shall officially begin on ${shortDateEn(ctx.plan.startDate)} and shall end on ${shortDateEn(ctx.plan.contractEndDate)}`,
     ),
   );
   items.push(space());
@@ -264,30 +334,45 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   items.push(text('heading', 'MASHARTI YA MKATABA', 'TERMS OF THE AGREEMENT'));
   items.push(space());
 
-  // 1. The daily obligation. The source spells the instalment count out in
-  // Swahili words as well as digits ("Mia nne ishirini na tano (425)") -
-  // guarding against a digit being altered is standard contract practice
-  // here, and should be reproduced. Generating arbitrary Swahili number
-  // words reliably is not something this code attempts (the grammar rules
-  // for compound hundreds/tens/units are involved enough that a wrong word
-  // is a real risk, not a hypothetical one) - so this renders digits only,
-  // flagged here and in the Stage F2 report, per the source's own explicit
-  // fallback instruction.
-  items.push(
-    text(
-      'body',
-      `1. Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${money(ctx.plan.dailyAmount)} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${instalments} mfululizo. Malipo yote yatafanyika ${destination.sw}`,
-      `1. The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${money(ctx.plan.dailyAmount)} TZS every day after the date of this agreement, for ${instalments} consecutive days. All payments shall be made ${destination.en}`,
-    ),
-  );
+  // 1. The daily obligation, the payment destination, and (Stage F3 Part 4)
+  // the total the driver will actually pay - computed as dailyAmount x
+  // instalmentCount and never typed or read from another field, so an
+  // owner sees their own term's arithmetic before anyone signs. The
+  // declared value in the recital above is a SEPARATE figure and is never
+  // reconciled against this one.
+  {
+    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${moneyWithWords(ctx.plan.dailyAmount)} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(instalments)} mfululizo.`;
+    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${money(ctx.plan.dailyAmount)} TZS every day after the date of this agreement, for ${instalments} consecutive days.`;
+    const paymentSw = `Malipo yote yatafanyika ${destination.sw}`;
+    const paymentEn = `All payments shall be made ${destination.en}`;
+
+    const total = ctx.plan.dailyAmount.times(instalments);
+    const totalSw = hasValidInstalments
+      ? `Jumla ya marejesho yote ni shilingi za kitanzania ${moneyWithWords(total)}, yaani siku ${numberWithWords(instalments)} kwa shilingi ${moneyWithWords(ctx.plan.dailyAmount)} kila siku.`
+      : null;
+    const totalEn = hasValidInstalments
+      ? `The total of all remittances is Tanzanian shillings ${money(total)}, being ${instalments} days at ${money(ctx.plan.dailyAmount)} each day.`
+      : null;
+
+    items.push(
+      text(
+        'body',
+        ['1. ' + obligationSw, paymentSw, totalSw]
+          .filter((part): part is string => Boolean(part))
+          .join(' '),
+        ['1. ' + obligationEn, paymentEn, totalEn]
+          .filter((part): part is string => Boolean(part))
+          .join(' '),
+      ),
+    );
+  }
   items.push(space());
 
-  // 2. The fine and the breach threshold. Same digits-only reasoning as
-  // Clause 1 above for breachAfterConsecutiveMissedDays.
+  // 2. The fine and the breach threshold.
   {
     const fineSw =
       ctx.plan.lateFeeAmount !== null
-        ? ` basi atalazimika kulipa faini ya Tsh ${money(ctx.plan.lateFeeAmount)} ili kuendelea na mkataba,`
+        ? ` basi atalazimika kulipa faini ya Tsh ${moneyWithWords(ctx.plan.lateFeeAmount)} ili kuendelea na mkataba,`
         : '';
     const fineEn =
       ctx.plan.lateFeeAmount !== null
@@ -296,7 +381,7 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
     items.push(
       text(
         'body',
-        `2. Marejesho ya kila siku ni LAZIMA kinyume na hapo dereva kama hajatoa taarifa juu ya sababu ya kutofanya hivo kwa msimamizi wake,${fineSw} lakini pia, kutofanya malipo kwa siku ${ctx.plan.breachAfterConsecutiveMissedDays} mfululizo dereva atakuwa amevunja mkataba wetu na chombo kitachukuliwa na mmiliki.`,
+        `2. Marejesho ya kila siku ni LAZIMA kinyume na hapo dereva kama hajatoa taarifa juu ya sababu ya kutofanya hivo kwa msimamizi wake,${fineSw} lakini pia, kutofanya malipo kwa siku ${numberWithWords(ctx.plan.breachAfterConsecutiveMissedDays)} mfululizo dereva atakuwa amevunja mkataba wetu na chombo kitachukuliwa na mmiliki.`,
         `2. The daily remittance is MANDATORY; if the Driver has not given their supervisor the reason for failing to do so,${fineEn} but also, failing to pay for ${ctx.plan.breachAfterConsecutiveMissedDays} consecutive days shall mean the Driver has breached our agreement and the vehicle will be taken by the Owner.`,
       ),
     );
@@ -422,121 +507,108 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   // Signature blocks - the driver's, then the owner's, each with its own
   // witness block ("MBELE YANGU"). The date blanks here are signed by hand
   // and are left as literal blanks, not filled from renderedAt/agreementDate.
+  // Each IMEWEKWA SAHIHI block and each MBELE YANGU witness block is wrapped
+  // in `group()` (Stage F3 Part 6) so the renderer keeps it on one page
+  // rather than splitting it across a page break.
   items.push(
-    text(
-      'body',
-      `IMEWEKWA SAHIHI na KUTOLEWA hapa ${notOnFile(ctx.tenant.physicalAddress)} na ${ctx.driver.fullName}, ambaye ninamfahamu leo tarehe ____ mwezi ____________ 202__.`,
-      `SIGNED and DELIVERED here at ${notOnFile(ctx.tenant.physicalAddress)} by ${ctx.driver.fullName}, whom I know, today the ____ day of ____________ 202__.`,
-    ),
+    group([
+      text(
+        'body',
+        `IMEWEKWA SAHIHI na KUTOLEWA hapa ${notOnFile(ctx.tenant.physicalAddress)} na ${ctx.driver.fullName}, ambaye ninamfahamu leo tarehe ____ mwezi ____________ 202__.`,
+        `SIGNED and DELIVERED here at ${notOnFile(ctx.tenant.physicalAddress)} by ${ctx.driver.fullName}, whom I know, today the ____ day of ____________ 202__.`,
+      ),
+      text('body', 'Sahihi ya Dereva: ________________', "Driver's Signature: ________________"),
+    ]),
   );
+  items.push(space());
   items.push(
-    text('body', 'Sahihi ya Dereva: ________________', "Driver's Signature: ________________"),
-  );
-  items.push(text('body', 'MBELE YANGU:', 'BEFORE ME:'));
-  items.push(
-    text(
-      'body',
-      'Jina: ..................................................',
-      'Name: ..................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Sahihi: ................................................',
-      'Signature: ................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Anuani: ................................................',
-      'Address: ................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Wadhifa: ...............................................',
-      'Position: ...............................................',
-    ),
+    group([
+      text('body', 'MBELE YANGU:', 'BEFORE ME:'),
+      text(
+        'body',
+        'Jina: ..................................................',
+        'Name: ..................................................',
+      ),
+      text(
+        'body',
+        'Sahihi: ................................................',
+        'Signature: ................................................',
+      ),
+      text(
+        'body',
+        'Anuani: ................................................',
+        'Address: ................................................',
+      ),
+      text(
+        'body',
+        'Wadhifa: ...............................................',
+        'Position: ...............................................',
+      ),
+    ]),
   );
   items.push(space());
 
-  items.push(text('body', `IMEWEKWA SAHIHI na ${ctx.tenant.name}`, `SIGNED by ${ctx.tenant.name}`));
   items.push(
-    text(
-      'body',
-      'Mbele ya Maafisa wake walioruhusiwa kushuhudia',
-      'Before its duly authorised Officers as witnesses',
-    ),
+    group([
+      text('body', `IMEWEKWA SAHIHI na ${ctx.tenant.name}`, `SIGNED by ${ctx.tenant.name}`),
+      text(
+        'body',
+        'Mbele ya Maafisa wake walioruhusiwa kushuhudia',
+        'Before its duly authorised Officers as witnesses',
+      ),
+      text(
+        'body',
+        'Leo tarehe ____ mwezi ____________ 202__',
+        'Today the ____ day of ____________ 202__',
+      ),
+      text('body', 'Sahihi ya Mmiliki: ________________', "Owner's Signature: ________________"),
+      text(
+        'body',
+        `Jina: ${notOnFile(ctx.tenant.directorName)}`,
+        `Name: ${notOnFile(ctx.tenant.directorName)}`,
+      ),
+      text(
+        'body',
+        'Sahihi: ................................................',
+        'Signature: ................................................',
+      ),
+      text(
+        'body',
+        `Anuani: ${notOnFile(ctx.tenant.physicalAddress)}`,
+        `Address: ${notOnFile(ctx.tenant.physicalAddress)}`,
+      ),
+      text(
+        'body',
+        `Wadhifa: MKURUGENZI WA ${ctx.tenant.name}`,
+        `Position: DIRECTOR OF ${ctx.tenant.name}`,
+      ),
+    ]),
   );
+  items.push(space());
   items.push(
-    text(
-      'body',
-      'Leo tarehe ____ mwezi ____________ 202__',
-      'Today the ____ day of ____________ 202__',
-    ),
-  );
-  items.push(
-    text('body', 'Sahihi ya Mmiliki: ________________', "Owner's Signature: ________________"),
-  );
-  items.push(
-    text(
-      'body',
-      `Jina: ${notOnFile(ctx.tenant.directorName)}`,
-      `Name: ${notOnFile(ctx.tenant.directorName)}`,
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Sahihi: ................................................',
-      'Signature: ................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      `Anuani: ${notOnFile(ctx.tenant.physicalAddress)}`,
-      `Address: ${notOnFile(ctx.tenant.physicalAddress)}`,
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      `Wadhifa: MKURUGENZI WA ${ctx.tenant.name}`,
-      `Position: DIRECTOR OF ${ctx.tenant.name}`,
-    ),
-  );
-  items.push(text('body', 'MBELE YANGU', 'BEFORE ME'));
-  items.push(
-    text(
-      'body',
-      'Jina: ..................................................',
-      'Name: ..................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Sahihi: ................................................',
-      'Signature: ................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Anuani: ................................................',
-      'Address: ................................................',
-    ),
-  );
-  items.push(
-    text(
-      'body',
-      'Wadhifa: ...............................................',
-      'Position: ...............................................',
-    ),
+    group([
+      text('body', 'MBELE YANGU', 'BEFORE ME'),
+      text(
+        'body',
+        'Jina: ..................................................',
+        'Name: ..................................................',
+      ),
+      text(
+        'body',
+        'Sahihi: ................................................',
+        'Signature: ................................................',
+      ),
+      text(
+        'body',
+        'Anuani: ................................................',
+        'Address: ................................................',
+      ),
+      text(
+        'body',
+        'Wadhifa: ...............................................',
+        'Position: ...............................................',
+      ),
+    ]),
   );
 
   // The render timestamp - a distinct fact from plan.agreementDate above, on
@@ -544,19 +616,33 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   // merge. This is what makes a reprint identifiable as a reprint.
   items.push(space());
   items.push(
-    text('body', `Imechapishwa ${isoDate(ctx.renderedAt)}`, `Printed ${isoDate(ctx.renderedAt)}`),
+    text(
+      'body',
+      `Imechapishwa ${shortDateSw(ctx.renderedAt)}`,
+      `Printed ${shortDateEn(ctx.renderedAt)}`,
+    ),
   );
 
   return items;
 }
 
-/** Every {sw, en} pair the contract renderer emits, in render order - the
- *  single source for CONTRACT_SWAHILI_STRINGS.txt (Stage F2 Part 0b) and for
- *  content-bearing assertions in tests. */
+/** Every {sw, en} pair the contract renderer emits, in render order,
+ *  recursing into `group` items - the single source for
+ *  CONTRACT_SWAHILI_STRINGS.txt and for content-bearing assertions in
+ *  tests. */
 export function contractTextPairs(ctx: ContractContext): Array<{ sw: string; en: string }> {
-  return buildContractContent(ctx)
-    .filter((item): item is Extract<ContractItem, { kind: 'text' }> => item.kind === 'text')
-    .map(({ sw, en }) => ({ sw, en }));
+  const pairs: Array<{ sw: string; en: string }> = [];
+  const visit = (contractItems: ContractItem[]): void => {
+    for (const item of contractItems) {
+      if (item.kind === 'text') {
+        pairs.push({ sw: item.sw, en: item.en });
+      } else if (item.kind === 'group') {
+        visit(item.items);
+      }
+    }
+  };
+  visit(buildContractContent(ctx));
+  return pairs;
 }
 
 const FONT_SIZE: Record<'title' | 'heading' | 'body', number> = {
@@ -567,6 +653,69 @@ const FONT_SIZE: Record<'title' | 'heading' | 'body', number> = {
 
 const INDENT_WIDTH = 24;
 
+/** Renders one 'text' or 'space' item - never a 'group' (the caller expands
+ *  those). Shared between the top-level render loop and group rendering so
+ *  there is exactly one place that turns an item into pdfkit calls. */
+function renderLeafItem(
+  doc: PDFKit.PDFDocument,
+  item: Extract<ContractItem, { kind: 'text' | 'space' }>,
+): void {
+  if (item.kind === 'space') {
+    doc.moveDown(item.size ?? 1);
+    return;
+  }
+
+  const align = item.style === 'title' ? 'center' : 'left';
+  const indent = item.indent ? INDENT_WIDTH : 0;
+  doc
+    .font('Helvetica')
+    .fontSize(FONT_SIZE[item.style])
+    .text(item.sw, { align, underline: item.style === 'heading', indent });
+
+  if (item.style !== 'title') {
+    doc.font('Helvetica-Oblique').fontSize(9).text(item.en, { align, indent });
+    doc.font('Helvetica');
+  }
+}
+
+/** The vertical space a leaf item would take, without drawing it - used to
+ *  decide whether a `group` fits on the remaining page (Stage F3 Part 6).
+ *  Mutates and restores the doc's font/size like renderLeafItem does, since
+ *  heightOfString depends on the current font. */
+function measureLeafHeight(
+  doc: PDFKit.PDFDocument,
+  item: Extract<ContractItem, { kind: 'text' | 'space' }>,
+): number {
+  if (item.kind === 'space') {
+    return doc.currentLineHeight() * (item.size ?? 1);
+  }
+
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const align = item.style === 'title' ? 'center' : 'left';
+  const indent = item.indent ? INDENT_WIDTH : 0;
+
+  doc.font('Helvetica').fontSize(FONT_SIZE[item.style]);
+  let height = doc.heightOfString(item.sw, { width, align, indent });
+
+  if (item.style !== 'title') {
+    doc.font('Helvetica-Oblique').fontSize(9);
+    height += doc.heightOfString(item.en, { width, align, indent });
+    doc.font('Helvetica');
+  }
+
+  return height;
+}
+
+function measureGroupHeight(doc: PDFKit.PDFDocument, groupItems: ContractItem[]): number {
+  return groupItems.reduce((sum, item) => {
+    // Groups do not nest in practice, but sum recursively rather than assume.
+    if (item.kind === 'group') {
+      return sum + measureGroupHeight(doc, item.items);
+    }
+    return sum + measureLeafHeight(doc, item);
+  }, 0);
+}
+
 /**
  * Lays out buildContractContent's items with pdfkit - Swahili line first,
  * English translation beneath it in a smaller italic face. This function
@@ -576,9 +725,15 @@ const INDENT_WIDTH = 24;
  * the standard `indent` text option - it offsets the FIRST line of a
  * paragraph, so a sub-point long enough to wrap would return to the normal
  * margin on its second line. Every sub-point here is short enough in
- * practice not to wrap; this is a layout nicety, not a content guarantee -
- * Ibrahim reviews the rendered PDF by eye for layout, same as the rest of
- * this document.
+ * practice not to wrap; this is a layout nicety, not a content guarantee.
+ *
+ * `group` (Stage F3 Part 6) measures its own total height before drawing
+ * and starts a new page first if it would otherwise be split - a signature
+ * block separated from its own signature is the specific defect this fixes.
+ * Ibrahim reviews the rendered PDF by eye for layout generally; this is the
+ * one layout property that gets an explicit check rather than relying on
+ * that review alone, because a split signature block is a correctness
+ * problem in a dispute, not merely a cosmetic one.
  */
 export function renderContractPdf(ctx: ContractContext): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -589,22 +744,18 @@ export function renderContractPdf(ctx: ContractContext): Promise<Buffer> {
     doc.on('error', reject);
 
     for (const item of buildContractContent(ctx)) {
-      if (item.kind === 'space') {
-        doc.moveDown(item.size ?? 1);
+      if (item.kind === 'group') {
+        const height = measureGroupHeight(doc, item.items);
+        const remaining = doc.page.height - doc.page.margins.bottom - doc.y;
+        if (height > remaining) {
+          doc.addPage();
+        }
+        for (const child of item.items) {
+          renderLeafItem(doc, child as Extract<ContractItem, { kind: 'text' | 'space' }>);
+        }
         continue;
       }
-
-      const align = item.style === 'title' ? 'center' : 'left';
-      const indent = item.indent ? INDENT_WIDTH : 0;
-      doc
-        .font('Helvetica')
-        .fontSize(FONT_SIZE[item.style])
-        .text(item.sw, { align, underline: item.style === 'heading', indent });
-
-      if (item.style !== 'title') {
-        doc.font('Helvetica-Oblique').fontSize(9).text(item.en, { align, indent });
-        doc.font('Helvetica');
-      }
+      renderLeafItem(doc, item);
     }
 
     doc.end();
