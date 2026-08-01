@@ -165,6 +165,27 @@ describe('OwnershipPlan (e2e)', () => {
       .expect(404);
   });
 
+  // These are schema-level column defaults (Stage F2 Part 1), so they can
+  // only be verified against a real database, not the mocked-Prisma unit
+  // suite this repo otherwise uses - the spec listed them as "unit" tests,
+  // but there is no way to observe a Postgres column default without a real
+  // round trip. See Stage F2 report.
+  it('defaults a newly created plan to all seven active weekdays and a breach threshold of 5', async () => {
+    const { accessToken } = await signupOwner(app);
+    const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'DEF1');
+
+    const res = await request(app.getHttpServer())
+      .post('/ownership-plans')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(planBody(driverId, motorcycleId))
+      .expect(201);
+
+    expect([...res.body.activeWeekdays].sort((a: number, b: number) => a - b)).toEqual([
+      0, 1, 2, 3, 4, 5, 6,
+    ]);
+    expect(res.body.breachAfterConsecutiveMissedDays).toBe(5);
+  });
+
   it('rejects a MANAGER creating a plan', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
     const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'C1');
@@ -218,7 +239,7 @@ describe('OwnershipPlan (e2e)', () => {
       await expect(fs.access(absolutePath)).resolves.toBeUndefined();
     });
 
-    it('fetches the contract as OWNER (200, application/pdf), as the driver on the plan (200), rejects a different driver in the same tenant (403), and a user in another tenant (not found)', async () => {
+    it('fetches the contract as OWNER (200, application/pdf), as the driver on the plan (200), rejects a different driver in the same tenant (404, indistinguishable from unknown), and a user in another tenant (not found)', async () => {
       const { accessToken } = await signupOwner(app);
       const { planId, driverEmail } = await createPlan(accessToken, 'E1');
       const { driverEmail: otherDriverEmail } = await createDriverAndVehicle(accessToken, 'E2');
@@ -253,7 +274,7 @@ describe('OwnershipPlan (e2e)', () => {
       await request(app.getHttpServer())
         .get(`/ownership-plans/${planId}/contract`)
         .set('Authorization', `Bearer ${otherDriverLogin.body.accessToken}`)
-        .expect(403);
+        .expect(404);
 
       const { accessToken: otherTenantToken } = await signupOwner(app, {
         email: 'owner2@other-fleet.test',

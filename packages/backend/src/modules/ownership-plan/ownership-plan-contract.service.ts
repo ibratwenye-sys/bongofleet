@@ -7,7 +7,7 @@ import { DocumentOwnerType, DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DocumentService } from '../document/document.service';
-import { renderContractPdf } from './ownership-plan-contract.pdf';
+import { ContractContext, renderContractPdf } from './ownership-plan-contract.pdf';
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
@@ -44,33 +44,88 @@ export class OwnershipPlanContractService {
       throw new NotFoundException('Ownership plan not found');
     }
 
-    const [driver, motorcycle, tenant] = await Promise.all([
+    const [driver, motorcycle, tenant, guarantor, paymentAccounts] = await Promise.all([
       this.prisma.client.driver.findUnique({
         where: { id: plan.driverId },
         include: { user: { select: { firstName: true, lastName: true } } },
       }),
       this.prisma.client.motorcycle.findUnique({ where: { id: plan.motorcycleId } }),
       this.prisma.client.tenant.findUnique({ where: { id: actor.tenantId } }),
+      // "The plan's Guarantor" - a driver may have several, so this is the
+      // most-recently-added active one, matching GuarantorService.list's own
+      // ordering. There is no schema concept of a single "primary" guarantor.
+      // NOTE: this means regenerating a contract after the driver adds a new
+      // guarantor silently changes who the next of kin is on the new PDF -
+      // tolerable only because each generation is its own Document row, so a
+      // signed copy keeps its own next of kin permanently. The real fix is a
+      // `guarantorId` column on OwnershipPlan so the owner picks explicitly
+      // at plan creation; that belongs with the create form in Stage G, not
+      // here.
+      this.prisma.client.guarantor.findFirst({
+        where: { driverId: plan.driverId, isActive: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.client.paymentAccount.findMany({
+        where: { tenantId: actor.tenantId, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
     ]);
     if (!driver || !motorcycle || !tenant) {
       throw new NotFoundException('Driver, vehicle, or tenant for this ownership plan not found');
     }
 
-    const buffer = await renderContractPdf({
-      businessName: tenant.name,
-      driverName: `${driver.user.firstName} ${driver.user.lastName}`,
-      driverNationalId: driver.nationalId,
-      vehicleMakeModel:
-        [motorcycle.make, motorcycle.model].filter(Boolean).join(' ') || 'Not on file',
-      registrationNumber: motorcycle.registrationNumber,
-      totalPrice: plan.totalPrice,
-      downPayment: plan.downPayment,
-      dailyAmount: plan.dailyAmount,
-      activeWeekdays: plan.activeWeekdays,
-      graceDays: plan.graceDays,
-      startDate: plan.startDate,
-      contractEndDate: plan.contractEndDate,
-    });
+    const context: ContractContext = {
+      // Two distinct facts, never merged: the agreement's own date (fixed at
+      // plan creation, unaffected by a later reprint) vs. this render's
+      // timestamp (footer line only). See ownership-plan-contract.pdf.ts.
+      renderedAt: new Date(),
+      tenant: {
+        name: tenant.name,
+        physicalAddress: tenant.physicalAddress,
+        directorName: tenant.directorName,
+      },
+      driver: {
+        fullName: `${driver.user.firstName} ${driver.user.lastName}`,
+        nationalId: driver.nationalId,
+        residenceWard: driver.residenceWard,
+        residenceDistrict: driver.residenceDistrict,
+        residenceRegion: driver.residenceRegion,
+      },
+      vehicle: {
+        registrationNumber: motorcycle.registrationNumber,
+        chassisNumber: motorcycle.chassisNumber,
+        make: motorcycle.make,
+        model: motorcycle.model,
+        colour: motorcycle.colour,
+      },
+      plan: {
+        agreementDate: plan.createdAt,
+        totalPrice: plan.totalPrice,
+        downPayment: plan.downPayment,
+        dailyAmount: plan.dailyAmount,
+        startDate: plan.startDate,
+        contractEndDate: plan.contractEndDate,
+        lateFeeAmount: plan.lateFeeAmount,
+        breachAfterConsecutiveMissedDays: plan.breachAfterConsecutiveMissedDays,
+      },
+      guarantor: guarantor
+        ? {
+            fullName: `${guarantor.firstName} ${guarantor.lastName}`,
+            phone: guarantor.phone,
+            residenceWard: guarantor.residenceWard,
+            residenceDistrict: guarantor.residenceDistrict,
+            residenceRegion: guarantor.residenceRegion,
+          }
+        : null,
+      paymentAccounts: paymentAccounts.map((account) => ({
+        kind: account.kind,
+        provider: account.provider,
+        accountNumber: account.accountNumber,
+        accountName: account.accountName,
+      })),
+    };
+
+    const buffer = await renderContractPdf(context);
 
     // A synthetic "upload" - DocumentService.create() never inspects `stream`
     // (MemoryStorage-only fields are all that matters: buffer/size/mimetype).
@@ -154,11 +209,12 @@ export class OwnershipPlanContractService {
 
   /**
    * OWNER/MANAGER of the tenant, or the driver on this specific plan - no one
-   * else, including other drivers in the same tenant. Deliberately not the
-   * uniform "NotFound to avoid leaking existence" pattern used elsewhere
-   * (e.g. OwnershipPlanService.get): a same-tenant driver who isn't on the
-   * plan gets an explicit Forbidden, while a genuinely cross-tenant request
-   * gets NotFound because the tenant-scoped query above never finds the plan.
+   * else, including other drivers in the same tenant. Same "not found" as an
+   * unknown or cross-tenant id (matches OwnershipPlanService.get) - not a
+   * Forbidden, because the only way a driver reaches another driver's plan
+   * id is by guessing at ids, and a 403 would confirm to exactly that person
+   * that the id is real. Corrected in Stage F2 Part 0a; Stage F shipped this
+   * as a Forbidden, which was wrong.
    */
   private async assertCanRead(plan: { driverId: string }, actor: AuthenticatedUser): Promise<void> {
     if (actor.role === UserRole.OWNER || actor.role === UserRole.MANAGER) {
@@ -172,6 +228,6 @@ export class OwnershipPlanContractService {
         return;
       }
     }
-    throw new ForbiddenException('Not authorized to view this contract');
+    throw new NotFoundException('No contract has been generated or uploaded for this plan yet');
   }
 }

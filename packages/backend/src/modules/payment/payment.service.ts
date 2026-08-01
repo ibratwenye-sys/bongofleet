@@ -103,11 +103,13 @@ export class PaymentService {
       }
     }
 
+    const paymentAccountId = await this.resolvePaymentAccountId(dto.paymentAccountId);
+
     // Plan assignments relax the over-target guard - paying more is the
     // point (§7) - and allocate via the oldest-first cascade instead.
     // Ordinary rental assignments keep today's typo-catching cap.
     if (assignment.ownershipPlanId) {
-      return this.createPlanPayment(assignment, dto, actor);
+      return this.createPlanPayment(assignment, dto, actor, paymentAccountId);
     }
 
     const cap = new Prisma.Decimal(assignment.targetAmount).times(AMOUNT_CAP_MULTIPLIER);
@@ -124,6 +126,7 @@ export class PaymentService {
         driverId: dto.driverId,
         amount: dto.amount,
         paymentMethod: dto.paymentMethod,
+        paymentAccountId,
         status: PaymentStatus.PENDING,
       },
     });
@@ -150,6 +153,7 @@ export class PaymentService {
     assignment: { ownershipPlanId: string | null },
     dto: CreatePaymentDto,
     actor: AuthenticatedUser,
+    paymentAccountId: string | undefined,
   ): Promise<PaymentCreationResult> {
     const planId = assignment.ownershipPlanId as string;
     const plan = await this.prisma.client.ownershipPlan.findUnique({ where: { id: planId } });
@@ -249,6 +253,7 @@ export class PaymentService {
               driverId: dto.driverId,
               amount: allocatedAmount,
               paymentMethod: dto.paymentMethod,
+              paymentAccountId,
               status: PaymentStatus.PENDING,
             },
           }),
@@ -435,5 +440,22 @@ export class PaymentService {
       throw new ForbiddenException('No driver profile is associated with this account');
     }
     return driver.id;
+  }
+
+  /** Omitted => behaves exactly as before this field existed. Supplied =>
+   *  must exist, belong to this tenant (the tenant-scoping extension already
+   *  filters findUnique to actor.tenantId, so a cross-tenant id simply comes
+   *  back null here), and be active. */
+  private async resolvePaymentAccountId(paymentAccountId?: string): Promise<string | undefined> {
+    if (!paymentAccountId) {
+      return undefined;
+    }
+    const account = await this.prisma.client.paymentAccount.findUnique({
+      where: { id: paymentAccountId },
+    });
+    if (!account || !account.isActive) {
+      throw new BadRequestException('paymentAccountId does not refer to an active payment account');
+    }
+    return paymentAccountId;
   }
 }

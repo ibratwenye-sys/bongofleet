@@ -34,6 +34,18 @@ export class UpdateDriverDto {
   emergencyContact?: string;
 
   @IsOptional()
+  @IsString()
+  residenceWard?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceDistrict?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceRegion?: string;
+
+  @IsOptional()
   @IsEnum(DriverType)
   driverType?: DriverType;
 }

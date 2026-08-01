@@ -35,6 +35,9 @@ export class GuarantorService {
         phone: dto.phone,
         relationship: dto.relationship,
         nationalId: dto.nationalId,
+        residenceWard: dto.residenceWard,
+        residenceDistrict: dto.residenceDistrict,
+        residenceRegion: dto.residenceRegion,
       },
     });
   }
@@ -65,6 +68,9 @@ export class GuarantorService {
         phone: dto.phone,
         relationship: dto.relationship,
         nationalId: dto.nationalId,
+        residenceWard: dto.residenceWard,
+        residenceDistrict: dto.residenceDistrict,
+        residenceRegion: dto.residenceRegion,
       },
     });
   }

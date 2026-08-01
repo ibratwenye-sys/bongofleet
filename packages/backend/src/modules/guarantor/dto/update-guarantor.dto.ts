@@ -26,4 +26,16 @@ export class UpdateGuarantorDto {
   @IsOptional()
   @IsString()
   nationalId?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceWard?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceDistrict?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceRegion?: string;
 }

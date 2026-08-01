@@ -98,13 +98,18 @@ enum MaintenanceReminderKind {
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
-  id           String   @id @default(cuid())
-  name         String
-  contactEmail String?  @map("contact_email")
-  contactPhone String?  @map("contact_phone")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  contactEmail    String?  @map("contact_email")
+  contactPhone    String?  @map("contact_phone")
+  /// Company party block on the hire-purchase contract (§Part 1). No API
+  /// currently sets these - there is no Tenant CRUD surface in this codebase
+  /// yet - so they render "Haijajazwa / Not on file" until one exists.
+  physicalAddress String?  @map("physical_address")
+  directorName    String?  @map("director_name")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   users             User[]
   drivers           Driver[]
@@ -120,6 +125,7 @@ model Tenant {
   assignmentAlerts  AssignmentAlert[]
   maintenanceReminders MaintenanceReminder[]
   transportJobs     TransportJob[]
+  paymentAccounts   PaymentAccount[]
 
   @@map("tenants")
 }
@@ -162,6 +168,10 @@ model Driver {
   driverType        DriverType @default(RIDER) @map("driver_type")
   nationalId        String?   @map("national_id")
   emergencyContact  String?   @map("emergency_contact")
+  /// The residence the hire-purchase contract identifies the driver by.
+  residenceWard     String?   @map("residence_ward")
+  residenceDistrict String?   @map("residence_district")
+  residenceRegion   String?   @map("residence_region")
   isActive          Boolean   @default(true) @map("is_active")
   deletedAt         DateTime? @map("deleted_at")
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -191,6 +201,10 @@ model Guarantor {
   phone        String
   relationship String?
   nationalId   String?   @map("national_id")
+  /// The next-of-kin residence printed on the hire-purchase contract (§Part 1).
+  residenceWard      String?   @map("residence_ward")
+  residenceDistrict  String?   @map("residence_district")
+  residenceRegion    String?   @map("residence_region")
   isActive     Boolean   @default(true) @map("is_active")
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -263,6 +277,10 @@ model Motorcycle {
   make               String?
   model              String?
   year               Int?
+  /// The recital on the hire-purchase contract identifies the vehicle by
+  /// these two - not stored anywhere else on this model until now (§Part 1).
+  chassisNumber      String?          @map("chassis_number")
+  colour             String?
   gpsDeviceId        String?          @map("gps_device_id")
   status             MotorcycleStatus @default(ACTIVE)
   currentMileage     Int              @default(0) @map("current_mileage")
@@ -337,6 +355,12 @@ model DailyPayment {
   amount            Decimal         @db.Decimal(10, 2)
   status            PaymentStatus   @default(PENDING)
   paymentMethod     String?         @map("payment_method")
+  /// Which of the tenant's configured accounts this payment was made into.
+  /// Deliberately separate from paymentMethod (free text, unconstrained,
+  /// historical rows keep meaning exactly what they meant) - this is the new,
+  /// optional, structured pointer sitting beside it, never replacing it.
+  paymentAccountId  String?         @map("payment_account_id")
+  paymentAccount    PaymentAccount? @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
   receiptStorageKey String?         @map("receipt_storage_key")
   receiptFileName   String?         @map("receipt_file_name")
   receiptMimeType   String?         @map("receipt_mime_type")
@@ -348,6 +372,7 @@ model DailyPayment {
 
   @@index([tenantId])
   @@index([dailyAssignmentId])
+  @@index([paymentAccountId])
   @@map("daily_payments")
 }
 
@@ -543,8 +568,27 @@ model OwnershipPlan {
 
   startDate       DateTime  @db.Date @map("start_date")        // contract begins
   contractEndDate DateTime? @db.Date @map("contract_end_date") // agreed end, see §5
-  activeWeekdays  Int[]     @default([1, 2, 3, 4, 5, 6]) @map("active_weekdays") // 0=Sun..6=Sat
+  // All seven days, matching "siku ... mfululizo" (consecutive calendar days,
+  // no weekend exclusion) in the real contract - Mon-Sat-only was a wrong
+  // assumption in an earlier stage. Existing rows are NOT migrated: this
+  // changes only what NEW plans get, on purpose (see Stage F2 Part 1).
+  activeWeekdays  Int[]     @default([0, 1, 2, 3, 4, 5, 6]) @map("active_weekdays") // 0=Sun..6=Sat
   graceDays       Int       @default(0) @map("grace_days")
+
+  // Printed terms only (Stage F2 Part 3) - never read by derivation.ts or by
+  // payment.service.ts's overpayment guard. A penalty a driver owes is never
+  // money that moves them closer to owning the vehicle, so this must never
+  // join totalOwed/amountBilled/amountPaid/remainingToBill/remainingToOwn/
+  // remainingUnreserved. The owner collects it by hand.
+  lateFeeAmount                    Decimal?  @db.Decimal(10, 2) @map("late_fee_amount")
+  breachAfterConsecutiveMissedDays Int       @default(5) @map("breach_after_consecutive_missed_days")
+
+  // Completion checklist - set later, by hand, once the plan is fully paid.
+  // Not read by the contract renderer (all null at contract-generation time);
+  // reserved for a future dashboard/API to mark handover done.
+  registrationCardHandedOverAt DateTime? @map("registration_card_handed_over_at")
+  spareKeyHandedOverAt         DateTime? @map("spare_key_handed_over_at")
+  nameTransferConfirmedAt      DateTime? @map("name_transfer_confirmed_at")
 
   status         OwnershipPlanStatus @default(ACTIVE)
   completedAt    DateTime? @map("completed_at")
@@ -557,4 +601,38 @@ model OwnershipPlan {
   @@index([tenantId, status])
   @@index([tenantId, driverId])
   @@map("ownership_plans")
+}
+
+enum PaymentAccountKind {
+  BANK
+  LIPA_NUMBER
+  MOBILE_MONEY
+
+  @@map("payment_account_kind")
+}
+
+/// A destination a driver can pay into - printed on the hire-purchase
+/// contract's daily-obligation term (§Part 3) and optionally attached to a
+/// DailyPayment when a driver names which one they used. tenantId is a plain
+/// scalar relation like the rest of this file's tenant-scoped models.
+model PaymentAccount {
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
+  kind          PaymentAccountKind
+  /// The name a driver recognises: "NMB", "Azam Pesa", "M-Pesa", "CRDB".
+  provider      String
+  /// Bank account no. / till number / phone number, depending on kind.
+  accountNumber String             @map("account_number")
+  /// The name on a bank account. Optional for LIPA_NUMBER/MOBILE_MONEY.
+  accountName   String?            @map("account_name")
+  isActive      Boolean            @default(true) @map("is_active")
+  sortOrder     Int                @default(0) @map("sort_order")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  payments DailyPayment[]
+
+  @@index([tenantId, isActive, sortOrder])
+  @@map("payment_accounts")
 }

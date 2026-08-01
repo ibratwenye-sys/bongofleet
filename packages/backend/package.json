@@ -18,7 +18,8 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts",
+    "contract:dump-swahili": "ts-node scripts/dump-contract-swahili-strings.ts"
   },
   "dependencies": {
     "@bongofleet/shared-lib": "workspace:*",

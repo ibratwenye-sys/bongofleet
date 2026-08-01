@@ -186,7 +186,7 @@ describe('OwnershipPlanService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('defaults activeWeekdays to Mon-Sat when omitted, letting the DB default apply', async () => {
+    it('leaves activeWeekdays out of the create() call when omitted, letting the DB default (all seven days) apply', async () => {
       prisma.client.ownershipPlan.create.mockResolvedValue({ id: 'plan-1' });
 
       await service.create(dto, owner);
@@ -402,6 +402,50 @@ describe('OwnershipPlanService', () => {
 
       expect(after.amountPaid).toBe('12000.00');
       expect(after.contractEndDate).toEqual(before.contractEndDate);
+    });
+
+    // lateFeeAmount is a printed contract term (Stage F2 Part 3), never an
+    // input to figure derivation. This guards the actual regression risk:
+    // batchDerivedFigures spreads the whole raw plan row (including
+    // lateFeeAmount) into its computation - a future "helpful" edit that
+    // starts reading plan.lateFeeAmount there would change every figure
+    // below without this test noticing anything except the diff itself.
+    it('produces byte-identical derived figures whether or not the plan has a lateFeeAmount set', async () => {
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
+      ]);
+      prisma.client.dailyPayment.groupBy.mockResolvedValue([
+        { dailyAssignmentId: 'a1', _sum: { amount: new Prisma.Decimal(12000) } },
+      ]);
+
+      prisma.client.ownershipPlan.findUnique.mockResolvedValueOnce({
+        ...plan,
+        lateFeeAmount: new Prisma.Decimal(2000),
+        breachAfterConsecutiveMissedDays: 5,
+      });
+      const withFine = await service.get('plan-1', owner);
+
+      prisma.client.ownershipPlan.findUnique.mockResolvedValueOnce({
+        ...plan,
+        lateFeeAmount: null,
+        breachAfterConsecutiveMissedDays: 5,
+      });
+      const withoutFine = await service.get('plan-1', owner);
+
+      const omitLateFeeAmount = (value: Record<string, unknown>): Record<string, unknown> =>
+        Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'lateFeeAmount'));
+      const restWithFine = omitLateFeeAmount(withFine as Record<string, unknown>);
+      const restWithoutFine = omitLateFeeAmount(withoutFine as Record<string, unknown>);
+      expect(restWithFine).toEqual(restWithoutFine);
+      expect(restWithFine.amountBilled).toBe(restWithoutFine.amountBilled);
+      expect(restWithFine.amountPaid).toBe(restWithoutFine.amountPaid);
+      expect(restWithFine.remainingToOwn).toBe(restWithoutFine.remainingToOwn);
+      expect(restWithFine.remainingToBill).toBe(restWithoutFine.remainingToBill);
     });
   });
 

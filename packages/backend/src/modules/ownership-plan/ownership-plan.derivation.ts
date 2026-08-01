@@ -77,7 +77,10 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decimal): Prisma.Decimal {
+/** Exported for tests only, as the plain building block the three
+ * computeRemaining* functions below share - not itself part of
+ * DerivedPlanFigures. */
+export function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decimal): Prisma.Decimal {
   return totalPrice.minus(downPayment);
 }
 

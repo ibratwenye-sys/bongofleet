@@ -13,7 +13,11 @@ import { derivePlanFigures, DerivedPlanFigures } from './ownership-plan.derivati
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 
-const DEFAULT_ACTIVE_WEEKDAYS = [1, 2, 3, 4, 5, 6];
+// Mirrors the schema's own default (Stage F2 Part 1: "siku ... mfululizo" is
+// consecutive calendar days, no weekend exclusion) - used only to validate an
+// omitted activeWeekdays for duplicates before create() hands off to the
+// Prisma column default itself.
+const DEFAULT_ACTIVE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
 function assertOwner(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER) {
@@ -124,6 +128,8 @@ export class OwnershipPlanService {
           contractEndDate: dto.contractEndDate ? new Date(dto.contractEndDate) : undefined,
           activeWeekdays: dto.activeWeekdays,
           graceDays: dto.graceDays,
+          lateFeeAmount: dto.lateFeeAmount,
+          breachAfterConsecutiveMissedDays: dto.breachAfterConsecutiveMissedDays,
           notes: dto.notes,
         },
       });
@@ -221,6 +227,10 @@ export class OwnershipPlanService {
       data.activeWeekdays = dto.activeWeekdays;
     }
     if (dto.graceDays !== undefined) data.graceDays = dto.graceDays;
+    if (dto.lateFeeAmount !== undefined) data.lateFeeAmount = dto.lateFeeAmount;
+    if (dto.breachAfterConsecutiveMissedDays !== undefined) {
+      data.breachAfterConsecutiveMissedDays = dto.breachAfterConsecutiveMissedDays;
+    }
     if (dto.notes !== undefined) data.notes = dto.notes;
 
     if (dto.status !== undefined && dto.status !== existing.status) {

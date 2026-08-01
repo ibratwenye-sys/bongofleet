@@ -26,4 +26,17 @@ export class CreateGuarantorDto {
   @IsOptional()
   @IsString()
   nationalId?: string;
+
+  /** The next-of-kin residence printed on the hire-purchase contract. */
+  @IsOptional()
+  @IsString()
+  residenceWard?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceDistrict?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceRegion?: string;
 }

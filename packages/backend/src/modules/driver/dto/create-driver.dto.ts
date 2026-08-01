@@ -41,6 +41,19 @@ export class CreateDriverDto {
   @IsString()
   emergencyContact?: string;
 
+  /** The residence the hire-purchase contract identifies the driver by. */
+  @IsOptional()
+  @IsString()
+  residenceWard?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceDistrict?: string;
+
+  @IsOptional()
+  @IsString()
+  residenceRegion?: string;
+
   /** Defaults to RIDER at the database level when omitted. */
   @IsOptional()
   @IsEnum(DriverType)

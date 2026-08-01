@@ -80,6 +80,9 @@ export class DriverService {
             licenseNumber: dto.licenseNumber,
             nationalId: dto.nationalId,
             emergencyContact: dto.emergencyContact,
+            residenceWard: dto.residenceWard,
+            residenceDistrict: dto.residenceDistrict,
+            residenceRegion: dto.residenceRegion,
             driverType: dto.driverType,
           },
         });
@@ -177,6 +180,9 @@ export class DriverService {
             licenseNumber: dto.licenseNumber,
             nationalId: dto.nationalId,
             emergencyContact: dto.emergencyContact,
+            residenceWard: dto.residenceWard,
+            residenceDistrict: dto.residenceDistrict,
+            residenceRegion: dto.residenceRegion,
             driverType: dto.driverType,
           },
         });

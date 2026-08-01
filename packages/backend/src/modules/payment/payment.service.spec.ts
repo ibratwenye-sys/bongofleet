@@ -355,6 +355,37 @@ describe('PaymentService', () => {
       expect(prisma.client.$transaction).not.toHaveBeenCalled();
     });
 
+    // lateFeeAmount is a printed contract term (Stage F2 Part 3), never an
+    // input to the overpayment guard. remainingUnreserved has no
+    // lateFeeAmount parameter to begin with, so this pins the actual
+    // regression risk: the same plan row (now carrying lateFeeAmount) must
+    // still reject at exactly the same remainingToOwn boundary as before
+    // that column existed.
+    it('rejects the same overpayment at the same boundary whether or not the plan has a lateFeeAmount set', async () => {
+      prisma.client.ownershipPlan.findUnique.mockResolvedValue({
+        ...plan,
+        totalPrice: new Prisma.Decimal(10000),
+        lateFeeAmount: new Prisma.Decimal(2000),
+        breachAfterConsecutiveMissedDays: 5,
+      });
+      prisma.client.dailyAssignment.findUnique.mockResolvedValue({
+        id: 'a-today',
+        driverId: 'driver-1',
+        ownershipPlanId: 'plan-1',
+      });
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([
+        planAssignment('a-today', '2026-07-01', 12000),
+      ]);
+
+      await expect(
+        service.createPayment(
+          { dailyAssignmentId: 'a-today', driverId: 'driver-1', amount: 15000 },
+          owner,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.client.$transaction).not.toHaveBeenCalled();
+    });
+
     it('two PENDING payments that individually pass a COMPLETED-only ceiling are jointly rejected by the second one', async () => {
       prisma.client.ownershipPlan.findUnique.mockResolvedValue({
         ...plan,

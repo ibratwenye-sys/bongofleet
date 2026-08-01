@@ -60,6 +60,20 @@ export class CreateOwnershipPlanDto {
   @Min(0)
   graceDays?: number;
 
+  // Printed on the contract only (§Part 1/3) - never read by derivation.ts
+  // or the overpayment guard. Not part of the original spec's DTO list;
+  // added here because otherwise these fields would be permanently
+  // unreachable through the API. See Stage F2 report.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  lateFeeAmount?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  breachAfterConsecutiveMissedDays?: number;
+
   @IsOptional()
   @Transform(trim)
   @IsString()

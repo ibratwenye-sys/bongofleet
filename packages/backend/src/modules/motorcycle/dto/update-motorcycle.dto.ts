@@ -31,6 +31,14 @@ export class UpdateMotorcycleDto {
   gpsDeviceId?: string;
 
   @IsOptional()
+  @IsString()
+  chassisNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  colour?: string;
+
+  @IsOptional()
   @IsEnum(MotorcycleStatus)
   status?: MotorcycleStatus;
 }

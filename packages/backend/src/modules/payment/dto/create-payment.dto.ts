@@ -34,4 +34,10 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsBoolean()
   confirmLargeAmount?: boolean;
+
+  // Which of the tenant's configured accounts the driver paid into. Optional -
+  // omitting it behaves exactly as before this field existed.
+  @IsOptional()
+  @IsString()
+  paymentAccountId?: string;
 }

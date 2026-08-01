@@ -217,6 +217,72 @@ describe('Payment (e2e)', () => {
       .send({ status: 'COMPLETED' })
       .expect(403);
   });
+
+  describe('paymentAccountId (Stage F2 Part 2)', () => {
+    it('persists a valid paymentAccountId on the created payment', async () => {
+      const { accessToken, tenantId } = await signupOwner(app);
+      const { driver, assignment } = await seedDriverAssignment(prisma, tenantId);
+
+      const account = await request(app.getHttpServer())
+        .post('/payment-accounts')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ kind: 'MOBILE_MONEY', provider: 'M-Pesa', accountNumber: '+255700000001' })
+        .expect(201);
+
+      const paymentRes = await request(app.getHttpServer())
+        .post('/payments')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          dailyAssignmentId: assignment.id,
+          driverId: driver.id,
+          amount: 20000,
+          paymentAccountId: account.body.id,
+        })
+        .expect(201);
+
+      expect(paymentRes.body.paymentAccountId).toBe(account.body.id);
+    });
+
+    it('rejects a paymentAccountId belonging to another tenant with 400', async () => {
+      const { accessToken: ownerAToken, tenantId: tenantAId } = await signupOwner(app);
+      const { driver, assignment } = await seedDriverAssignment(prisma, tenantAId);
+
+      const { accessToken: ownerBToken } = await signupOwner(app, {
+        email: 'owner-b-accounts@other-fleet.test',
+        companyName: 'Other Fleet Accounts',
+        phone: '+254700000098',
+      });
+      const otherTenantAccount = await request(app.getHttpServer())
+        .post('/payment-accounts')
+        .set('Authorization', `Bearer ${ownerBToken}`)
+        .send({ kind: 'MOBILE_MONEY', provider: 'M-Pesa', accountNumber: '+255700000097' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/payments')
+        .set('Authorization', `Bearer ${ownerAToken}`)
+        .send({
+          dailyAssignmentId: assignment.id,
+          driverId: driver.id,
+          amount: 20000,
+          paymentAccountId: otherTenantAccount.body.id,
+        })
+        .expect(400);
+    });
+
+    it('still succeeds, unchanged, when paymentAccountId is omitted', async () => {
+      const { accessToken, tenantId } = await signupOwner(app);
+      const { driver, assignment } = await seedDriverAssignment(prisma, tenantId);
+
+      const paymentRes = await request(app.getHttpServer())
+        .post('/payments')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ dailyAssignmentId: assignment.id, driverId: driver.id, amount: 20000 })
+        .expect(201);
+
+      expect(paymentRes.body.paymentAccountId).toBeNull();
+    });
+  });
 });
 
 describe('Payment module does not affect the auth rate limiter', () => {

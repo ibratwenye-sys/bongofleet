@@ -30,6 +30,15 @@ export class CreateMotorcycleDto {
   @IsString()
   gpsDeviceId?: string;
 
+  /** The hire-purchase contract's recital identifies the vehicle by these two. */
+  @IsOptional()
+  @IsString()
+  chassisNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  colour?: string;
+
   @IsOptional()
   @IsEnum(MotorcycleStatus)
   status?: MotorcycleStatus;

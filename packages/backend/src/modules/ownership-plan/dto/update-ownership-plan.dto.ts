@@ -52,6 +52,18 @@ export class UpdateOwnershipPlanDto {
   @Min(0)
   graceDays?: number;
 
+  // Printed on the contract only (§Part 1/3) - never read by derivation.ts
+  // or the overpayment guard.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  lateFeeAmount?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  breachAfterConsecutiveMissedDays?: number;
+
   @IsOptional()
   @IsEnum(OwnershipPlanStatus)
   status?: OwnershipPlanStatus;

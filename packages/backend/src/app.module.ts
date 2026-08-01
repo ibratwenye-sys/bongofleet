@@ -20,6 +20,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { TransportModule } from './modules/transport/transport.module';
 import { OwnershipPlanModule } from './modules/ownership-plan/ownership-plan.module';
+import { PaymentAccountModule } from './modules/payment-account/payment-account.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -47,6 +48,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     MaintenanceModule,
     TransportModule,
     OwnershipPlanModule,
+    PaymentAccountModule,
   ],
   controllers: [AppController],
   providers: [

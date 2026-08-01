@@ -50,6 +50,8 @@ export class MotorcycleService {
           model: dto.model,
           year: dto.year,
           gpsDeviceId: dto.gpsDeviceId,
+          chassisNumber: dto.chassisNumber,
+          colour: dto.colour,
           status: dto.status,
         },
       });
@@ -130,6 +132,8 @@ export class MotorcycleService {
           model: dto.model,
           year: dto.year,
           gpsDeviceId: dto.gpsDeviceId,
+          chassisNumber: dto.chassisNumber,
+          colour: dto.colour,
           status: dto.status,
         },
       });
