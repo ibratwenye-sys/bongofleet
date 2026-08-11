@@ -143,7 +143,7 @@ export interface UpdateDriverPayload {
   driverType?: DriverType;
 }
 
-export type DocumentOwnerType = 'RIDER' | 'MOTORCYCLE' | 'GUARANTOR';
+export type DocumentOwnerType = 'RIDER' | 'MOTORCYCLE' | 'GUARANTOR' | 'OWNERSHIP_PLAN';
 
 export type DocType =
   | 'NATIONAL_ID'
@@ -155,6 +155,7 @@ export type DocType =
   | 'ROAD_SAFETY_WEEK'
   | 'TBS_CERTIFICATE'
   | 'GUARANTOR_ID'
+  | 'HIRE_PURCHASE_CONTRACT'
   | 'OTHER';
 
 export type DocumentExpiryStatus = 'VALID' | 'EXPIRING_SOON' | 'EXPIRED';
@@ -362,4 +363,103 @@ export interface UpdateMaintenancePayload {
   mileageAtService?: number;
   nextServiceDate?: string;
   nextServiceMileage?: number;
+}
+
+// --- Payment accounts (Stage G) ---
+
+export type PaymentAccountKind = 'BANK' | 'LIPA_NUMBER' | 'MOBILE_MONEY';
+
+export interface PaymentAccount {
+  id: string;
+  kind: PaymentAccountKind;
+  provider: string;
+  accountNumber: string;
+  accountName: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+// --- Tenant settings (Stage G Part 2) ---
+
+export interface TenantSettings {
+  name: string;
+  physicalAddress: string | null;
+  directorName: string | null;
+}
+
+export interface UpdateTenantSettingsPayload {
+  physicalAddress?: string;
+  directorName?: string;
+}
+
+// --- Hire-purchase ownership plans (Stage G Part 4) ---
+// money fields are Prisma Decimals -> strings, same convention as the rest
+// of this file. driver/motorcycle here are the OwnershipPlanService's own
+// join shape - narrower than the Driver/Motorcycle types above (see
+// ownership-plan.service.ts's driversById/motorcyclesById selects).
+
+export type OwnershipPlanStatus = 'ACTIVE' | 'COMPLETED' | 'DEFAULTED' | 'CANCELLED';
+
+export interface OwnershipPlanDriver {
+  id: string;
+  licenseNumber: string;
+  driverType: DriverType;
+  user: { firstName: string; lastName: string };
+}
+
+export interface OwnershipPlanMotorcycle {
+  id: string;
+  registrationNumber: string;
+  vehicleType: VehicleType;
+  make: string | null;
+  model: string | null;
+}
+
+export interface OwnershipPlan {
+  id: string;
+  driverId: string;
+  motorcycleId: string;
+  guarantorId: string | null;
+  dailyAmount: string;
+  totalPrice: string;
+  downPayment: string;
+  startDate: string;
+  contractEndDate: string | null;
+  activeWeekdays: number[];
+  graceDays: number;
+  breachAfterConsecutiveMissedDays: number;
+  status: OwnershipPlanStatus;
+  notes: string | null;
+  driver: OwnershipPlanDriver | null;
+  motorcycle: OwnershipPlanMotorcycle | null;
+  // Derived (ownership-plan.derivation.ts) - never re-derived on the client.
+  amountPaid: string;
+  remainingToOwn: string;
+  daysBehind: number;
+  daysAhead: number;
+  daysLeft: number | null;
+  projectedCompletion: string;
+}
+
+export interface CreateOwnershipPlanPayload {
+  driverId: string;
+  motorcycleId: string;
+  guarantorId?: string;
+  dailyAmount: number;
+  totalPrice: number;
+  downPayment?: number;
+  startDate: string;
+  contractEndDate?: string;
+  activeWeekdays?: number[];
+  graceDays?: number;
+  lateFeeAmount?: number;
+  breachAfterConsecutiveMissedDays?: number;
+  notes?: string;
+}
+
+export interface OwnershipPlanLedgerRow {
+  assignedDate: string;
+  owed: string;
+  paid: string;
+  runningPosition: string;
 }

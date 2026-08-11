@@ -61,6 +61,12 @@ export class OwnershipPlanController {
     return this.ownershipPlanService.get(id, actor);
   }
 
+  @Get(':id/ledger')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
+  ledger(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.ownershipPlanService.ledger(id, actor);
+  }
+
   @Patch(':id')
   @Roles(UserRole.OWNER)
   update(

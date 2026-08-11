@@ -14,6 +14,8 @@ import { MotorcycleDetailPage } from './pages/MotorcycleDetailPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { MaintenancePage } from './pages/MaintenancePage';
+import { OwnershipPage } from './pages/OwnershipPage';
+import { OwnershipPlanDetailPage } from './pages/OwnershipPlanDetailPage';
 
 // Kept for one release so an old bookmark/link to /riders/:id still lands on the
 // same driver's detail page rather than a dead end.
@@ -39,6 +41,8 @@ function App() {
               <Route path="/riders" element={<Navigate to="/drivers" replace />} />
               <Route path="/riders/:driverId" element={<DriverRedirect />} />
               <Route path="/assignments" element={<AssignmentsPage />} />
+              <Route path="/ownership" element={<OwnershipPage />} />
+              <Route path="/ownership/:planId" element={<OwnershipPlanDetailPage />} />
               <Route path="/transport" element={<TransportPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />

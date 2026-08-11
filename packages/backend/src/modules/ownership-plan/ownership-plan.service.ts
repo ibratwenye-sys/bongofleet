@@ -41,6 +41,23 @@ function assertNoDuplicateWeekdays(activeWeekdays: number[]): void {
   }
 }
 
+/** guarantorId must belong to driverId - same-tenant is automatic (the
+ *  tenant-scoping Prisma extension merges actor.tenantId into the query),
+ *  so a guarantor from another tenant already looks not-found; this adds
+ *  the same-driver check the extension can't express. Wrong tenant or wrong
+ *  driver both read as the same NotFound - never a Forbidden that would
+ *  confirm the id belongs to someone else. */
+async function assertGuarantorBelongsToDriver(
+  prisma: PrismaService,
+  guarantorId: string,
+  driverId: string,
+): Promise<void> {
+  const guarantor = await prisma.client.guarantor.findUnique({ where: { id: guarantorId } });
+  if (!guarantor || guarantor.driverId !== driverId) {
+    throw new NotFoundException('Guarantor not found');
+  }
+}
+
 type PlanRow = {
   id: string;
   dailyAmount: Prisma.Decimal;
@@ -84,6 +101,10 @@ export class OwnershipPlanService {
       );
     }
 
+    if (dto.guarantorId) {
+      await assertGuarantorBelongsToDriver(this.prisma, dto.guarantorId, dto.driverId);
+    }
+
     const activeWeekdays = dto.activeWeekdays ?? DEFAULT_ACTIVE_WEEKDAYS;
     assertNoDuplicateWeekdays(activeWeekdays);
 
@@ -121,6 +142,7 @@ export class OwnershipPlanService {
           tenantId: actor.tenantId,
           driverId: dto.driverId,
           motorcycleId: dto.motorcycleId,
+          guarantorId: dto.guarantorId,
           dailyAmount: dto.dailyAmount,
           totalPrice: dto.totalPrice,
           downPayment: dto.downPayment ?? 0,
@@ -174,16 +196,7 @@ export class OwnershipPlanService {
     if (!plan) {
       throw new NotFoundException('Ownership plan not found');
     }
-
-    if (actor.role === UserRole.RIDER) {
-      const ownDriverId = await this.getOwnDriverId(actor);
-      if (plan.driverId !== ownDriverId) {
-        // Same "not found" as an unknown id, so a driver can't probe others' plans.
-        throw new NotFoundException('Ownership plan not found');
-      }
-    } else if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
-      throw new ForbiddenException('Not authorized to view this ownership plan');
-    }
+    await this.assertCanView(plan, actor);
 
     const [figuresById, driver, motorcycle] = await Promise.all([
       this.batchDerivedFigures([plan]),
@@ -197,6 +210,58 @@ export class OwnershipPlanService {
     return { ...plan, driver, motorcycle, ...(figuresById.get(plan.id) as DerivedPlanFigures) };
   }
 
+  /**
+   * Stage G Part 3b - the plan detail page's day-by-day ledger: every
+   * DailyAssignment the generator has created for this plan, each with what
+   * was owed that day, what was actually paid (COMPLETED only, same filter
+   * batchDerivedFigures uses), and a running position (cumulative paid -
+   * cumulative owed) so a driver's day of falling behind is visible exactly
+   * where it happened, not just as today's single netPosition number.
+   * Same access rule as get() - OWNER/MANAGER any plan, the DRIVER their own.
+   */
+  async ledger(id: string, actor: AuthenticatedUser) {
+    const plan = await this.prisma.client.ownershipPlan.findUnique({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException('Ownership plan not found');
+    }
+    await this.assertCanView(plan, actor);
+
+    const assignments = await this.prisma.client.dailyAssignment.findMany({
+      where: { ownershipPlanId: id },
+      orderBy: { assignedDate: 'asc' },
+      select: { id: true, assignedDate: true, targetAmount: true },
+    });
+
+    const paidByAssignment = new Map<string, Prisma.Decimal>();
+    if (assignments.length > 0) {
+      const paid = await this.prisma.client.dailyPayment.groupBy({
+        by: ['dailyAssignmentId'],
+        where: {
+          dailyAssignmentId: { in: assignments.map((a) => a.id) },
+          status: PaymentStatus.COMPLETED,
+        },
+        _sum: { amount: true },
+      });
+      for (const row of paid) {
+        paidByAssignment.set(row.dailyAssignmentId, row._sum.amount ?? new Prisma.Decimal(0));
+      }
+    }
+
+    let cumulativeOwed = new Prisma.Decimal(0);
+    let cumulativePaid = new Prisma.Decimal(0);
+    return assignments.map((assignment) => {
+      const paid = paidByAssignment.get(assignment.id) ?? new Prisma.Decimal(0);
+      cumulativeOwed = cumulativeOwed.plus(assignment.targetAmount);
+      cumulativePaid = cumulativePaid.plus(paid);
+      return {
+        assignedDate: assignment.assignedDate.toISOString().slice(0, 10),
+        owed: assignment.targetAmount.toFixed(2),
+        paid: paid.toFixed(2),
+        runningPosition: cumulativePaid.minus(cumulativeOwed).toFixed(2),
+      };
+    });
+  }
+
   async update(id: string, dto: UpdateOwnershipPlanDto, actor: AuthenticatedUser) {
     assertOwner(actor);
 
@@ -206,6 +271,13 @@ export class OwnershipPlanService {
     }
 
     const data: Prisma.OwnershipPlanUpdateInput = {};
+
+    if (dto.guarantorId !== undefined) {
+      if (dto.guarantorId !== null) {
+        await assertGuarantorBelongsToDriver(this.prisma, dto.guarantorId, existing.driverId);
+      }
+      data.guarantorId = dto.guarantorId;
+    }
 
     if (dto.dailyAmount !== undefined) data.dailyAmount = dto.dailyAmount;
     if (dto.totalPrice !== undefined) data.totalPrice = dto.totalPrice;
@@ -362,5 +434,22 @@ export class OwnershipPlanService {
       throw new ForbiddenException('No driver profile is associated with this account');
     }
     return driver.id;
+  }
+
+  /** OWNER/MANAGER may view any plan; a RIDER only their own - shared by
+   *  get() and ledger(). Same "not found" as an unknown id for a driver
+   *  probing another driver's plan, so the response never confirms the id
+   *  is real. */
+  private async assertCanView(plan: { driverId: string }, actor: AuthenticatedUser): Promise<void> {
+    if (actor.role === UserRole.RIDER) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (plan.driverId !== ownDriverId) {
+        throw new NotFoundException('Ownership plan not found');
+      }
+      return;
+    }
+    if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
+      throw new ForbiddenException('Not authorized to view this ownership plan');
+    }
   }
 }

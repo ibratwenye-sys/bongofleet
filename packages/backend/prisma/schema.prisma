@@ -561,6 +561,16 @@ model OwnershipPlan {
   tenantId       String   @map("tenant_id")
   driverId       String   @map("driver_id")       // the buyer
   motorcycleId   String   @map("motorcycle_id")   // the vehicle being bought
+  // Stage G Part 3: the guarantor this specific plan's contract names as
+  // next of kin. Nullable, and a plain scalar like tenantId/driverId/
+  // motorcycleId above (DESIGN_HIRE_PURCHASE.md §3) - existence, same-tenant,
+  // and same-driver are all checked in the service layer, not by a Prisma
+  // relation. Before this, the contract picked "the driver's most recently
+  // added active guarantor" implicitly (see ownership-plan-contract.service.ts);
+  // an explicit guarantorId here is what the owner actually chooses at plan
+  // creation. A driver may still have several guarantors - this is which one
+  // this plan's contract prints, nothing more.
+  guarantorId    String?  @map("guarantor_id")
 
   dailyAmount    Decimal  @db.Decimal(10, 2) @map("daily_amount")   // e.g. 12000.00
   totalPrice     Decimal  @db.Decimal(12, 2) @map("total_price")

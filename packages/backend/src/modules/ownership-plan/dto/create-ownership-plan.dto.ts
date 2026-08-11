@@ -25,6 +25,13 @@ export class CreateOwnershipPlanDto {
   @IsNotEmpty()
   motorcycleId: string;
 
+  /** The guarantor this plan's contract names as next of kin - must belong
+   *  to driverId (checked in the service, where a clear message fits
+   *  better). Optional: a plan may have no guarantor on file yet. */
+  @IsOptional()
+  @IsString()
+  guarantorId?: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   dailyAmount: number;

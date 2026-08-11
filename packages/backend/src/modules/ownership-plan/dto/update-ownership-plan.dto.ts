@@ -20,6 +20,13 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 /** Terms, status, and notes only - driverId/motorcycleId are not editable
  *  here; reassigning either means cancelling this plan and creating a new one. */
 export class UpdateOwnershipPlanDto {
+  /** Same validation as create (same-tenant, same-driver, checked in the
+   *  service). Pass null explicitly to clear a previously-set guarantor;
+   *  omit the field entirely to leave it unchanged. */
+  @IsOptional()
+  @IsString()
+  guarantorId?: string | null;
+
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()

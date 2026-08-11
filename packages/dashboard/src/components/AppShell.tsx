@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { to: '/fleet', label: 'Fleet' },
   { to: '/drivers', label: 'Drivers' },
   { to: '/assignments', label: 'Assignments' },
+  { to: '/ownership', label: 'Ownership' },
   { to: '/transport', label: 'Transport' },
   { to: '/payments', label: 'Payments' },
   { to: '/expenses', label: 'Expenses' },

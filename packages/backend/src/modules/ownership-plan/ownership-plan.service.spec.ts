@@ -16,6 +16,7 @@ describe('OwnershipPlanService', () => {
     client: {
       driver: { findUnique: jest.Mock; findMany: jest.Mock };
       motorcycle: { findUnique: jest.Mock; findMany: jest.Mock };
+      guarantor: { findUnique: jest.Mock };
       ownershipPlan: {
         findFirst: jest.Mock;
         findMany: jest.Mock;
@@ -85,6 +86,7 @@ describe('OwnershipPlanService', () => {
       client: {
         driver: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
         motorcycle: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+        guarantor: { findUnique: jest.fn() },
         ownershipPlan: {
           findFirst: jest.fn().mockResolvedValue(null),
           findMany: jest.fn(),
@@ -193,6 +195,54 @@ describe('OwnershipPlanService', () => {
 
       const { data } = prisma.client.ownershipPlan.create.mock.calls[0][0];
       expect(data.activeWeekdays).toBeUndefined();
+    });
+
+    describe('guarantorId (Stage G Part 3)', () => {
+      it('accepts a guarantor belonging to the same driver and passes it through to create()', async () => {
+        prisma.client.guarantor.findUnique.mockResolvedValue({
+          id: 'guarantor-1',
+          driverId: 'driver-1',
+        });
+        prisma.client.ownershipPlan.create.mockResolvedValue({ id: 'plan-1' });
+
+        await service.create({ ...dto, guarantorId: 'guarantor-1' }, owner);
+
+        const { data } = prisma.client.ownershipPlan.create.mock.calls[0][0];
+        expect(data.guarantorId).toBe('guarantor-1');
+      });
+
+      it('throws NotFound (never Forbidden) for a guarantor belonging to a different driver', async () => {
+        prisma.client.guarantor.findUnique.mockResolvedValue({
+          id: 'guarantor-1',
+          driverId: 'some-other-driver',
+        });
+
+        await expect(
+          service.create({ ...dto, guarantorId: 'guarantor-1' }, owner),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.client.ownershipPlan.create).not.toHaveBeenCalled();
+      });
+
+      it('throws NotFound (never Forbidden) for a guarantor from another tenant', async () => {
+        // The tenant-scoping Prisma extension merges actor.tenantId into
+        // every query in production - a cross-tenant guarantorId simply
+        // never matches a row, so findUnique resolving null is exactly
+        // what that looks like here.
+        prisma.client.guarantor.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.create({ ...dto, guarantorId: 'guarantor-from-another-tenant' }, owner),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.client.ownershipPlan.create).not.toHaveBeenCalled();
+      });
+
+      it('never queries guarantor when guarantorId is omitted', async () => {
+        prisma.client.ownershipPlan.create.mockResolvedValue({ id: 'plan-1' });
+
+        await service.create(dto, owner);
+
+        expect(prisma.client.guarantor.findUnique).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -449,9 +499,85 @@ describe('OwnershipPlanService', () => {
     });
   });
 
+  describe('ledger (Stage G Part 3b)', () => {
+    const plan = {
+      id: 'plan-1',
+      tenantId: 'tenant-1',
+      driverId: 'driver-1',
+      motorcycleId: 'veh-1',
+    };
+
+    beforeEach(() => {
+      prisma.client.ownershipPlan.findUnique.mockResolvedValue(plan);
+    });
+
+    it('throws NotFound for an unknown plan', async () => {
+      prisma.client.ownershipPlan.findUnique.mockResolvedValue(null);
+      await expect(service.ledger('nope', owner)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("does not let a different driver view someone else's plan", async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-2', userId: 'user-driver' });
+      await expect(service.ledger('plan-1', driverActor)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns owed/paid/running position per day, in date order, with a correct running total', async () => {
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([
+        {
+          id: 'a1',
+          assignedDate: new Date('2026-08-03'),
+          targetAmount: new Prisma.Decimal(12000),
+        },
+        {
+          id: 'a2',
+          assignedDate: new Date('2026-08-04'),
+          targetAmount: new Prisma.Decimal(12000),
+        },
+        {
+          id: 'a3',
+          assignedDate: new Date('2026-08-05'),
+          targetAmount: new Prisma.Decimal(12000),
+        },
+      ]);
+      prisma.client.dailyPayment.groupBy.mockResolvedValue([
+        { dailyAssignmentId: 'a1', _sum: { amount: new Prisma.Decimal(12000) } },
+        // a2 short-paid, a3 not paid at all - the driver falls behind starting a2.
+        { dailyAssignmentId: 'a2', _sum: { amount: new Prisma.Decimal(5000) } },
+      ]);
+
+      const rows = await service.ledger('plan-1', owner);
+
+      expect(rows).toEqual([
+        { assignedDate: '2026-08-03', owed: '12000.00', paid: '12000.00', runningPosition: '0.00' },
+        {
+          assignedDate: '2026-08-04',
+          owed: '12000.00',
+          paid: '5000.00',
+          runningPosition: '-7000.00',
+        },
+        {
+          assignedDate: '2026-08-05',
+          owed: '12000.00',
+          paid: '0.00',
+          runningPosition: '-19000.00',
+        },
+      ]);
+    });
+
+    it('returns an empty ledger, not an error, for a plan with no assignments yet', async () => {
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([]);
+
+      const rows = await service.ledger('plan-1', owner);
+
+      expect(rows).toEqual([]);
+      expect(prisma.client.dailyPayment.groupBy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('update', () => {
     const activePlan = {
       id: 'plan-1',
+      driverId: 'driver-1',
       status: OwnershipPlanStatus.ACTIVE,
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(0),
@@ -526,6 +652,54 @@ describe('OwnershipPlanService', () => {
     it('does not touch contractEndDate unless explicitly given', async () => {
       const result = await service.update('plan-1', { notes: 'just a note' }, owner);
       expect(result).not.toHaveProperty('contractEndDate');
+    });
+
+    describe('guarantorId (Stage G Part 3)', () => {
+      it('accepts a guarantor belonging to the plan driver and updates it', async () => {
+        prisma.client.guarantor.findUnique.mockResolvedValue({
+          id: 'guarantor-1',
+          driverId: 'driver-1',
+        });
+
+        const result = await service.update('plan-1', { guarantorId: 'guarantor-1' }, owner);
+
+        expect(result.guarantorId).toBe('guarantor-1');
+      });
+
+      it('clears guarantorId when explicitly passed null, without a guarantor lookup', async () => {
+        const result = await service.update('plan-1', { guarantorId: null }, owner);
+
+        expect(result.guarantorId).toBeNull();
+        expect(prisma.client.guarantor.findUnique).not.toHaveBeenCalled();
+      });
+
+      it('leaves guarantorId untouched when omitted from the payload', async () => {
+        const result = await service.update('plan-1', { notes: 'x' }, owner);
+
+        expect(result).not.toHaveProperty('guarantorId');
+        expect(prisma.client.guarantor.findUnique).not.toHaveBeenCalled();
+      });
+
+      it('throws NotFound (never Forbidden) for a guarantor belonging to a different driver', async () => {
+        prisma.client.guarantor.findUnique.mockResolvedValue({
+          id: 'guarantor-1',
+          driverId: 'some-other-driver',
+        });
+
+        await expect(
+          service.update('plan-1', { guarantorId: 'guarantor-1' }, owner),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.client.ownershipPlan.update).not.toHaveBeenCalled();
+      });
+
+      it('throws NotFound (never Forbidden) for a guarantor from another tenant', async () => {
+        prisma.client.guarantor.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.update('plan-1', { guarantorId: 'guarantor-from-another-tenant' }, owner),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.client.ownershipPlan.update).not.toHaveBeenCalled();
+      });
     });
   });
 });

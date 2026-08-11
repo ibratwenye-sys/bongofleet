@@ -51,20 +51,22 @@ export class OwnershipPlanContractService {
       }),
       this.prisma.client.motorcycle.findUnique({ where: { id: plan.motorcycleId } }),
       this.prisma.client.tenant.findUnique({ where: { id: actor.tenantId } }),
-      // "The plan's Guarantor" - a driver may have several, so this is the
-      // most-recently-added active one, matching GuarantorService.list's own
-      // ordering. There is no schema concept of a single "primary" guarantor.
-      // NOTE: this means regenerating a contract after the driver adds a new
-      // guarantor silently changes who the next of kin is on the new PDF -
-      // tolerable only because each generation is its own Document row, so a
-      // signed copy keeps its own next of kin permanently. The real fix is a
-      // `guarantorId` column on OwnershipPlan so the owner picks explicitly
-      // at plan creation; that belongs with the create form in Stage G, not
-      // here.
-      this.prisma.client.guarantor.findFirst({
-        where: { driverId: plan.driverId, isActive: true },
-        orderBy: { createdAt: 'desc' },
-      }),
+      // Stage G Part 3: plan.guarantorId is the owner's explicit choice at
+      // plan creation - prefer it. Older plans (or ones created without
+      // picking one) fall back to "the driver's most-recently-added active
+      // guarantor", matching GuarantorService.list's own ordering, same as
+      // before Stage G. NOTE: the fallback path means regenerating such a
+      // plan's contract after the driver gains a new guarantor can silently
+      // change who the next of kin is on the new PDF - tolerable only
+      // because each generation is its own Document row, so a signed copy
+      // keeps its own next of kin permanently. A plan with an explicit
+      // guarantorId never has this problem.
+      plan.guarantorId
+        ? this.prisma.client.guarantor.findUnique({ where: { id: plan.guarantorId } })
+        : this.prisma.client.guarantor.findFirst({
+            where: { driverId: plan.driverId, isActive: true },
+            orderBy: { createdAt: 'desc' },
+          }),
       this.prisma.client.paymentAccount.findMany({
         where: { tenantId: actor.tenantId, isActive: true },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
