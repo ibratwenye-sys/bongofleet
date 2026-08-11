@@ -15,7 +15,11 @@
  */
 import { promises as fs } from 'node:fs';
 import { renderContractPdf } from '../src/modules/ownership-plan/ownership-plan-contract.pdf';
-import { FULL_SAMPLE_CONTEXT, SPARSE_SAMPLE_CONTEXT } from './contract-sample-fixture';
+import {
+  FULL_SAMPLE_CONTEXT,
+  SPARSE_SAMPLE_CONTEXT,
+  REMAINDER_SAMPLE_CONTEXT,
+} from './contract-sample-fixture';
 
 const OUT_DIR = 'C:\\Users\\HP\\Desktop\\Bongofleet Documents';
 
@@ -29,6 +33,15 @@ async function main(): Promise<void> {
   await fs.writeFile(`${OUT_DIR}\\SAMPLE_CONTRACT_SPARSE.pdf`, sparse);
   // eslint-disable-next-line no-console
   console.log(`Wrote SAMPLE_CONTRACT_SPARSE.pdf (${sparse.length} bytes)`);
+
+  // Stage F3c Part 2: totalOwed 1,608,500 is not an exact multiple of the
+  // 12,000 daily amount - the one permanent sample that shows the fullDays +
+  // final-day-remainder clause and would catch a regression back to
+  // days x dailyAmount.
+  const remainder = await renderContractPdf(REMAINDER_SAMPLE_CONTEXT);
+  await fs.writeFile(`${OUT_DIR}\\SAMPLE_CONTRACT_REMAINDER.pdf`, remainder);
+  // eslint-disable-next-line no-console
+  console.log(`Wrote SAMPLE_CONTRACT_REMAINDER.pdf (${remainder.length} bytes)`);
 }
 
 main().catch((error) => {

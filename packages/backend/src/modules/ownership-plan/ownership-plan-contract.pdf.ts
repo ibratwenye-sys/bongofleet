@@ -271,8 +271,14 @@ function group(items: ContractItem[]): ContractItem {
  */
 export function buildContractContent(ctx: ContractContext): ContractItem[] {
   const totalOwed = ctx.plan.totalPrice.minus(ctx.plan.downPayment);
-  const instalments = totalOwed.dividedBy(ctx.plan.dailyAmount).ceil().toNumber();
-  const hasValidInstalments = Number.isFinite(instalments) && instalments > 0;
+  // fullDays/remainder (Stage F3c Part 1), not days x dailyAmount: the driver
+  // only pays a full dailyAmount on fullDays of the term - the Stage E daily-
+  // charge generator caps the final charge at whatever balance is left, so a
+  // totalOwed that isn't an exact multiple of dailyAmount always closes with
+  // one smaller final charge. Printing days x dailyAmount as "the total"
+  // overstates by exactly that shortfall on a document the driver signs.
+  const fullDays = totalOwed.dividedBy(ctx.plan.dailyAmount).floor().toNumber();
+  const hasValidInstalments = Number.isFinite(fullDays) && totalOwed.greaterThan(0);
   const destination = paymentDestinationPhrase(ctx.paymentAccounts);
 
   const items: ContractItem[] = [];
@@ -342,24 +348,34 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   items.push(text('heading', 'MASHARTI YA MKATABA', 'TERMS OF THE AGREEMENT'));
   items.push(space());
 
-  // 1. The daily obligation, the payment destination, and (Stage F3 Part 4)
-  // the total the driver will actually pay - computed as dailyAmount x
-  // instalmentCount and never typed or read from another field, so an
-  // owner sees their own term's arithmetic before anyone signs. The
-  // declared value in the recital above is a SEPARATE figure and is never
-  // reconciled against this one.
+  // 1. The daily obligation, the payment destination, and (Stage F3 Part 4,
+  // corrected Stage F3c Part 1) the total the driver will actually pay - the
+  // total is always totalOwed, never days x dailyAmount, and never typed or
+  // read from another field, so an owner sees their own term's arithmetic
+  // before anyone signs. The declared value in the recital above is a
+  // SEPARATE figure and is never reconciled against this one. The obligation
+  // sentence's day count is fullDays (not a rounded-up instalment count), so
+  // it never asserts dailyAmount on the final day when a smaller remainder
+  // is actually charged that day - the remainder is stated once, below, in
+  // the total sentence only.
   {
-    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${withoutShillingSuffix(moneyWithWords(ctx.plan.dailyAmount))} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(instalments)} mfululizo.`;
-    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${withoutShillingSuffix(money(ctx.plan.dailyAmount))} TZS every day after the date of this agreement, for ${instalments} consecutive days.`;
+    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${withoutShillingSuffix(moneyWithWords(ctx.plan.dailyAmount))} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(fullDays)} mfululizo.`;
+    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${withoutShillingSuffix(money(ctx.plan.dailyAmount))} TZS every day after the date of this agreement, for ${fullDays} consecutive days.`;
     const paymentSw = `Malipo yote yatafanyika ${destination.sw}`;
     const paymentEn = `All payments shall be made ${destination.en}`;
 
-    const total = ctx.plan.dailyAmount.times(instalments);
+    const remainder = totalOwed.minus(ctx.plan.dailyAmount.times(fullDays));
+    const hasRemainder = hasValidInstalments && remainder.greaterThan(0);
+
     const totalSw = hasValidInstalments
-      ? `Jumla ya marejesho yote ni shilingi za kitanzania ${moneyWithWords(total)}, yaani siku ${numberWithWords(instalments)} kwa shilingi ${moneyWithWords(ctx.plan.dailyAmount)} kila siku.`
+      ? `Jumla ya marejesho yote ni shilingi za kitanzania ${moneyWithWords(totalOwed)}, yaani siku ${numberWithWords(fullDays)} kwa shilingi ${moneyWithWords(ctx.plan.dailyAmount)} kila siku${
+          hasRemainder ? ` na siku ya mwisho shilingi ${moneyWithWords(remainder)}` : ''
+        }.`
       : null;
     const totalEn = hasValidInstalments
-      ? `The total of all remittances is Tanzanian shillings ${money(total)}, being ${instalments} days at ${money(ctx.plan.dailyAmount)} each day.`
+      ? `The total of all remittances is Tanzanian shillings ${money(totalOwed)}, being ${fullDays} days at ${money(ctx.plan.dailyAmount)} each day${
+          hasRemainder ? ` and a final day of ${money(remainder)}` : ''
+        }.`
       : null;
 
     items.push(

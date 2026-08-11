@@ -9,6 +9,15 @@
  * contract can contain; SPARSE_SAMPLE_CONTEXT leaves everything optional
  * null - the document a new owner actually generates on day one, and the
  * one most likely to look broken.
+ *
+ * REMAINDER_SAMPLE_CONTEXT is Stage F3c Part 2: totalOwed 1,608,500 at
+ * 12,000/day is deliberately NOT an exact multiple (fullDays 134, remainder
+ * 500) - neither of the other two samples exercises the final-day clause in
+ * the total repayment sentence (FULL_SAMPLE_CONTEXT's totalOwed happens to
+ * be non-exact too, but that was an accident this stage fixed, not something
+ * either sample was built to demonstrate). This is the one permanent,
+ * reviewable artifact that shows the fix - and would catch a regression back
+ * to days x dailyAmount.
  */
 import { Prisma, PaymentAccountKind } from '@prisma/client';
 import { ContractContext } from '../src/modules/ownership-plan/ownership-plan-contract.pdf';
@@ -106,4 +115,60 @@ export const SPARSE_SAMPLE_CONTEXT: ContractContext = {
   },
   guarantor: null,
   paymentAccounts: [],
+};
+
+export const REMAINDER_SAMPLE_CONTEXT: ContractContext = {
+  renderedAt: new Date('2026-08-01T00:00:00.000Z'),
+  tenant: {
+    name: 'Mfano Fleet Ltd',
+    physicalAddress: 'Barabara ya Mandela, Kariakoo, Dar es Salaam',
+    directorName: 'Amina Said',
+  },
+  driver: {
+    fullName: 'Juma Hassan Mwakalinga',
+    nationalId: '00000000-00000-00000-00',
+    residenceWard: 'Kariakoo',
+    residenceDistrict: 'Ilala',
+    residenceRegion: 'Dar es Salaam',
+  },
+  vehicle: {
+    registrationNumber: 'T 456 DEF',
+    chassisNumber: 'MH1JF5011KK098765',
+    make: 'TVS',
+    model: 'HLX 125',
+    colour: 'Nyekundu',
+  },
+  plan: {
+    agreementDate: new Date('2026-03-03T00:00:00.000Z'),
+    // totalOwed = 1,800,000 - 191,500 = 1,608,500. 1,608,500 / 12,000 =
+    // 134.04 - fullDays 134, remainder 500 (Stage F3c Part 2).
+    totalPrice: new Prisma.Decimal(1_800_000),
+    downPayment: new Prisma.Decimal(191_500),
+    dailyAmount: new Prisma.Decimal(12_000),
+    startDate: new Date('2026-03-03T00:00:00.000Z'),
+    contractEndDate: new Date('2027-03-03T00:00:00.000Z'),
+    lateFeeAmount: new Prisma.Decimal(2_000),
+    breachAfterConsecutiveMissedDays: 5,
+  },
+  guarantor: {
+    fullName: 'Zainabu Hassan Mwakalinga',
+    phone: '+255700000000',
+    residenceWard: 'Kariakoo',
+    residenceDistrict: 'Ilala',
+    residenceRegion: 'Dar es Salaam',
+  },
+  paymentAccounts: [
+    {
+      kind: PaymentAccountKind.BANK,
+      provider: 'NMB',
+      accountNumber: '0000000000',
+      accountName: 'Mfano Fleet Ltd',
+    },
+    {
+      kind: PaymentAccountKind.LIPA_NUMBER,
+      provider: 'Azam Pesa',
+      accountNumber: '000000',
+      accountName: null,
+    },
+  ],
 };

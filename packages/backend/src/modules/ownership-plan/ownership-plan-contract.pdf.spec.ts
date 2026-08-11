@@ -208,10 +208,12 @@ describe('buildContractContent / contractTextPairs', () => {
   });
 
   it('spells the instalment count in Swahili words beside the digits (Stage F3 Part 3)', () => {
-    // totalOwed = 1,800,000 - 200,000 = 1,600,000; ceil(1,600,000 / 12,000) = 134.
+    // totalOwed = 1,800,000 - 200,000 = 1,600,000; floor(1,600,000 / 12,000) = 133
+    // full days, with a 4,000 remainder (Stage F3c Part 1 - this fixture was
+    // never an exact multiple; see the obligation day count changing here).
     const text = allText(fullContext());
 
-    expect(text).toContain('kwa siku mia moja thelathini na nne (134) mfululizo');
+    expect(text).toContain('kwa siku mia moja thelathini na tatu (133) mfululizo');
   });
 
   it('formats every shilling amount as Tanzanian "/=" notation with Swahili words beside it', () => {
@@ -239,21 +241,43 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).toContain('at 12,000/= each day');
   });
 
-  describe('Part 4 - total repayment sentence', () => {
-    it('states the total as dailyAmount x instalmentCount, computed fresh, with its own working shown', () => {
-      // dailyAmount 12,000 x instalments 134 = 1,608,000.
+  describe('Part 4 / Stage F3c Part 1 - total repayment sentence', () => {
+    it('states the total as totalOwed, never days x dailyAmount - this fixture was never an exact multiple, so the total, day count, and remainder all changed under the fix (Stage F3c)', () => {
+      // totalOwed = 1,800,000 - 200,000 = 1,600,000. floor(1,600,000 / 12,000)
+      // = 133 full days, remainder 1,600,000 - (133 x 12,000) = 4,000. The
+      // total is totalOwed (1,600,000) - NOT 133 x 12,000 (1,596,000) and NOT
+      // the old buggy 134 x 12,000 (1,608,000).
       const text = allText(fullContext());
 
       expect(text).toContain(
-        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja laki sita na elfu nane (1,608,000/=), yaani siku mia moja thelathini na nne (134) kwa shilingi elfu kumi na mbili (12,000/=) kila siku.',
+        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja na laki sita (1,600,000/=), yaani siku mia moja thelathini na tatu (133) kwa shilingi elfu kumi na mbili (12,000/=) kila siku na siku ya mwisho shilingi elfu nne (4,000/=).',
       );
       expect(text).toContain(
-        'The total of all remittances is Tanzanian shillings 1,608,000/=, being 134 days at 12,000/= each day.',
+        'The total of all remittances is Tanzanian shillings 1,600,000/=, being 133 days at 12,000/= each day and a final day of 4,000/=.',
       );
     });
 
+    it('renders the old no-remainder sentence, with no trailing final-day clause, when totalOwed is an exact multiple of dailyAmount', () => {
+      // totalOwed = 1,800,000 - 240,000 = 1,560,000; 1,560,000 / 12,000 = 130 exactly.
+      const ctx = fullContext({
+        plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(240_000) },
+      });
+      const text = allText(ctx);
+
+      expect(text).toContain(
+        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja laki tano na elfu sitini (1,560,000/=), yaani siku mia moja na thelathini (130) kwa shilingi elfu kumi na mbili (12,000/=) kila siku.',
+      );
+      expect(text).toContain(
+        'The total of all remittances is Tanzanian shillings 1,560,000/=, being 130 days at 12,000/= each day.',
+      );
+      expect(text).not.toContain('na siku ya mwisho');
+      expect(text).not.toContain('and a final day of');
+      // The obligation sentence's day count agrees with the total sentence's.
+      expect(text).toContain('kwa siku mia moja na thelathini (130) mfululizo');
+    });
+
     it('drops the sentence entirely when instalmentCount is unavailable, rather than printing a partial or zero total', () => {
-      // downPayment === totalPrice => totalOwed = 0 => instalments = 0 (unavailable).
+      // downPayment === totalPrice => totalOwed = 0 => fullDays = 0 (unavailable).
       const ctx = fullContext({
         plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(1_800_000) },
       });
