@@ -650,6 +650,21 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   return items;
 }
 
+/** One text item's page span (Stage F3d Part 3) - the page doc was on right
+ *  before its Swahili line was drawn, and the page it was on right after its
+ *  English translation was drawn. pairIndex matches contractTextPairs()'s
+ *  order exactly (text items only, groups flattened, spaces skipped), so a
+ *  test can correlate a span back to the pair it belongs to without ever
+ *  parsing the rendered PDF's bytes back into text. startPage !== endPage
+ *  means a page break landed inside this single pair - the defect Part 2
+ *  fixes; this type exists so a regression back to it is a page-count
+ *  comparison, not a fragile string match against rendered PDF content. */
+export interface PairPageSpan {
+  pairIndex: number;
+  startPage: number;
+  endPage: number;
+}
+
 /** Every {sw, en} pair the contract renderer emits, in render order,
  *  recursing into `group` items - the single source for
  *  CONTRACT_SWAHILI_STRINGS.txt and for content-bearing assertions in
@@ -677,17 +692,52 @@ const FONT_SIZE: Record<'title' | 'heading' | 'body', number> = {
 
 const INDENT_WIDTH = 24;
 
+/** Tracks the current 1-based page number as pdfkit adds pages - shared by
+ *  reference between renderContractPdf's 'pageAdded' listener (which
+ *  increments it) and renderLeafItem (which reads it around the two
+ *  doc.text() calls for a pair). A plain mutable object rather than a
+ *  closure variable so renderLeafItem can read the live value regardless of
+ *  which page-break - the proactive one below, or pdfkit's own automatic
+ *  one - actually fired. */
+interface PageCounter {
+  current: number;
+}
+
 /** Renders one 'text' or 'space' item - never a 'group' (the caller expands
  *  those). Shared between the top-level render loop and group rendering so
- *  there is exactly one place that turns an item into pdfkit calls. */
+ *  there is exactly one place that turns an item into pdfkit calls - and
+ *  therefore the one place (Stage F3d Part 2) that can guarantee a text
+ *  item's Swahili line and its English translation are one atomic unit:
+ *  pdfkit's own automatic page break can otherwise land between the two
+ *  doc.text() calls below, splitting a bilingual pair across a page
+ *  boundary. Measuring the pair's combined height first and forcing a page
+ *  break before drawing, rather than letting pdfkit discover mid-item that
+ *  it doesn't fit, holds for every clause this function ever draws -
+ *  including ones added later - without each needing its own group()
+ *  wrapper. `group` (Stage F3 Part 6) is a different, still-needed
+ *  guarantee: several distinct pairs (e.g. a whole signature block) that
+ *  must stay together as one visual unit, not just each pair internally.
+ *
+ *  Returns the pair's start/end page (Stage F3d Part 3) for 'text' items so
+ *  the caller can report a PairPageSpan - captured here, not by the caller,
+ *  because only this function knows the page immediately after the
+ *  proactive addPage() above but before either doc.text() call runs. */
 function renderLeafItem(
   doc: PDFKit.PDFDocument,
   item: Extract<ContractItem, { kind: 'text' | 'space' }>,
-): void {
+  pageCounter: PageCounter,
+): { startPage: number; endPage: number } | null {
   if (item.kind === 'space') {
     doc.moveDown(item.size ?? 1);
-    return;
+    return null;
   }
+
+  const height = measureLeafHeight(doc, item);
+  const remaining = doc.page.height - doc.page.margins.bottom - doc.y;
+  if (height > remaining) {
+    doc.addPage();
+  }
+  const startPage = pageCounter.current;
 
   const align = item.style === 'title' ? 'center' : 'left';
   const indent = item.indent ? INDENT_WIDTH : 0;
@@ -700,6 +750,8 @@ function renderLeafItem(
     doc.font('Helvetica-Oblique').fontSize(9).text(item.en, { align, indent });
     doc.font('Helvetica');
   }
+
+  return { startPage, endPage: pageCounter.current };
 }
 
 /** The vertical space a leaf item would take, without drawing it - used to
@@ -758,8 +810,16 @@ function measureGroupHeight(doc: PDFKit.PDFDocument, groupItems: ContractItem[])
  * one layout property that gets an explicit check rather than relying on
  * that review alone, because a split signature block is a correctness
  * problem in a dispute, not merely a cosmetic one.
+ *
+ * The optional onPairRendered callback (Stage F3d Part 3) reports each text
+ * item's PairPageSpan as it is drawn - test-only instrumentation, never
+ * passed by real callers, that lets a test verify every pair rendered on a
+ * single page without parsing the finished PDF's bytes back into text.
  */
-export function renderContractPdf(ctx: ContractContext): Promise<Buffer> {
+export function renderContractPdf(
+  ctx: ContractContext,
+  onPairRendered?: (span: PairPageSpan) => void,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const chunks: Buffer[] = [];
@@ -767,7 +827,13 @@ export function renderContractPdf(ctx: ContractContext): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    for (const item of buildContractContent(ctx)) {
+    const pageCounter: PageCounter = { current: 1 };
+    doc.on('pageAdded', () => {
+      pageCounter.current += 1;
+    });
+    let pairIndex = 0;
+
+    const renderItem = (item: ContractItem): void => {
       if (item.kind === 'group') {
         const height = measureGroupHeight(doc, item.items);
         const remaining = doc.page.height - doc.page.margins.bottom - doc.y;
@@ -775,11 +841,19 @@ export function renderContractPdf(ctx: ContractContext): Promise<Buffer> {
           doc.addPage();
         }
         for (const child of item.items) {
-          renderLeafItem(doc, child as Extract<ContractItem, { kind: 'text' | 'space' }>);
+          renderItem(child);
         }
-        continue;
+        return;
       }
-      renderLeafItem(doc, item);
+      const span = renderLeafItem(doc, item, pageCounter);
+      if (span) {
+        onPairRendered?.({ pairIndex, ...span });
+        pairIndex += 1;
+      }
+    };
+
+    for (const item of buildContractContent(ctx)) {
+      renderItem(item);
     }
 
     doc.end();

@@ -5,7 +5,13 @@ import {
   ordinal,
   renderContractPdf,
   ContractContext,
+  PairPageSpan,
 } from './ownership-plan-contract.pdf';
+import {
+  FULL_SAMPLE_CONTEXT,
+  SPARSE_SAMPLE_CONTEXT,
+  REMAINDER_SAMPLE_CONTEXT,
+} from '../../../scripts/contract-sample-fixture';
 
 function fullContext(overrides: Partial<ContractContext> = {}): ContractContext {
   return {
@@ -329,5 +335,28 @@ describe('renderContractPdf', () => {
     // so an empty or throwing renderer cannot pass a green suite, not to
     // check layout. Ibrahim reviews the actual PDF by eye for that.
     expect(buffer.length).toBeGreaterThan(2000);
+  });
+
+  describe('every bilingual pair renders on a single page (Stage F3d Part 2/3)', () => {
+    // SAMPLE_CONTRACT_REMAINDER.pdf was observed to split
+    // "Sahihi: ______________    Mahali anapoishi: ..." from its own English
+    // translation across the page 1/2 boundary - the same defect could hit
+    // any pair, not just ones inside a group() block. Checked via the
+    // PairPageSpan the renderer reports for each pair as it draws it (Stage
+    // F3d Part 3), not by parsing the finished PDF's text back out.
+    it.each<[string, ContractContext]>([
+      ['FULL', FULL_SAMPLE_CONTEXT],
+      ['SPARSE', SPARSE_SAMPLE_CONTEXT],
+      ['REMAINDER', REMAINDER_SAMPLE_CONTEXT],
+    ])('%s sample: no pair starts on one page and ends on another', async (_label, ctx) => {
+      const spans: PairPageSpan[] = [];
+      await renderContractPdf(ctx, (span) => spans.push(span));
+
+      const pairCount = contractTextPairs(ctx).length;
+      expect(spans).toHaveLength(pairCount);
+
+      const split = spans.filter((s) => s.startPage !== s.endPage);
+      expect(split).toEqual([]);
+    });
   });
 });

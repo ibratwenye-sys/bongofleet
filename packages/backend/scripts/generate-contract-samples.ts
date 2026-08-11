@@ -1,10 +1,25 @@
 /**
- * Regenerates the two contract review PDFs Ibrahim reads for layout and
- * pagination - the one thing the content-model unit tests cannot see (a
- * clause drawn off the bottom of a page passes every text assertion).
+ * Regenerates EVERY review artifact Ibrahim proofreads from, in one command
+ * (Stage F3d Part 1): the three contract PDFs (layout and pagination - the
+ * one thing the content-model unit tests cannot see, a clause drawn off the
+ * bottom of a page passes every text assertion) AND both copies of
+ * CONTRACT_SWAHILI_STRINGS.txt - the repo-root tracked copy and the
+ * Desktop review-folder copy.
  *
- * Writes to the Desktop review folder, NOT the repo - these carry plausible
- * NIDA numbers and must never be committed.
+ * Before this, the review-folder copy of CONTRACT_SWAHILI_STRINGS.txt had no
+ * script writing to it at all - someone had hand-copied it into the review
+ * folder once (Stage F3a) and nothing ever refreshed it again, so it silently
+ * fell behind Stage F3b and F3c while the PDFs and the repo-root copy moved
+ * on. Both copies are now built here from the exact same
+ * buildSwahiliStringsDump() (see contract-swahili-dump.ts) that
+ * dump-contract-swahili-strings.ts uses for the repo-root copy on its own -
+ * one function, two destinations, so they cannot diverge from each other or
+ * from the real renderer again.
+ *
+ * The PDFs and the review-folder text copy write to the Desktop review
+ * folder, NOT the repo - they carry plausible NIDA numbers and must never be
+ * committed. The repo-root text copy is the proofread reference under
+ * version control and is safe to commit.
  *
  * Depends on @bongofleet/shared-lib's compiled output (formatShillings) -
  * the "precontract:generate-samples" script rebuilds it first, so this
@@ -14,7 +29,9 @@
  * Run: pnpm --filter backend run contract:generate-samples
  */
 import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 import { renderContractPdf } from '../src/modules/ownership-plan/ownership-plan-contract.pdf';
+import { buildSwahiliStringsDump } from './contract-swahili-dump';
 import {
   FULL_SAMPLE_CONTEXT,
   SPARSE_SAMPLE_CONTEXT,
@@ -42,6 +59,18 @@ async function main(): Promise<void> {
   await fs.writeFile(`${OUT_DIR}\\SAMPLE_CONTRACT_REMAINDER.pdf`, remainder);
   // eslint-disable-next-line no-console
   console.log(`Wrote SAMPLE_CONTRACT_REMAINDER.pdf (${remainder.length} bytes)`);
+
+  const dump = buildSwahiliStringsDump(FULL_SAMPLE_CONTEXT);
+
+  const reviewFolderPath = `${OUT_DIR}\\CONTRACT_SWAHILI_STRINGS.txt`;
+  await fs.writeFile(reviewFolderPath, dump, 'utf8');
+  // eslint-disable-next-line no-console
+  console.log(`Wrote ${reviewFolderPath}`);
+
+  const repoRootPath = path.join(__dirname, '../../../CONTRACT_SWAHILI_STRINGS.txt');
+  await fs.writeFile(repoRootPath, dump, 'utf8');
+  // eslint-disable-next-line no-console
+  console.log(`Wrote ${repoRootPath}`);
 }
 
 main().catch((error) => {
