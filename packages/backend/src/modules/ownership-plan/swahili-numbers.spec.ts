@@ -45,15 +45,30 @@ describe('toSwahiliWords - fallback (mandatory per Stage F3 Part 3)', () => {
   });
 });
 
-describe('toSwahiliWords - all four groups plus a non-zero sub-1000 remainder (Stage F3a Part 5c)', () => {
-  // 1,654,230 - a real possibility (12,345/day x 134 days lands nearby) that
-  // the golden table never exercised: milioni, laki, elfu AND remainder all
-  // non-zero at once. Documented here, not silently special-cased - see the
-  // Stage F3a report for the open question this raises.
-  it('renders with three "na"s, applying rule (b) once between groups and rule (a) twice within compound counts', () => {
-    expect(toSwahiliWords(1_654_230)).toBe(
-      'milioni moja laki sita elfu hamsini na nne na mia mbili na thelathini',
-    );
+describe('toSwahiliWords - fallback when all four groups are simultaneously non-zero (Stage F3b Part 1)', () => {
+  // 1,654,230 used to render "milioni moja laki sita elfu hamsini na nne na
+  // mia mbili na thelathini" - three consecutive "na"s (Stage F3a Part 5c
+  // found this; Ibrahim ruled it out as a mis-transcription risk). Now
+  // falls back to digits only, same as every other fallback case.
+  it('falls back to null for 1,654,230 (milioni, laki, elfu, and remainder all non-zero)', () => {
+    expect(toSwahiliWords(1_654_230)).toBeNull();
+  });
+
+  it('falls back to null for 2,345,678 (all four groups non-zero)', () => {
+    expect(toSwahiliWords(2_345_678)).toBeNull();
+  });
+
+  it('does NOT fall back for 1,654,000 - same three leading groups, but a zero remainder', () => {
+    expect(toSwahiliWords(1_654_000)).toBe('milioni moja laki sita na elfu hamsini na nne');
+  });
+
+  it('does NOT fall back for 1,000,230 - only milioni and the remainder are non-zero (laki and elfu are zero)', () => {
+    expect(toSwahiliWords(1_000_230)).toBe('milioni moja na mia mbili na thelathini');
+  });
+
+  it('leaves every golden-table entry with a zero remainder unaffected - 1,608,000 and 1,800,000 keep their words', () => {
+    expect(toSwahiliWords(1_608_000)).toBe('milioni moja laki sita na elfu nane');
+    expect(toSwahiliWords(1_800_000)).toBe('milioni moja na laki nane');
   });
 });
 

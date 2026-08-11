@@ -22,6 +22,16 @@
  * for anything outside 1..999,999,999, or a non-integer - callers fall
  * back to digits-only. A wrong word on a signed contract is worse than a
  * missing one.
+ *
+ * One more fallback, added in Stage F3b: when milioni, laki, elfu AND the
+ * sub-1000 remainder are ALL non-zero at once (e.g. 1,654,230 ->
+ * "milioni moja laki sita elfu hamsini na nne na mia mbili na thelathini"),
+ * rules (a) and (b) each fire correctly but the result carries three
+ * consecutive "na"s - dense enough to be a mis-transcription risk on a
+ * signed document, which is exactly what a fallback exists for. Any number
+ * with a zero remainder (1,608,000, 1,800,000, ...) is unaffected and keeps
+ * its words - the fallback is specifically the four-simultaneous-groups
+ * case, not "any large number".
  */
 
 const UNITS_SW = ['', 'moja', 'mbili', 'tatu', 'nne', 'tano', 'sita', 'saba', 'nane', 'tisa'];
@@ -85,11 +95,23 @@ export function toSwahiliWords(n: number): string | null {
     return null;
   }
 
-  const groupPhrases: string[] = [];
+  const counts: number[] = [];
   let remaining = n;
-  for (const { value, word } of GROUPS) {
-    const count = Math.floor(remaining / value);
+  for (const { value } of GROUPS) {
+    counts.push(Math.floor(remaining / value));
     remaining %= value;
+  }
+  const [milioniCount, lakiCount, elfuCount] = counts;
+
+  // Stage F3b: all four groups non-zero at once - fall back rather than
+  // stack three "na"s. See the doc comment above.
+  if (milioniCount > 0 && lakiCount > 0 && elfuCount > 0 && remaining > 0) {
+    return null;
+  }
+
+  const groupPhrases: string[] = [];
+  for (const [index, { word }] of GROUPS.entries()) {
+    const count = counts[index];
     if (count > 0) {
       const countWords = wordsUnder1000(count);
       if (!countWords) return null;
