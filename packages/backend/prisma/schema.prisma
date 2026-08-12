@@ -126,6 +126,7 @@ model Tenant {
   maintenanceReminders MaintenanceReminder[]
   transportJobs     TransportJob[]
   paymentAccounts   PaymentAccount[]
+  dayExcusals       DayExcusal[]
 
   @@map("tenants")
 }
@@ -611,6 +612,60 @@ model OwnershipPlan {
   @@index([tenantId, status])
   @@index([tenantId, driverId])
   @@map("ownership_plans")
+}
+
+enum DayExcusalStatus {
+  REQUESTED
+  APPROVED
+  DECLINED
+
+  @@map("day_excusal_status")
+}
+
+/// Stage G4 - Clause 2 fines a driver only when he has NOT told his
+/// supervisor the reason for a missed day; a phoned-in funeral or sick
+/// relative was never meant to read the same as a driver who vanished. This
+/// is what lets computeConsecutiveMissedDays (ownership-plan.derivation.ts)
+/// tell the two apart.
+///
+/// Keyed on (ownershipPlanId, excusedDate), NOT dailyAssignmentId - a driver,
+/// or staff on his behalf, can give notice for a day before the nightly
+/// generator has created that day's assignment row. ownershipPlanId is a
+/// plain scalar, matching DailyAssignment's own reference to a plan (see
+/// that model's comment) - existence and same-tenant are checked in the
+/// service layer.
+///
+/// Modelled as a request with a status, not a flag, because the driver app
+/// will eventually create these itself (REQUESTED, requestedByUserId set,
+/// no immediate decision) - NOT built in this stage, but the model must not
+/// need to change when it is. Staff-created excusals are APPROVED
+/// immediately (decidedByUserId/decidedAt set at creation).
+///
+/// Prisma cannot express a partial unique index ("at most one APPROVED row
+/// per date"), so this deliberately allows multiple rows for the same date.
+/// computeConsecutiveMissedDays treats ANY APPROVED row for a date as
+/// excusing it - REQUESTED and DECLINED rows are never read for that
+/// purpose. An excusal changes the judgement signal only: it must never be
+/// joined into totalOwed/amountBilled/amountPaid/remainingToBill/
+/// remainingToOwn, the same rule DESIGN_HIRE_PURCHASE.md §9c gives the late
+/// fine - the charge still stands and the driver still owes it.
+model DayExcusal {
+  id              String           @id @default(cuid())
+  tenantId        String           @map("tenant_id")
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  ownershipPlanId String           @map("ownership_plan_id")
+  excusedDate     DateTime         @db.Date @map("excused_date")
+  reason          String
+  status          DayExcusalStatus @default(REQUESTED)
+  /// Null when staff-created (an OWNER/MANAGER typing this in on the
+  /// driver's behalf) - set once the driver app can create these itself.
+  requestedByUserId String?   @map("requested_by_user_id")
+  decidedByUserId   String?   @map("decided_by_user_id")
+  decidedAt         DateTime? @map("decided_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, ownershipPlanId, excusedDate])
+  @@map("day_excusals")
 }
 
 enum PaymentAccountKind {

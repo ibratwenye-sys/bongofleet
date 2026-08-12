@@ -154,6 +154,16 @@ describe('OwnershipPlan (e2e)', () => {
       .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .expect(200);
 
+    // Stage G4: reusing this driver login (not a fresh /auth/login call) -
+    // that endpoint is rate-limited to 5/min and this file is already near
+    // that ceiling. A DRIVER-role token must not be able to create an
+    // excusal, even for their own plan.
+    await request(app.getHttpServer())
+      .post(`/ownership-plans/${planRes.body.id}/excusals`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .send({ excusedDate: '2026-01-01', reason: 'Should never be reachable' })
+      .expect(403);
+
     const otherLogin = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: otherEmail, password: 'driverpass123' })
@@ -384,6 +394,148 @@ describe('OwnershipPlan (e2e)', () => {
         uploaded.body.id,
         firstGenerate.body.id,
       ]);
+    });
+  });
+
+  describe('day excusals (Stage G4)', () => {
+    function daysAgoIso(n: number): string {
+      return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    }
+
+    it('OWNER can create (immediately APPROVED), list, and decline/revoke an excusal', async () => {
+      const { accessToken } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'X1');
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+      const planId = planRes.body.id as string;
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/ownership-plans/${planId}/excusals`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ excusedDate: daysAgoIso(1), reason: 'Msiba wa jamaa - phoned supervisor' })
+        .expect(201);
+
+      expect(createRes.body.status).toBe('APPROVED');
+      expect(createRes.body.decidedByUserId).toBeTruthy();
+      expect(createRes.body.decidedAt).toBeTruthy();
+      expect(createRes.body.requestedByUserId).toBeFalsy();
+
+      const listRes = await request(app.getHttpServer())
+        .get(`/ownership-plans/${planId}/excusals`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(listRes.body).toHaveLength(1);
+      expect(listRes.body[0].id).toBe(createRes.body.id);
+
+      const declineRes = await request(app.getHttpServer())
+        .patch(`/ownership-plans/${planId}/excusals/${createRes.body.id}/decline`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(declineRes.body.status).toBe('DECLINED');
+
+      // Declining again is rejected, not silently accepted.
+      await request(app.getHttpServer())
+        .patch(`/ownership-plans/${planId}/excusals/${createRes.body.id}/decline`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(400);
+    });
+
+    // The DRIVER-role rejection is covered above, in "lets a DRIVER GET
+    // their own plan..." (reusing that test's driver login rather than
+    // spending another /auth/login call - see the comment there).
+
+    it('cross-tenant create and list both return 404, not 403', async () => {
+      const { accessToken } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'X3');
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+
+      const { accessToken: otherTenantToken } = await signupOwner(app, {
+        email: 'owner2@other-fleet.test',
+        companyName: 'Other Fleet',
+        phone: '+254700000099',
+      });
+
+      await request(app.getHttpServer())
+        .post(`/ownership-plans/${planRes.body.id}/excusals`)
+        .set('Authorization', `Bearer ${otherTenantToken}`)
+        .send({ excusedDate: daysAgoIso(1), reason: 'Cross-tenant probe' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .get(`/ownership-plans/${planRes.body.id}/excusals`)
+        .set('Authorization', `Bearer ${otherTenantToken}`)
+        .expect(404);
+    });
+
+    it('an APPROVED excusal moves consecutiveMissedDays but touches no money figure', async () => {
+      const { accessToken } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'X4');
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+      const planId = planRes.body.id as string;
+
+      // Two unpaid, elapsed assigned days, seeded directly (no need to run
+      // the nightly generator for this) - an unexcused streak of 2.
+      await prisma.client.dailyAssignment.create({
+        data: {
+          tenantId: planRes.body.tenantId,
+          driverId,
+          motorcycleId,
+          ownershipPlanId: planId,
+          assignedDate: new Date(daysAgoIso(2)),
+          targetAmount: 12000,
+        },
+      });
+      await prisma.client.dailyAssignment.create({
+        data: {
+          tenantId: planRes.body.tenantId,
+          driverId,
+          motorcycleId,
+          ownershipPlanId: planId,
+          assignedDate: new Date(daysAgoIso(1)),
+          targetAmount: 12000,
+        },
+      });
+
+      const before = await request(app.getHttpServer())
+        .get(`/ownership-plans/${planId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(before.body.consecutiveMissedDays).toBe(2);
+
+      await request(app.getHttpServer())
+        .post(`/ownership-plans/${planId}/excusals`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ excusedDate: daysAgoIso(2), reason: 'Mgonjwa - alimjulisha msimamizi' })
+        .expect(201);
+
+      const after = await request(app.getHttpServer())
+        .get(`/ownership-plans/${planId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      // The excused day is transparent - only the other, unexcused day counts.
+      expect(after.body.consecutiveMissedDays).toBe(1);
+
+      // Every money figure, asserted individually, unchanged by the excusal.
+      expect(after.body.amountDue).toBe(before.body.amountDue);
+      expect(after.body.amountPaid).toBe(before.body.amountPaid);
+      expect(after.body.amountBilled).toBe(before.body.amountBilled);
+      expect(after.body.netPosition).toBe(before.body.netPosition);
+      expect(after.body.daysBehind).toBe(before.body.daysBehind);
+      expect(after.body.daysAhead).toBe(before.body.daysAhead);
+      expect(after.body.remainingToOwn).toBe(before.body.remainingToOwn);
+      expect(after.body.remainingToBill).toBe(before.body.remainingToBill);
     });
   });
 });

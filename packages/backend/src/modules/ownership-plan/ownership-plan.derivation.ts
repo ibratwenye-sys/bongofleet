@@ -38,6 +38,14 @@ export interface PlanPosition {
    *  to derive consecutiveMissedDays (see computeConsecutiveMissedDays).
    *  Order and date range don't matter; rows after `today` are ignored. */
   assignmentPayments: AssignmentPaidRow[];
+  /** Stage G4 - dates with an APPROVED DayExcusal, already filtered to that
+   *  status by the caller (this file makes no Prisma calls and knows nothing
+   *  of DayExcusal.status - see ownership-plan.service.ts). Order doesn't
+   *  matter, and a date need not have a matching assignmentPayments row yet -
+   *  see computeConsecutiveMissedDays. Read only by that function; every
+   *  money figure in DerivedPlanFigures is computed without looking at this
+   *  at all. */
+  excusedDates: Date[];
 }
 
 export interface DerivedPlanFigures {
@@ -225,15 +233,34 @@ export function computeRemainingUnreserved(
  * Deliberately independent of daysBehind (see DerivedPlanFigures) - do not
  * derive one from the other, or the "one miss a week" vs "five in a row"
  * distinction this function exists for collapses back into the same number.
+ *
+ * Stage G4 - an excused date (an APPROVED DayExcusal - see excusedDates on
+ * PlanPosition) is transparent to the run: `continue`, not `break` and not
+ * skip-the-count. It neither extends the streak (like a paid day would stop
+ * it) nor breaks it (an unexcused miss right before an excused day still
+ * chains through to one right after) - it behaves exactly like a day with no
+ * assignment row, which is the whole point: unexcused Monday, excused
+ * Tuesday, unexcused Wednesday is a run of two, not one, not zero. A
+ * REQUESTED or DECLINED excusal must never reach this function at all - the
+ * caller filters to APPROVED before building excusedDates - so there is
+ * nothing here to gate on status.
  */
-export function computeConsecutiveMissedDays(rows: AssignmentPaidRow[], today: Date): number {
+export function computeConsecutiveMissedDays(
+  rows: AssignmentPaidRow[],
+  today: Date,
+  excusedDates: Date[] = [],
+): number {
   const elapsedBefore = dateOnlyInDarEsSalaam(today);
+  const excused = new Set(excusedDates.map((d) => dateOnly(d).getTime()));
   const relevant = rows
     .filter((row) => dateOnly(row.assignedDate).getTime() < elapsedBefore.getTime())
     .sort((a, b) => b.assignedDate.getTime() - a.assignedDate.getTime());
 
   let count = 0;
   for (const row of relevant) {
+    if (excused.has(dateOnly(row.assignedDate).getTime())) {
+      continue;
+    }
     if (row.paidAmount.greaterThanOrEqualTo(row.targetAmount)) {
       break;
     }
@@ -278,7 +305,11 @@ export function derivePlanFigures(
   // compute its own Africa/Dar_es_Salaam day boundary (Stage G3 Part 2); a
   // UTC-truncated value has already lost the information that distinguishes
   // them for the first three hours of every local day.
-  const consecutiveMissedDays = computeConsecutiveMissedDays(input.assignmentPayments, today);
+  const consecutiveMissedDays = computeConsecutiveMissedDays(
+    input.assignmentPayments,
+    today,
+    input.excusedDates,
+  );
 
   const daysLeft = input.contractEndDate
     ? countActiveWeekdaysAfter(todayOnly, input.contractEndDate, input.activeWeekdays)

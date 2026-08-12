@@ -20,8 +20,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { OwnershipPlanService } from './ownership-plan.service';
 import { OwnershipPlanGeneratorService } from './ownership-plan-generator.service';
 import { OwnershipPlanContractService } from './ownership-plan-contract.service';
+import { OwnershipPlanExcusalService } from './ownership-plan-excusal.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
+import { CreateDayExcusalDto } from './dto/create-day-excusal.dto';
 
 // No DELETE - cancelling is status = CANCELLED. A plan with payments against
 // it must never vanish.
@@ -32,6 +34,7 @@ export class OwnershipPlanController {
     private readonly ownershipPlanService: OwnershipPlanService,
     private readonly generatorService: OwnershipPlanGeneratorService,
     private readonly contractService: OwnershipPlanContractService,
+    private readonly excusalService: OwnershipPlanExcusalService,
   ) {}
 
   @Post()
@@ -107,5 +110,33 @@ export class OwnershipPlanController {
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   listContracts(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.contractService.listAll(id, actor);
+  }
+
+  // Stage G4. OWNER/MANAGER only - a RIDER token must not be able to create
+  // one (that's the future driver-app request path, not this stage).
+  @Post(':id/excusals')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  createExcusal(
+    @Param('id') id: string,
+    @Body() dto: CreateDayExcusalDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.excusalService.create(id, dto, actor);
+  }
+
+  @Get(':id/excusals')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  listExcusals(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.excusalService.list(id, actor);
+  }
+
+  @Patch(':id/excusals/:excusalId/decline')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  declineExcusal(
+    @Param('id') id: string,
+    @Param('excusalId') excusalId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.excusalService.decline(id, excusalId, actor);
   }
 }

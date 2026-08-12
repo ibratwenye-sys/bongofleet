@@ -25,6 +25,7 @@ function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
     contractEndDate: null,
     activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
     assignmentPayments: [],
+    excusedDates: [],
     ...overrides,
   };
 }
@@ -333,6 +334,76 @@ describe('derivePlanFigures', () => {
       expect(result.netPosition).toBe('-33500.00');
       expect(result.daysBehind).toBe(3);
       expect(result.consecutiveMissedDays).toBe(5);
+    });
+  });
+
+  describe('computeConsecutiveMissedDays with excusedDates (Stage G4)', () => {
+    it('unexcused / excused / unexcused reads as a run of two, not one', () => {
+      // day -2 (the middle, excused) is transparent: the unexcused miss
+      // before it (-3) and the unexcused miss after it (-1) still chain
+      // through as a single run of two, not reset to one by the excusal.
+      const rows = [paidRow(-3, 0), paidRow(-2, 0), paidRow(-1, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY, [day(-2)])).toBe(2);
+    });
+
+    it('a REQUESTED (or DECLINED/revoked) excusal does not reduce the streak; only an APPROVED one does', () => {
+      // computeConsecutiveMissedDays has no notion of status - the caller
+      // (ownership-plan.service.ts) is contracted to only ever pass APPROVED
+      // dates. A REQUESTED, DECLINED, or revoked excusal is therefore simply
+      // ABSENT from excusedDates - represented here as the empty-array call -
+      // and the day counts as an ordinary miss exactly as if no excusal
+      // record existed at all.
+      const rows = [paidRow(-1, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY, [])).toBe(1); // REQUESTED/DECLINED/revoked
+      expect(computeConsecutiveMissedDays(rows, TODAY, [day(-1)])).toBe(0); // APPROVED
+    });
+
+    it('an excusal on a non-riding day (no assignment row) changes nothing', () => {
+      const rows = [paidRow(-3, 0), paidRow(-1, 0)]; // day -2 has no row
+      const withoutExcusal = computeConsecutiveMissedDays(rows, TODAY, []);
+      const withExcusalOnAGap = computeConsecutiveMissedDays(rows, TODAY, [day(-2)]);
+      expect(withExcusalOnAGap).toBe(withoutExcusal);
+      expect(withExcusalOnAGap).toBe(2);
+    });
+
+    it('an excusal for a future date, before its assignment row exists, is accepted and applies once the generator creates that day', () => {
+      const futureDate = day(3);
+      // Before the row exists: harmless, same as an excusal on any other gap.
+      expect(computeConsecutiveMissedDays([], TODAY, [futureDate])).toBe(0);
+
+      // The generator later creates that day's row (still unpaid, and now
+      // elapsed) - the same excusedDates entry, unchanged, now makes it
+      // transparent instead of a miss.
+      const rows = [paidRow(-1, 0), paidRow(0, 0)]; // day 0 stands in for "that day" once elapsed
+      expect(computeConsecutiveMissedDays(rows, TODAY, [day(0)])).toBe(1); // only day -1 counts
+      expect(computeConsecutiveMissedDays(rows, TODAY, [])).toBe(1); // day 0 excluded anyway (Part 2, today)
+    });
+
+    it('every money figure is identical before and after approving an excusal - only consecutiveMissedDays moves', () => {
+      const rows = [paidRow(-1, 0)];
+      const position = basePosition({
+        amountDue: new Prisma.Decimal(12000),
+        amountPaid: new Prisma.Decimal(0),
+        amountBilled: new Prisma.Decimal(12000),
+        assignmentPayments: rows,
+      });
+
+      const before = derivePlanFigures({ ...position, excusedDates: [] }, TODAY);
+      const after = derivePlanFigures({ ...position, excusedDates: [day(-1)] }, TODAY);
+
+      expect(before.consecutiveMissedDays).toBe(1);
+      expect(after.consecutiveMissedDays).toBe(0);
+
+      expect(after.amountDue).toBe(before.amountDue);
+      expect(after.amountPaid).toBe(before.amountPaid);
+      expect(after.amountBilled).toBe(before.amountBilled);
+      expect(after.netPosition).toBe(before.netPosition);
+      expect(after.daysBehind).toBe(before.daysBehind);
+      expect(after.daysAhead).toBe(before.daysAhead);
+      expect(after.remainingToOwn).toBe(before.remainingToOwn);
+      expect(after.remainingToBill).toBe(before.remainingToBill);
+      expect(after.daysLeft).toBe(before.daysLeft);
+      expect(after.projectedCompletion).toBe(before.projectedCompletion);
     });
   });
 });

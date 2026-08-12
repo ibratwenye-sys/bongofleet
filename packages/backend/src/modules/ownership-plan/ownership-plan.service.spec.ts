@@ -26,6 +26,7 @@ describe('OwnershipPlanService', () => {
       };
       dailyAssignment: { findMany: jest.Mock };
       dailyPayment: { groupBy: jest.Mock };
+      dayExcusal: { findMany: jest.Mock };
     };
   };
 
@@ -96,6 +97,7 @@ describe('OwnershipPlanService', () => {
         },
         dailyAssignment: { findMany: jest.fn().mockResolvedValue([]) },
         dailyPayment: { groupBy: jest.fn().mockResolvedValue([]) },
+        dayExcusal: { findMany: jest.fn().mockResolvedValue([]) },
       },
     };
 
@@ -427,6 +429,63 @@ describe('OwnershipPlanService', () => {
 
       expect(result.find((p) => p.id === 'plan-1')?.consecutiveMissedDays).toBe(1);
       expect(result.find((p) => p.id === 'plan-2')?.consecutiveMissedDays).toBe(2);
+    });
+
+    it('Stage G4: threads APPROVED excusals through to consecutiveMissedDays, per plan, without touching any money figure', async () => {
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([
+        {
+          id: 'plan-1',
+          driverId: 'driver-1',
+          motorcycleId: 'veh-1',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+      ]);
+      // Two unpaid, elapsed assigned days - an unexcused streak of 2.
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([
+        {
+          id: 'a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
+        {
+          id: 'a2',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-02'),
+        },
+      ]);
+      prisma.client.dailyPayment.groupBy.mockResolvedValue([]);
+      // 2026-07-01 has an APPROVED excusal - transparent, so only 2026-07-02
+      // should count.
+      prisma.client.dayExcusal.findMany.mockResolvedValue([
+        { ownershipPlanId: 'plan-1', excusedDate: new Date('2026-07-01') },
+      ]);
+
+      const [before] = await service.list(owner);
+      expect(before.consecutiveMissedDays).toBe(1);
+
+      // Same money figures regardless of the excusal - it never touches them.
+      expect(before.amountDue).toBe('24000.00');
+      expect(before.amountPaid).toBe('0.00');
+      expect(before.amountBilled).toBe('24000.00');
+      expect(before.remainingToOwn).toBe('1800000.00');
+      expect(before.remainingToBill).toBe('1776000.00');
+
+      // Confirm it's the excusal doing the work: without it, both days count.
+      prisma.client.dayExcusal.findMany.mockResolvedValue([]);
+      const [withoutExcusal] = await service.list(owner);
+      expect(withoutExcusal.consecutiveMissedDays).toBe(2);
+      expect(withoutExcusal.amountDue).toBe(before.amountDue);
+      expect(withoutExcusal.amountPaid).toBe(before.amountPaid);
+      expect(withoutExcusal.amountBilled).toBe(before.amountBilled);
+      expect(withoutExcusal.remainingToOwn).toBe(before.remainingToOwn);
+      expect(withoutExcusal.remainingToBill).toBe(before.remainingToBill);
     });
   });
 

@@ -276,6 +276,7 @@ describe('PaymentService', () => {
         contractEndDate: null,
         activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
         assignmentPayments: [],
+        excusedDates: [],
       });
       expect(figures.daysAhead).toBe(5);
     });

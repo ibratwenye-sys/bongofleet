@@ -5,7 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OwnershipPlanStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  DayExcusalStatus,
+  OwnershipPlanStatus,
+  PaymentStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
@@ -337,10 +343,12 @@ export class OwnershipPlanService {
   }
 
   /**
-   * Derived figures for a batch of plans in two queries total, never one per
-   * plan: assignment target amounts (grouped in memory by plan), then
+   * Derived figures for a batch of plans in three queries total, never one
+   * per plan: assignment target amounts (grouped in memory by plan),
    * completed-payment sums for exactly those assignments (grouped in memory
-   * back to their plan).
+   * back to their plan), and Stage G4's APPROVED excusals (grouped by plan,
+   * independent of the assignment rows - an excusal can predate the
+   * assignment it will eventually apply to).
    */
   private async batchDerivedFigures(plans: PlanRow[]): Promise<Map<string, DerivedPlanFigures>> {
     const today = dateOnly();
@@ -408,6 +416,22 @@ export class OwnershipPlanService {
       assignmentPaymentsByPlan.set(planId, rows);
     }
 
+    // Stage G4 - only APPROVED rows count; REQUESTED must never suppress the
+    // breach flag and DECLINED/revoked must never have suppressed it either
+    // (see computeConsecutiveMissedDays). No date filter: an excusal for a
+    // future date is accepted before its assignment row exists and simply
+    // has nothing to match yet (see DayExcusal's own comment).
+    const excusals = await this.prisma.client.dayExcusal.findMany({
+      where: { ownershipPlanId: { in: planIds }, status: DayExcusalStatus.APPROVED },
+      select: { ownershipPlanId: true, excusedDate: true },
+    });
+    const excusedDatesByPlan = new Map<string, Date[]>();
+    for (const e of excusals) {
+      const dates = excusedDatesByPlan.get(e.ownershipPlanId) ?? [];
+      dates.push(e.excusedDate);
+      excusedDatesByPlan.set(e.ownershipPlanId, dates);
+    }
+
     const result = new Map<string, DerivedPlanFigures>();
     for (const plan of plans) {
       result.set(
@@ -423,6 +447,7 @@ export class OwnershipPlanService {
             contractEndDate: plan.contractEndDate,
             activeWeekdays: plan.activeWeekdays,
             assignmentPayments: assignmentPaymentsByPlan.get(plan.id) ?? [],
+            excusedDates: excusedDatesByPlan.get(plan.id) ?? [],
           },
           today,
         ),
