@@ -7,9 +7,18 @@ import { Prisma } from '@prisma/client';
  */
 export interface AssignmentPaidRow {
   assignedDate: Date;
+  /** Stage G3 Part 1 - this assignment's own charge, NOT the plan's flat
+   *  dailyAmount. The final instalment of a plan is deliberately smaller
+   *  than dailyAmount (whatever remains of totalOwed), so comparing against
+   *  dailyAmount would mark every driver's last day as missed. */
+  targetAmount: Prisma.Decimal;
   /** COMPLETED-only, matching amountPaid's own convention throughout this
    *  file - a PENDING payment does not clear a day for breach purposes any
-   *  more than it moves the driver closer to owning the vehicle. */
+   *  more than it moves the driver closer to owning the vehicle. Reflects
+   *  Stage F's oldest-first allocation cascade (payment.service.ts §7), so a
+   *  driver who paid several days ahead has those future rows already
+   *  carrying their own allocated amount - this file never re-derives that
+   *  allocation, only reads it. */
   paidAmount: Prisma.Decimal;
 }
 
@@ -58,6 +67,23 @@ export interface DerivedPlanFigures {
 
 function dateOnly(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+// East Africa Time is a fixed UTC+3 with no DST, matching the cron jobs'
+// own timezone (Africa/Dar_es_Salaam).
+const DAR_ES_SALAAM_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Stage G3 Part 2 - the calendar date `instant` falls on in Africa/Dar_es_Salaam,
+ * not UTC. assignedDate columns are plain dates (no time component, already
+ * the correct calendar day - see AssignmentPaidRow), but `instant` ("now") is
+ * a real timestamp, and UTC is 3 hours behind Dar es Salaam: for the first
+ * three hours of every local day, a naive UTC dateOnly() would still report
+ * yesterday's date. Only ever apply this to an instant, never to an
+ * assignedDate that is already a bare calendar date.
+ */
+function dateOnlyInDarEsSalaam(instant: Date): Date {
+  return dateOnly(new Date(instant.getTime() + DAR_ES_SALAAM_UTC_OFFSET_MS));
 }
 
 function isActiveWeekday(date: Date, activeWeekdays: number[]): boolean {
@@ -167,14 +193,27 @@ export function computeRemainingUnreserved(
 }
 
 /**
- * Stage G2 Part 1. The run of consecutive ASSIGNED days, ending at today
- * (inclusive) and walking backwards, where paidAmount is zero - stopping at
- * the first day that has any COMPLETED payment at all, however small. A
- * shortfall day (paid something, just not enough) breaks the run the same
- * way "kutofanya malipo" (failing to pay) in the contract means paying
- * nothing, not paying less - this mirrors the codebase's own existing
- * NO_PAYMENT/SHORTFALL split (see missed-payment-notification.service.ts),
- * not a new distinction invented here.
+ * The run of consecutive ASSIGNED days, ending at yesterday (Stage G3 Part 2
+ * - today is excluded; see below) and walking backwards, where paidAmount
+ * falls short of that day's own targetAmount - stopping at the first day
+ * paid in full or better.
+ *
+ * Stage G3 Part 1 - "paid" means paidAmount >= targetAmount, not merely
+ * nonzero. A driver owing 12,000 who pays 500 has not paid that day; letting
+ * any nonzero payment reset the streak would let a driver dribble a token
+ * amount indefinitely and never trip the breach flag. >= rather than ==
+ * because an overpayment on a day still counts as paid. Compared against
+ * that ROW's own targetAmount, never the plan's flat dailyAmount - a plan's
+ * final instalment is deliberately smaller than dailyAmount, and comparing
+ * against dailyAmount would mark every driver's last day as missed.
+ *
+ * Stage G3 Part 2 - today does not count as missed until it has fully
+ * elapsed. The old `<=` boundary counted today's charge as missed from the
+ * moment it was created at local midnight, before the driver had all day to
+ * pay it; a threshold of 5 could turn red hours before the 5th day was even
+ * over. `today` here is the current instant (not yet truncated), so the
+ * elapsed/not-elapsed boundary is computed in Africa/Dar_es_Salaam - the
+ * cron jobs' own timezone - via dateOnlyInDarEsSalaam, not UTC.
  *
  * Only rows that actually exist count - a day with no assignment at all
  * (an inactive weekday, or one the generator hasn't backfilled yet) is not
@@ -188,14 +227,14 @@ export function computeRemainingUnreserved(
  * distinction this function exists for collapses back into the same number.
  */
 export function computeConsecutiveMissedDays(rows: AssignmentPaidRow[], today: Date): number {
-  const todayOnly = dateOnly(today);
+  const elapsedBefore = dateOnlyInDarEsSalaam(today);
   const relevant = rows
-    .filter((row) => dateOnly(row.assignedDate).getTime() <= todayOnly.getTime())
+    .filter((row) => dateOnly(row.assignedDate).getTime() < elapsedBefore.getTime())
     .sort((a, b) => b.assignedDate.getTime() - a.assignedDate.getTime());
 
   let count = 0;
   for (const row of relevant) {
-    if (!row.paidAmount.isZero()) {
+    if (row.paidAmount.greaterThanOrEqualTo(row.targetAmount)) {
       break;
     }
     count += 1;
@@ -235,7 +274,11 @@ export function derivePlanFigures(
 
   const todayOnly = dateOnly(today);
 
-  const consecutiveMissedDays = computeConsecutiveMissedDays(input.assignmentPayments, todayOnly);
+  // Not todayOnly - computeConsecutiveMissedDays needs the actual instant to
+  // compute its own Africa/Dar_es_Salaam day boundary (Stage G3 Part 2); a
+  // UTC-truncated value has already lost the information that distinguishes
+  // them for the first three hours of every local day.
+  const consecutiveMissedDays = computeConsecutiveMissedDays(input.assignmentPayments, today);
 
   const daysLeft = input.contractEndDate
     ? countActiveWeekdaysAfter(todayOnly, input.contractEndDate, input.activeWeekdays)

@@ -402,6 +402,7 @@ export class OwnershipPlanService {
       const rows = assignmentPaymentsByPlan.get(planId) ?? [];
       rows.push({
         assignedDate: a.assignedDate,
+        targetAmount: a.targetAmount,
         paidAmount: paidByAssignment.get(a.id) ?? new Prisma.Decimal(0),
       });
       assignmentPaymentsByPlan.set(planId, rows);

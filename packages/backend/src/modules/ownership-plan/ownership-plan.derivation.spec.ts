@@ -8,6 +8,10 @@ import {
   PlanPosition,
 } from './ownership-plan.derivation';
 
+// Stage G3 Part 2: computeConsecutiveMissedDays interprets `today` in
+// Africa/Dar_es_Salaam (UTC+3). 00:00Z is 03:00 local, still well inside
+// 2026-08-01 local - so TODAY reads as the same calendar day in both, and
+// offsets below need no extra adjustment for that.
 const TODAY = new Date('2026-08-01T00:00:00.000Z'); // a Saturday
 
 function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
@@ -29,8 +33,16 @@ function day(offsetFromToday: number): Date {
   return new Date(TODAY.getTime() + offsetFromToday * 24 * 60 * 60 * 1000);
 }
 
-function paidRow(offsetFromToday: number, paidAmount: number): AssignmentPaidRow {
-  return { assignedDate: day(offsetFromToday), paidAmount: new Prisma.Decimal(paidAmount) };
+function paidRow(
+  offsetFromToday: number,
+  paidAmount: number,
+  targetAmount = 12000,
+): AssignmentPaidRow {
+  return {
+    assignedDate: day(offsetFromToday),
+    targetAmount: new Prisma.Decimal(targetAmount),
+    paidAmount: new Prisma.Decimal(paidAmount),
+  };
 }
 
 describe('derivePlanFigures', () => {
@@ -181,52 +193,78 @@ describe('derivePlanFigures', () => {
     });
   });
 
-  describe('computeConsecutiveMissedDays (Stage G2 Part 1)', () => {
+  describe('computeConsecutiveMissedDays (Stage G3)', () => {
     it('empty rows -> 0', () => {
       expect(computeConsecutiveMissedDays([], TODAY)).toBe(0);
     });
 
-    it('a single unpaid day ending at today -> 1', () => {
+    it('Part 1: a 500 payment against a 12,000 day does NOT break the streak', () => {
+      const rows = [paidRow(-1, 500)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
+    });
+
+    it('Part 1: an exactly-full payment DOES break it', () => {
+      const rows = [paidRow(-1, 12000)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(0);
+    });
+
+    it('Part 1: an overpayment breaks it', () => {
+      const rows = [paidRow(-1, 15000)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(0);
+    });
+
+    it('Part 1: the final partial instalment, paid in full, counts as paid and does not show as a missed day', () => {
+      // A plan's last day can legitimately be billed less than dailyAmount -
+      // compared against dailyAmount (12,000) this would look like a huge
+      // shortfall; compared against its own targetAmount (500) it is paid.
+      const rows = [paidRow(-1, 500, 500)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(0);
+    });
+
+    it("Part 2: today's unpaid assignment is excluded from the streak", () => {
       const rows = [paidRow(0, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(0);
+    });
+
+    it("Part 2: yesterday's unpaid assignment is included", () => {
+      const rows = [paidRow(-1, 0)];
       expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
     });
 
-    it('stops at the first day (walking backward from today) with any COMPLETED payment, however small', () => {
-      const rows = [paidRow(-2, 0), paidRow(-1, 1), paidRow(0, 0)];
+    it('Part 2: an unpaid today alongside an unpaid yesterday only counts yesterday', () => {
+      const rows = [paidRow(-1, 0), paidRow(0, 0), paidRow(1, 0)];
       expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
     });
 
-    it('a shortfall day (paid something, just not enough) still breaks the run', () => {
-      const rows = [paidRow(-3, 0), paidRow(-2, 6000), paidRow(-1, 0), paidRow(0, 0)];
+    it('a driver who paid five days ahead has a streak of zero, not five', () => {
+      // Every day from yesterday through five days from now is paid in full -
+      // the oldest-first cascade guarantees the past is covered before any
+      // surplus buys future days ahead. Only the elapsed days (< today) are
+      // even examined; yesterday being paid in full stops the walk at 0.
+      const rows = [-1, 0, 1, 2, 3, 4, 5].map((offset) => paidRow(offset, 12000));
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(0);
+    });
+
+    it('a day the driver does not ride (no assignment row) neither breaks nor extends the streak - pin it', () => {
+      // day -2 has no row (an inactive weekday, or not yet backfilled) - the
+      // run walks straight past it to day -3 without breaking.
+      const rows = [paidRow(-3, 0), paidRow(-1, 0)];
       expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(2);
     });
 
-    it('a day with no assignment row at all is silently skipped, not a break', () => {
-      // day -2 has no row (an inactive weekday, or not yet backfilled) - the
-      // run walks straight past it to day -3 without breaking.
-      const rows = [paidRow(-3, 0), paidRow(-1, 0), paidRow(0, 0)];
-      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(3);
-    });
-
-    it('rows after today are ignored', () => {
-      const rows = [paidRow(0, 0), paidRow(1, 0), paidRow(2, 0)];
-      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
-    });
-
     it('row order does not matter', () => {
-      const rows = [paidRow(0, 0), paidRow(-2, 0), paidRow(-1, 0)];
+      const rows = [paidRow(-1, 0), paidRow(-3, 0), paidRow(-2, 0)];
       expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(3);
     });
   });
 
-  describe('daysBehind vs consecutiveMissedDays (Stage G2 Part 1)', () => {
+  describe('daysBehind vs consecutiveMissedDays, streak fix and full-payment rule together (Stage G2 + G3)', () => {
     it('missing one day a week for five weeks: daysBehind is 5, but never missing two in a row keeps consecutiveMissedDays at 1', () => {
-      // 35 consecutive assigned days, every 7th one (offsets -28,-21,-14,-7,0)
-      // unpaid, everything else paid in full. Today (offset 0) is itself one
-      // of the missed days, so the backward run is length 1 - day -1 was paid.
+      // 35 elapsed days ending yesterday (offsets -35..-1), every 7th one
+      // (relative to yesterday) unpaid, everything else paid in full.
       const rows: AssignmentPaidRow[] = [];
-      for (let offset = -34; offset <= 0; offset += 1) {
-        const isMissedWeek = offset % 7 === 0;
+      for (let offset = -35; offset <= -1; offset += 1) {
+        const isMissedWeek = (offset + 1) % 7 === 0;
         rows.push(paidRow(offset, isMissedWeek ? 0 : 12000));
       }
       const amountDue = new Prisma.Decimal(35 * 12000);
@@ -242,17 +280,17 @@ describe('derivePlanFigures', () => {
     });
 
     it('three days ahead then five consecutive missed days: daysBehind reads only 2, but consecutiveMissedDays (the actual repossession condition) is 5', () => {
-      // Days -7..-5 paid double (24,000 against a 12,000 target - 3 days
-      // ahead); days -4..0 (5 days) unpaid.
+      // Days -8..-6 paid double (24,000 against a 12,000 target - 3 days
+      // ahead); days -5..-1 (5 elapsed days, ending yesterday) unpaid.
       const rows: AssignmentPaidRow[] = [
+        paidRow(-8, 24000),
         paidRow(-7, 24000),
         paidRow(-6, 24000),
-        paidRow(-5, 24000),
+        paidRow(-5, 0),
         paidRow(-4, 0),
         paidRow(-3, 0),
         paidRow(-2, 0),
         paidRow(-1, 0),
-        paidRow(0, 0),
       ];
       const amountDue = new Prisma.Decimal(8 * 12000); // 96,000
       const amountPaid = new Prisma.Decimal(3 * 24000); // 72,000
@@ -265,6 +303,36 @@ describe('derivePlanFigures', () => {
       expect(result.netPosition).toBe('-24000.00');
       expect(result.daysBehind).toBe(2); // the buggy old reading
       expect(result.consecutiveMissedDays).toBe(5); // the real repossession condition
+    });
+
+    it('two days ahead, then five elapsed days of token 500 payments: daysBehind under-signals at 3 while the true 5-day miss streak - invisible under the old any-nonzero-breaks rule - is caught', () => {
+      // Days -7..-6 paid double (2 days ahead). Days -5..-1 (5 elapsed days)
+      // each get a 500 payment against a 12,000 target: under the Stage G2
+      // rule (any nonzero payment breaks the run) every one of these would
+      // have reset the streak to 0 and this run would never have been seen;
+      // under Stage G3's full-payment rule none of them count as paid, so
+      // the streak correctly reaches 5 - the real repossession trigger -
+      // while daysBehind (3) alone would still have under-stated it.
+      const rows: AssignmentPaidRow[] = [
+        paidRow(-7, 24000),
+        paidRow(-6, 24000),
+        paidRow(-5, 500),
+        paidRow(-4, 500),
+        paidRow(-3, 500),
+        paidRow(-2, 500),
+        paidRow(-1, 500),
+      ];
+      const amountDue = new Prisma.Decimal(7 * 12000); // 84,000
+      const amountPaid = new Prisma.Decimal(24000 + 24000 + 500 * 5); // 50,500
+
+      const result = derivePlanFigures(
+        basePosition({ amountDue, amountPaid, assignmentPayments: rows }),
+        TODAY,
+      );
+
+      expect(result.netPosition).toBe('-33500.00');
+      expect(result.daysBehind).toBe(3);
+      expect(result.consecutiveMissedDays).toBe(5);
     });
   });
 });
