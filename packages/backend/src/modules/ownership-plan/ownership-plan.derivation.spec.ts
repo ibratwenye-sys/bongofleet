@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
+  AssignmentPaidRow,
+  computeConsecutiveMissedDays,
   computeRemainingToOwn,
   computeRemainingUnreserved,
   derivePlanFigures,
@@ -18,8 +20,17 @@ function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
     amountBilled: new Prisma.Decimal(0),
     contractEndDate: null,
     activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+    assignmentPayments: [],
     ...overrides,
   };
+}
+
+function day(offsetFromToday: number): Date {
+  return new Date(TODAY.getTime() + offsetFromToday * 24 * 60 * 60 * 1000);
+}
+
+function paidRow(offsetFromToday: number, paidAmount: number): AssignmentPaidRow {
+  return { assignedDate: day(offsetFromToday), paidAmount: new Prisma.Decimal(paidAmount) };
 }
 
 describe('derivePlanFigures', () => {
@@ -167,6 +178,93 @@ describe('derivePlanFigures', () => {
 
       expect(remainingToOwn.toFixed(2)).toBe('20000.00');
       expect(remainingUnreserved.toFixed(2)).toBe('5000.00');
+    });
+  });
+
+  describe('computeConsecutiveMissedDays (Stage G2 Part 1)', () => {
+    it('empty rows -> 0', () => {
+      expect(computeConsecutiveMissedDays([], TODAY)).toBe(0);
+    });
+
+    it('a single unpaid day ending at today -> 1', () => {
+      const rows = [paidRow(0, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
+    });
+
+    it('stops at the first day (walking backward from today) with any COMPLETED payment, however small', () => {
+      const rows = [paidRow(-2, 0), paidRow(-1, 1), paidRow(0, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
+    });
+
+    it('a shortfall day (paid something, just not enough) still breaks the run', () => {
+      const rows = [paidRow(-3, 0), paidRow(-2, 6000), paidRow(-1, 0), paidRow(0, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(2);
+    });
+
+    it('a day with no assignment row at all is silently skipped, not a break', () => {
+      // day -2 has no row (an inactive weekday, or not yet backfilled) - the
+      // run walks straight past it to day -3 without breaking.
+      const rows = [paidRow(-3, 0), paidRow(-1, 0), paidRow(0, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(3);
+    });
+
+    it('rows after today are ignored', () => {
+      const rows = [paidRow(0, 0), paidRow(1, 0), paidRow(2, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(1);
+    });
+
+    it('row order does not matter', () => {
+      const rows = [paidRow(0, 0), paidRow(-2, 0), paidRow(-1, 0)];
+      expect(computeConsecutiveMissedDays(rows, TODAY)).toBe(3);
+    });
+  });
+
+  describe('daysBehind vs consecutiveMissedDays (Stage G2 Part 1)', () => {
+    it('missing one day a week for five weeks: daysBehind is 5, but never missing two in a row keeps consecutiveMissedDays at 1', () => {
+      // 35 consecutive assigned days, every 7th one (offsets -28,-21,-14,-7,0)
+      // unpaid, everything else paid in full. Today (offset 0) is itself one
+      // of the missed days, so the backward run is length 1 - day -1 was paid.
+      const rows: AssignmentPaidRow[] = [];
+      for (let offset = -34; offset <= 0; offset += 1) {
+        const isMissedWeek = offset % 7 === 0;
+        rows.push(paidRow(offset, isMissedWeek ? 0 : 12000));
+      }
+      const amountDue = new Prisma.Decimal(35 * 12000);
+      const amountPaid = new Prisma.Decimal(30 * 12000);
+
+      const result = derivePlanFigures(
+        basePosition({ amountDue, amountPaid, assignmentPayments: rows }),
+        TODAY,
+      );
+
+      expect(result.daysBehind).toBe(5);
+      expect(result.consecutiveMissedDays).toBe(1);
+    });
+
+    it('three days ahead then five consecutive missed days: daysBehind reads only 2, but consecutiveMissedDays (the actual repossession condition) is 5', () => {
+      // Days -7..-5 paid double (24,000 against a 12,000 target - 3 days
+      // ahead); days -4..0 (5 days) unpaid.
+      const rows: AssignmentPaidRow[] = [
+        paidRow(-7, 24000),
+        paidRow(-6, 24000),
+        paidRow(-5, 24000),
+        paidRow(-4, 0),
+        paidRow(-3, 0),
+        paidRow(-2, 0),
+        paidRow(-1, 0),
+        paidRow(0, 0),
+      ];
+      const amountDue = new Prisma.Decimal(8 * 12000); // 96,000
+      const amountPaid = new Prisma.Decimal(3 * 24000); // 72,000
+
+      const result = derivePlanFigures(
+        basePosition({ amountDue, amountPaid, assignmentPayments: rows }),
+        TODAY,
+      );
+
+      expect(result.netPosition).toBe('-24000.00');
+      expect(result.daysBehind).toBe(2); // the buggy old reading
+      expect(result.consecutiveMissedDays).toBe(5); // the real repossession condition
     });
   });
 });

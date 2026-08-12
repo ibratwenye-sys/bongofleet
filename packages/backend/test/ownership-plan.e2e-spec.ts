@@ -186,6 +186,38 @@ describe('OwnershipPlan (e2e)', () => {
     expect(res.body.breachAfterConsecutiveMissedDays).toBe(5);
   });
 
+  describe('ledger tenant scoping (Stage G2 Part 3)', () => {
+    // Confirmed from the code, not assumed: DailyAssignment carries tenantId
+    // (schema.prisma), so the fail-closed Prisma extension scopes ledger()'s
+    // dailyAssignment.findMany by tenant on its own; and ledger() calls
+    // assertCanView(plan, actor) - which 404s on an unknown/cross-tenant plan
+    // id, since OwnershipPlan.findUnique is itself tenant-scoped - before
+    // that query ever runs. A user in another tenant should therefore never
+    // reach the assignments query at all, and the response must be
+    // indistinguishable from an unknown id: 404, not 403.
+    it('returns 404, not 403, for a plan id that belongs to a different tenant', async () => {
+      const { accessToken } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'L1');
+
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+
+      const { accessToken: otherTenantToken } = await signupOwner(app, {
+        email: 'owner2@other-fleet.test',
+        companyName: 'Other Fleet',
+        phone: '+254700000099',
+      });
+
+      await request(app.getHttpServer())
+        .get(`/ownership-plans/${planRes.body.id}/ledger`)
+        .set('Authorization', `Bearer ${otherTenantToken}`)
+        .expect(404);
+    });
+  });
+
   it('rejects a MANAGER creating a plan', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
     const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'C1');

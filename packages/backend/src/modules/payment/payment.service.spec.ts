@@ -275,6 +275,7 @@ describe('PaymentService', () => {
         amountBilled: new Prisma.Decimal(12000),
         contractEndDate: null,
         activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        assignmentPayments: [],
       });
       expect(figures.daysAhead).toBe(5);
     });

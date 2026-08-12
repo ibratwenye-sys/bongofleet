@@ -353,6 +353,81 @@ describe('OwnershipPlanService', () => {
       expect(result[0].id).toBe('plan-a-lot-behind');
       expect(result[1].id).toBe('plan-current');
     });
+
+    it('Stage G2 Part 1: threads per-assignment payment rows through to consecutiveMissedDays, independent of daysBehind', async () => {
+      // plan-1: two assigned days in the past, the most recent one unpaid -
+      // a one-day-behind AND a one-day-missed-streak, same number here.
+      // plan-2: three assigned days, the earliest paid then the latest two
+      // unpaid - daysBehind (2) and consecutiveMissedDays (2) still agree
+      // here; the derivation-level tests already cover the case where they
+      // diverge. This test is only proving the service wires the rows
+      // through at all, not re-proving the arithmetic.
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([
+        {
+          id: 'plan-1',
+          driverId: 'driver-1',
+          motorcycleId: 'veh-1',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+        {
+          id: 'plan-2',
+          driverId: 'driver-2',
+          motorcycleId: 'veh-2',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+      ]);
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([
+        {
+          id: 'p1-a1',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
+        {
+          id: 'p1-a2',
+          ownershipPlanId: 'plan-1',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-02'),
+        },
+        {
+          id: 'p2-a1',
+          ownershipPlanId: 'plan-2',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-01'),
+        },
+        {
+          id: 'p2-a2',
+          ownershipPlanId: 'plan-2',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-02'),
+        },
+        {
+          id: 'p2-a3',
+          ownershipPlanId: 'plan-2',
+          targetAmount: new Prisma.Decimal(12000),
+          assignedDate: new Date('2026-07-03'),
+        },
+      ]);
+      prisma.client.dailyPayment.groupBy.mockResolvedValue([
+        { dailyAssignmentId: 'p1-a1', _sum: { amount: new Prisma.Decimal(12000) } },
+        { dailyAssignmentId: 'p2-a1', _sum: { amount: new Prisma.Decimal(12000) } },
+      ]);
+
+      const result = await service.list(owner);
+
+      expect(result.find((p) => p.id === 'plan-1')?.consecutiveMissedDays).toBe(1);
+      expect(result.find((p) => p.id === 'plan-2')?.consecutiveMissedDays).toBe(2);
+    });
   });
 
   describe('get', () => {

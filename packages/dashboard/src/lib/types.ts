@@ -437,6 +437,7 @@ export interface OwnershipPlan {
   remainingToOwn: string;
   daysBehind: number;
   daysAhead: number;
+  consecutiveMissedDays: number;
   daysLeft: number | null;
   projectedCompletion: string;
 }

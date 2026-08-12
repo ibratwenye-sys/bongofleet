@@ -23,16 +23,20 @@ const OWNERSHIP_PLAN_STATUS_STYLES: Record<string, string> = {
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_ACTIVE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
-/** Amber past graceDays, red at the plan's own breachAfterConsecutiveMissedDays
- *  - never a hardcoded threshold. A plan that's never fallen behind (daysBehind
- *  0) is never coloured, regardless of graceDays. */
+/** Stage G2 Part 1 - red and amber watch different quantities, on purpose.
+ *  Red compares consecutiveMissedDays (an unbroken run) against the plan's
+ *  own breachAfterConsecutiveMissedDays - the contract's actual repossession
+ *  condition - independently of daysBehind's sign: a driver who is net
+ *  ahead overall but has just missed a breach-length run in a row must still
+ *  show red, not green. Amber is unchanged: daysBehind (a cumulative money
+ *  position) past graceDays, never a hardcoded threshold. */
 function positionSeverity(
   daysBehind: number,
+  consecutiveMissedDays: number,
   graceDays: number,
   breachAfterConsecutiveMissedDays: number,
 ): 'ok' | 'amber' | 'red' {
-  if (daysBehind <= 0) return 'ok';
-  if (daysBehind >= breachAfterConsecutiveMissedDays) return 'red';
+  if (consecutiveMissedDays >= breachAfterConsecutiveMissedDays) return 'red';
   if (daysBehind > graceDays) return 'amber';
   return 'ok';
 }
@@ -53,6 +57,14 @@ function positionLabel(daysBehind: number, daysAhead: number): string {
   if (daysBehind > 0) return `${daysBehind} day${daysBehind === 1 ? '' : 's'} behind`;
   if (daysAhead > 0) return `${daysAhead} day${daysAhead === 1 ? '' : 's'} ahead`;
   return 'On track';
+}
+
+/** Stage G2 Part 1 - the run length itself, shown separately from
+ *  positionLabel's cumulative-position read so an owner deciding whether to
+ *  repossess sees the number the red threshold actually watches. */
+function missedStreakLabel(consecutiveMissedDays: number): string {
+  if (consecutiveMissedDays <= 0) return '—';
+  return `${consecutiveMissedDays} day${consecutiveMissedDays === 1 ? '' : 's'} missed in a row`;
 }
 
 interface CreateFormState {
@@ -478,6 +490,7 @@ export function OwnershipPage() {
               <th className="px-4 py-2 text-right font-medium text-gray-500">Paid to date</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Remaining</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Position</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Missed streak</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Start</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">End</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Days left</th>
@@ -490,13 +503,13 @@ export function OwnershipPage() {
           <tbody className="divide-y divide-gray-100">
             {plans === null ? (
               <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : plans.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">
                   No ownership plans yet.
                 </td>
               </tr>
@@ -504,6 +517,7 @@ export function OwnershipPage() {
               plans.map((plan) => {
                 const severity = positionSeverity(
                   plan.daysBehind,
+                  plan.consecutiveMissedDays,
                   plan.graceDays,
                   plan.breachAfterConsecutiveMissedDays,
                 );
@@ -530,6 +544,9 @@ export function OwnershipPage() {
                     </td>
                     <td className={`px-4 py-2 ${SEVERITY_TEXT_STYLES[severity]}`}>
                       {positionLabel(plan.daysBehind, plan.daysAhead)}
+                    </td>
+                    <td className={`px-4 py-2 ${SEVERITY_TEXT_STYLES[severity]}`}>
+                      {missedStreakLabel(plan.consecutiveMissedDays)}
                     </td>
                     <td className="px-4 py-2 text-gray-600">{plan.startDate.slice(0, 10)}</td>
                     <td className="px-4 py-2 text-gray-600">

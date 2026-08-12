@@ -5,6 +5,14 @@ import { Prisma } from '@prisma/client';
  * has already queried (see ownership-plan.service.ts) - this file does no
  * Prisma calls itself, so the arithmetic is unit-testable without a database.
  */
+export interface AssignmentPaidRow {
+  assignedDate: Date;
+  /** COMPLETED-only, matching amountPaid's own convention throughout this
+   *  file - a PENDING payment does not clear a day for breach purposes any
+   *  more than it moves the driver closer to owning the vehicle. */
+  paidAmount: Prisma.Decimal;
+}
+
 export interface PlanPosition {
   dailyAmount: Prisma.Decimal;
   totalPrice: Prisma.Decimal;
@@ -17,6 +25,10 @@ export interface PlanPosition {
   amountBilled: Prisma.Decimal;
   contractEndDate: Date | null;
   activeWeekdays: number[];
+  /** Every assignment's date + what was actually paid against it - used only
+   *  to derive consecutiveMissedDays (see computeConsecutiveMissedDays).
+   *  Order and date range don't matter; rows after `today` are ignored. */
+  assignmentPayments: AssignmentPaidRow[];
 }
 
 export interface DerivedPlanFigures {
@@ -26,6 +38,18 @@ export interface DerivedPlanFigures {
   netPosition: string;
   daysBehind: number;
   daysAhead: number;
+  /** Stage G2 Part 1 - the length of the unbroken run of assigned-but-unpaid
+   *  days ending at today. A DIFFERENT quantity from daysBehind: daysBehind
+   *  is a cumulative money position (how many days' worth of deposits the
+   *  driver is short, in total, ever), while this is how many days IN A ROW
+   *  the driver has paid nothing, right now. A driver who misses one day a
+   *  week for five weeks can have daysBehind 5 while consecutiveMissedDays
+   *  is 1 (each miss was followed by a paid day, resetting the run); a
+   *  driver who was days ahead and then missed five days straight can have
+   *  daysBehind 0 (still net-positive) while consecutiveMissedDays is 5.
+   *  This is the figure that belongs against breachAfterConsecutiveMissedDays
+   *  - see computeConsecutiveMissedDays. */
+  consecutiveMissedDays: number;
   remainingToOwn: string;
   remainingToBill: string;
   daysLeft: number | null;
@@ -143,6 +167,43 @@ export function computeRemainingUnreserved(
 }
 
 /**
+ * Stage G2 Part 1. The run of consecutive ASSIGNED days, ending at today
+ * (inclusive) and walking backwards, where paidAmount is zero - stopping at
+ * the first day that has any COMPLETED payment at all, however small. A
+ * shortfall day (paid something, just not enough) breaks the run the same
+ * way "kutofanya malipo" (failing to pay) in the contract means paying
+ * nothing, not paying less - this mirrors the codebase's own existing
+ * NO_PAYMENT/SHORTFALL split (see missed-payment-notification.service.ts),
+ * not a new distinction invented here.
+ *
+ * Only rows that actually exist count - a day with no assignment at all
+ * (an inactive weekday, or one the generator hasn't backfilled yet) is not
+ * part of the obligation sequence and is silently skipped, never treated as
+ * either a miss or a break. This is why the walk is over `rows`, not over
+ * calendar days: the assignment rows themselves already encode which days
+ * were active.
+ *
+ * Deliberately independent of daysBehind (see DerivedPlanFigures) - do not
+ * derive one from the other, or the "one miss a week" vs "five in a row"
+ * distinction this function exists for collapses back into the same number.
+ */
+export function computeConsecutiveMissedDays(rows: AssignmentPaidRow[], today: Date): number {
+  const todayOnly = dateOnly(today);
+  const relevant = rows
+    .filter((row) => dateOnly(row.assignedDate).getTime() <= todayOnly.getTime())
+    .sort((a, b) => b.assignedDate.getTime() - a.assignedDate.getTime());
+
+  let count = 0;
+  for (const row of relevant) {
+    if (!row.paidAmount.isZero()) {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/**
  * netPosition = amountPaid - amountDue is the single signed number everything
  * else reads from. daysBehind and daysAhead are two directions of the same
  * read - never compute them independently, or a driver ends up "2 days
@@ -174,6 +235,8 @@ export function derivePlanFigures(
 
   const todayOnly = dateOnly(today);
 
+  const consecutiveMissedDays = computeConsecutiveMissedDays(input.assignmentPayments, todayOnly);
+
   const daysLeft = input.contractEndDate
     ? countActiveWeekdaysAfter(todayOnly, input.contractEndDate, input.activeWeekdays)
     : null;
@@ -195,6 +258,7 @@ export function derivePlanFigures(
     netPosition: netPosition.toFixed(2),
     daysBehind,
     daysAhead,
+    consecutiveMissedDays,
     remainingToOwn: remainingToOwn.toFixed(2),
     remainingToBill: remainingToBill.toFixed(2),
     daysLeft,

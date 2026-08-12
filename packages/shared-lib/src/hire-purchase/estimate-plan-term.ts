@@ -65,18 +65,41 @@ function toIsoDate(date: Date): string {
 
 /** The calendar date of the Nth active weekday counting inclusively from
  *  `start` (start itself is day 1 if it is active) - matches how a fresh
- *  plan's first payment day is startDate itself, not startDate + 1. */
+ *  plan's first payment day is startDate itself, not startDate + 1.
+ *
+ *  Stage G2 Part 2 - this runs in the browser on every keystroke of the
+ *  create-plan form, where no DTO validates activeWeekdays before it gets
+ *  here, so both failure modes below are guarded inside the function rather
+ *  than assumed away by a caller precondition:
+ *
+ *  - an empty activeWeekdays would otherwise loop forever (unchecking every
+ *    weekday mid-edit is ordinary user behaviour, not a validation gap the
+ *    form is expected to prevent before this runs);
+ *  - a day-by-day walk is O(n) in the payment day count - a dailyAmount of 1
+ *    against a six-figure total is >1,000,000 synchronous iterations, easily
+ *    landing between two keystrokes.
+ *
+ *  Every block of 7 consecutive calendar days contains each weekday exactly
+ *  once, so activeWeekdays.length active days fall in every such block
+ *  regardless of where it starts. That turns most of the walk into one
+ *  arithmetic step (whole weeks skipped via addDaysUTC, not iteration) and
+ *  leaves at most a 7-day remainder walk - O(1) instead of O(n). */
 function nthActiveWeekdayFrom(start: Date, n: number, activeWeekdays: number[]): Date {
   if (n <= 0) return start;
-  let cursor = start;
+  if (activeWeekdays.length === 0) {
+    throw new Error('nthActiveWeekdayFrom: activeWeekdays must not be empty');
+  }
+
+  const activeCount = activeWeekdays.length;
+  const fullWeeks = Math.floor((n - 1) / activeCount);
+  const remainder = ((n - 1) % activeCount) + 1;
+
+  let cursor = addDaysUTC(start, fullWeeks * 7);
   let counted = 0;
-  // activeWeekdays is validated non-empty by both DTOs that construct this
-  // input (create/update ownership plan) - an empty array would loop forever,
-  // same precondition ownership-plan.derivation.ts's own date walk relies on.
   for (;;) {
     if (activeWeekdays.includes(cursor.getUTCDay())) {
       counted += 1;
-      if (counted === n) return cursor;
+      if (counted === remainder) return cursor;
     }
     cursor = addDaysUTC(cursor, 1);
   }

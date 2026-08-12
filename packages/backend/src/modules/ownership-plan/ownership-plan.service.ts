@@ -9,7 +9,11 @@ import { OwnershipPlanStatus, PaymentStatus, Prisma, UserRole } from '@prisma/cl
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
-import { derivePlanFigures, DerivedPlanFigures } from './ownership-plan.derivation';
+import {
+  AssignmentPaidRow,
+  derivePlanFigures,
+  DerivedPlanFigures,
+} from './ownership-plan.derivation';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 
@@ -370,6 +374,7 @@ export class OwnershipPlanService {
     }
 
     const amountPaidByPlan = new Map<string, Prisma.Decimal>();
+    const paidByAssignment = new Map<string, Prisma.Decimal>();
     const assignmentIds = assignments.map((a) => a.id);
     if (assignmentIds.length > 0) {
       const paid = await this.prisma.client.dailyPayment.groupBy({
@@ -378,13 +383,28 @@ export class OwnershipPlanService {
         _sum: { amount: true },
       });
       for (const row of paid) {
+        const amount = row._sum.amount ?? new Prisma.Decimal(0);
+        paidByAssignment.set(row.dailyAssignmentId, amount);
         const planId = planIdByAssignment.get(row.dailyAssignmentId);
         if (!planId) continue;
         amountPaidByPlan.set(
           planId,
-          (amountPaidByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(row._sum.amount ?? 0),
+          (amountPaidByPlan.get(planId) ?? new Prisma.Decimal(0)).plus(amount),
         );
       }
+    }
+
+    // Same rows already fetched above, reshaped per plan for
+    // computeConsecutiveMissedDays - no extra query.
+    const assignmentPaymentsByPlan = new Map<string, AssignmentPaidRow[]>();
+    for (const a of assignments) {
+      const planId = a.ownershipPlanId as string;
+      const rows = assignmentPaymentsByPlan.get(planId) ?? [];
+      rows.push({
+        assignedDate: a.assignedDate,
+        paidAmount: paidByAssignment.get(a.id) ?? new Prisma.Decimal(0),
+      });
+      assignmentPaymentsByPlan.set(planId, rows);
     }
 
     const result = new Map<string, DerivedPlanFigures>();
@@ -401,6 +421,7 @@ export class OwnershipPlanService {
             amountBilled: amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             contractEndDate: plan.contractEndDate,
             activeWeekdays: plan.activeWeekdays,
+            assignmentPayments: assignmentPaymentsByPlan.get(plan.id) ?? [],
           },
           today,
         ),
