@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { ThrottlerRedisService } from './redis/throttler-redis.service';
+import { buildThrottlerOptions } from './common/throttle/throttler-options.factory';
 import { AuthModule } from './modules/auth/auth.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
@@ -32,7 +36,17 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
       envFilePath: '../../.env',
       validationSchema: envValidationSchema,
     }),
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    // Stage H0 - Redis-backed (Part 4), tracked by user-or-IP globally (Part
+    // 1) and by dedicated per-route throttlers for login/signup/refresh
+    // (Parts 2/3/5). See throttler-options.factory.ts for the full wiring
+    // and throttle.constants.ts for the numbers, with rationale, in one
+    // place.
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule, JwtModule.register({})],
+      inject: [ThrottlerRedisService, ConfigService, JwtService],
+      useFactory: (redis: ThrottlerRedisService, config: ConfigService, jwt: JwtService) =>
+        buildThrottlerOptions(new ThrottlerStorageRedisService(redis), config, jwt),
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,

@@ -1,5 +1,4 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -14,21 +13,26 @@ import { AuthenticatedUser } from './auth.types';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Stage H0 - rate limiting lives in throttler-options.factory.ts
+  // ('signup-identifier'), keyed the same way as login: IP + identifier.
   @Post('signup')
   signup(@Body() dto: SignupDto): Promise<TokenResponseDto> {
     return this.authService.signup(dto);
   }
 
+  // Stage H0 - rate limiting for this route lives in
+  // common/throttle/throttler-options.factory.ts ('login-identifier' and
+  // 'login-ip'), keyed by handler reference, not a decorator here.
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   login(@Body() dto: LoginDto): Promise<TokenResponseDto> {
     return this.authService.login(dto);
   }
 
+  // Stage H0 - rate limiting lives in throttler-options.factory.ts
+  // ('refresh'), keyed on the refresh token's own user, not this route.
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   refresh(@Body() dto: RefreshDto): Promise<TokenResponseDto> {
     return this.authService.refreshToken(dto.refreshToken);
   }
