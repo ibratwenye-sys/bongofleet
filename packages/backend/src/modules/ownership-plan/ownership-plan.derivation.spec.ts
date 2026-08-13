@@ -406,4 +406,38 @@ describe('derivePlanFigures', () => {
       expect(after.projectedCompletion).toBe(before.projectedCompletion);
     });
   });
+
+  describe('recentExcusalCount (Stage G5 Part 3)', () => {
+    it('is 0 with no excusals', () => {
+      const result = derivePlanFigures(basePosition({ excusedDates: [] }), TODAY);
+      expect(result.recentExcusalCount).toBe(0);
+    });
+
+    it('counts APPROVED excusal dates within the last 90 days, inclusive of today', () => {
+      const result = derivePlanFigures(
+        basePosition({ excusedDates: [day(-10), day(-89), day(0)] }),
+        TODAY,
+      );
+      expect(result.recentExcusalCount).toBe(3);
+    });
+
+    it('excludes an excusal older than 90 days', () => {
+      const result = derivePlanFigures(basePosition({ excusedDates: [day(-91)] }), TODAY);
+      expect(result.recentExcusalCount).toBe(0);
+    });
+
+    it('is independent of consecutiveMissedDays and daysBehind - a fully current, paid-up plan can still have a high recent count', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          amountDue: new Prisma.Decimal(12000),
+          amountPaid: new Prisma.Decimal(12000),
+          excusedDates: [day(-1), day(-2), day(-3), day(-4), day(-5)],
+        }),
+        TODAY,
+      );
+      expect(result.daysBehind).toBe(0);
+      expect(result.consecutiveMissedDays).toBe(0);
+      expect(result.recentExcusalCount).toBe(5);
+    });
+  });
 });

@@ -5,7 +5,14 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { DriverType, OwnershipPlanStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  DayExcusalStatus,
+  DriverType,
+  OwnershipPlanStatus,
+  PaymentStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { OwnershipPlanService } from './ownership-plan.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -486,6 +493,78 @@ describe('OwnershipPlanService', () => {
       expect(withoutExcusal.amountBilled).toBe(before.amountBilled);
       expect(withoutExcusal.remainingToOwn).toBe(before.remainingToOwn);
       expect(withoutExcusal.remainingToBill).toBe(before.remainingToBill);
+    });
+
+    it('Stage G5 Part 3/4: recentExcusalCount is correct per plan, counts only APPROVED rows inside the window, and costs exactly one dayExcusal query for the whole fleet', async () => {
+      const today = new Date();
+      const daysAgo = (n: number) => {
+        const d = new Date(today);
+        d.setUTCDate(d.getUTCDate() - n);
+        return d;
+      };
+
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([
+        {
+          id: 'plan-1',
+          driverId: 'driver-1',
+          motorcycleId: 'veh-1',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+        {
+          id: 'plan-2',
+          driverId: 'driver-2',
+          motorcycleId: 'veh-2',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+        {
+          id: 'plan-3',
+          driverId: 'driver-3',
+          motorcycleId: 'veh-3',
+          dailyAmount: new Prisma.Decimal(12000),
+          totalPrice: new Prisma.Decimal(1_800_000),
+          downPayment: new Prisma.Decimal(0),
+          contractEndDate: null,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+          status: OwnershipPlanStatus.ACTIVE,
+        },
+      ]);
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([]);
+      prisma.client.dailyPayment.groupBy.mockResolvedValue([]);
+      // plan-1: two recent APPROVED excusals -> 2. plan-2: one recent, one
+      // stale (>90 days) APPROVED excusal -> 1. plan-3: no excusals -> 0.
+      // The APPROVED-only filter is the query's own `where`, asserted below
+      // (findMany is mocked, so a REQUESTED/DECLINED row here would still
+      // wrongly count if the service ever stopped filtering by status).
+      prisma.client.dayExcusal.findMany.mockResolvedValue([
+        { ownershipPlanId: 'plan-1', excusedDate: daysAgo(5) },
+        { ownershipPlanId: 'plan-1', excusedDate: daysAgo(80) },
+        { ownershipPlanId: 'plan-2', excusedDate: daysAgo(10) },
+        { ownershipPlanId: 'plan-2', excusedDate: daysAgo(120) },
+      ]);
+
+      const result = await service.list(owner);
+
+      expect(result.find((p) => p.id === 'plan-1')?.recentExcusalCount).toBe(2);
+      expect(result.find((p) => p.id === 'plan-2')?.recentExcusalCount).toBe(1);
+      expect(result.find((p) => p.id === 'plan-3')?.recentExcusalCount).toBe(0);
+
+      // The no-N+1 proof: one query for all three plans, not three.
+      expect(prisma.client.dayExcusal.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.client.dayExcusal.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: DayExcusalStatus.APPROVED }),
+        }),
+      );
     });
   });
 

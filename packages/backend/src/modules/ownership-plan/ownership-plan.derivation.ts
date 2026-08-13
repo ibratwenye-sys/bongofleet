@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { countRecentExcusals } from '@bongofleet/shared-lib';
 
 /**
  * Raw inputs the derivation needs. amountDue/amountPaid are sums the caller
@@ -67,6 +68,13 @@ export interface DerivedPlanFigures {
    *  This is the figure that belongs against breachAfterConsecutiveMissedDays
    *  - see computeConsecutiveMissedDays. */
   consecutiveMissedDays: number;
+  /** Stage G5 Part 3 - count of APPROVED excusals in the last 90 days
+   *  (excusalWindowStart/countRecentExcusals, shared-lib). A judgement
+   *  signal, same family as consecutiveMissedDays, not a limit: there is no
+   *  cap this number feeds into anywhere. The point is only to make "twelve
+   *  days excused this quarter" visible instead of invisible one day at a
+   *  time. */
+  recentExcusalCount: number;
   remainingToOwn: string;
   remainingToBill: string;
   daysLeft: number | null;
@@ -311,6 +319,11 @@ export function derivePlanFigures(
     input.excusedDates,
   );
 
+  // Stage G5 Part 3 - same excusedDates already fetched for
+  // consecutiveMissedDays above, no separate query. today (not todayOnly) is
+  // fine here - countRecentExcusals truncates to UTC midnight itself.
+  const recentExcusalCount = countRecentExcusals(input.excusedDates, today);
+
   const daysLeft = input.contractEndDate
     ? countActiveWeekdaysAfter(todayOnly, input.contractEndDate, input.activeWeekdays)
     : null;
@@ -333,6 +346,7 @@ export function derivePlanFigures(
     daysBehind,
     daysAhead,
     consecutiveMissedDays,
+    recentExcusalCount,
     remainingToOwn: remainingToOwn.toFixed(2),
     remainingToBill: remainingToBill.toFixed(2),
     daysLeft,

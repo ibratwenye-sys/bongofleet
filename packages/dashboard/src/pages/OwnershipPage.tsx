@@ -67,6 +67,15 @@ function missedStreakLabel(consecutiveMissedDays: number): string {
   return `${consecutiveMissedDays} day${consecutiveMissedDays === 1 ? '' : 's'} missed in a row`;
 }
 
+/** Stage G5 Part 3 - a count, not a flag and not a limit: there is no
+ *  threshold this turns red at. The point is only to make "excused twelve
+ *  days this quarter" visible instead of invisible one day at a time, so an
+ *  owner can go have that conversation. */
+function recentExcusalLabel(recentExcusalCount: number): string {
+  if (recentExcusalCount <= 0) return '—';
+  return `${recentExcusalCount} in last 90 days`;
+}
+
 interface CreateFormState {
   driverId: string;
   motorcycleId: string;
@@ -491,6 +500,7 @@ export function OwnershipPage() {
               <th className="px-4 py-2 text-right font-medium text-gray-500">Remaining</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Position</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Missed streak</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Recent excusals</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Start</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">End</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Days left</th>
@@ -503,13 +513,13 @@ export function OwnershipPage() {
           <tbody className="divide-y divide-gray-100">
             {plans === null ? (
               <tr>
-                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={13} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : plans.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={13} className="px-4 py-6 text-center text-gray-500">
                   No ownership plans yet.
                 </td>
               </tr>
@@ -547,6 +557,9 @@ export function OwnershipPage() {
                     </td>
                     <td className={`px-4 py-2 ${SEVERITY_TEXT_STYLES[severity]}`}>
                       {missedStreakLabel(plan.consecutiveMissedDays)}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {recentExcusalLabel(plan.recentExcusalCount)}
                     </td>
                     <td className="px-4 py-2 text-gray-600">{plan.startDate.slice(0, 10)}</td>
                     <td className="px-4 py-2 text-gray-600">

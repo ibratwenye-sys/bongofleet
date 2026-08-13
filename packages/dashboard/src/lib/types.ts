@@ -438,6 +438,9 @@ export interface OwnershipPlan {
   daysBehind: number;
   daysAhead: number;
   consecutiveMissedDays: number;
+  // Stage G5 Part 3 - APPROVED excusals in the last 90 days. A signal, not a
+  // limit - there is no cap this feeds into.
+  recentExcusalCount: number;
   daysLeft: number | null;
   projectedCompletion: string;
 }
@@ -463,4 +466,31 @@ export interface OwnershipPlanLedgerRow {
   owed: string;
   paid: string;
   runningPosition: string;
+}
+
+// Stage G5 - matches DayExcusal (backend Prisma model) plus the
+// decidedByName/requestedByName the excusal service enriches list() with
+// (both plain scalars server-side, no relation to join through on the
+// client). REQUESTED has no creation path yet (the driver-app request path
+// is a later stage) but the type exists now so the ledger doesn't need
+// rewriting when it does.
+export type DayExcusalStatus = 'REQUESTED' | 'APPROVED' | 'DECLINED';
+
+export interface DayExcusal {
+  id: string;
+  ownershipPlanId: string;
+  excusedDate: string;
+  reason: string;
+  status: DayExcusalStatus;
+  requestedByUserId: string | null;
+  requestedByName: string | null;
+  decidedByUserId: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateDayExcusalPayload {
+  excusedDate: string;
+  reason: string;
 }

@@ -429,6 +429,9 @@ describe('OwnershipPlan (e2e)', () => {
         .expect(200);
       expect(listRes.body).toHaveLength(1);
       expect(listRes.body[0].id).toBe(createRes.body.id);
+      // Stage G5 Part 2 - the dashboard needs a name, not just an id.
+      expect(listRes.body[0].decidedByName).toBe('Ada Lovelace');
+      expect(listRes.body[0].requestedByName).toBeNull();
 
       const declineRes = await request(app.getHttpServer())
         .patch(`/ownership-plans/${planId}/excusals/${createRes.body.id}/decline`)
@@ -446,6 +449,59 @@ describe('OwnershipPlan (e2e)', () => {
     // The DRIVER-role rejection is covered above, in "lets a DRIVER GET
     // their own plan..." (reusing that test's driver login rather than
     // spending another /auth/login call - see the comment there).
+
+    it('Stage G5: a MANAGER can create and revoke an excusal, not just OWNER', async () => {
+      const { accessToken, tenantId } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'X5');
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+      const planId = planRes.body.id as string;
+
+      const manager = await seedManager(prisma, tenantId);
+      const managerLogin = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: manager.email, password: manager.password })
+        .expect(200);
+      const managerToken = managerLogin.body.accessToken as string;
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/ownership-plans/${planId}/excusals`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ excusedDate: daysAgoIso(1), reason: 'Manager-approved: funeral' })
+        .expect(201);
+      expect(createRes.body.status).toBe('APPROVED');
+
+      const declineRes = await request(app.getHttpServer())
+        .patch(`/ownership-plans/${planId}/excusals/${createRes.body.id}/decline`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+      expect(declineRes.body.status).toBe('DECLINED');
+    });
+
+    it('Stage G5: an excusal for a future date, before any assignment row exists, is accepted', async () => {
+      const { accessToken } = await signupOwner(app);
+      const { driverId, motorcycleId } = await createDriverAndVehicle(accessToken, 'X6');
+      const planRes = await request(app.getHttpServer())
+        .post('/ownership-plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(planBody(driverId, motorcycleId))
+        .expect(201);
+      const planId = planRes.body.id as string;
+
+      const inFiveDays = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/ownership-plans/${planId}/excusals`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ excusedDate: inFiveDays, reason: 'Driver gave advance notice for a family event' })
+        .expect(201);
+
+      expect(createRes.body.status).toBe('APPROVED');
+      expect(createRes.body.excusedDate.slice(0, 10)).toBe(inFiveDays);
+    });
 
     it('cross-tenant create and list both return 404, not 403', async () => {
       const { accessToken } = await signupOwner(app);

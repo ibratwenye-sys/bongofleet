@@ -2,8 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
-import type { Document, OwnershipPlan, OwnershipPlanLedgerRow, PaymentAccount } from '../lib/types';
+import type {
+  CreateDayExcusalPayload,
+  DayExcusal,
+  Document,
+  OwnershipPlan,
+  OwnershipPlanLedgerRow,
+  PaymentAccount,
+} from '../lib/types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Modal } from '../components/Modal';
+import { StatusBadge } from '../components/StatusBadge';
+
+const DAY_EXCUSAL_STATUS_STYLES: Record<string, string> = {
+  APPROVED: 'bg-green-100 text-green-800',
+  REQUESTED: 'bg-amber-100 text-amber-800',
+  DECLINED: 'bg-gray-100 text-gray-500',
+};
+
+const DAY_EXCUSAL_STATUS_LABELS: Record<string, string> = {
+  APPROVED: 'Excused',
+  REQUESTED: 'Pending approval',
+  DECLINED: 'Declined',
+};
 
 function runningPositionClass(value: string): string {
   const n = Number(value);
@@ -140,18 +161,191 @@ function ContractSection({ planId }: { planId: string }) {
   );
 }
 
+// Stage G5 Part 1/2. Handles both "excuse a fresh date" (opened from the
+// section header, date picker free - the driver often gives notice before
+// the generator has created that day's ledger row at all) and "excuse this
+// specific row" (opened from a row, date pre-filled).
+function ExcuseDayDialog({
+  planId,
+  initialDate,
+  onClose,
+  onExcused,
+}: {
+  planId: string;
+  initialDate: string | null;
+  onClose: () => void;
+  onExcused: () => void;
+}) {
+  const [excusedDate, setExcusedDate] = useState(initialDate ?? '');
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = excusedDate !== '' && reason.trim() !== '' && !submitting;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload: CreateDayExcusalPayload = { excusedDate, reason: reason.trim() };
+      await apiFetch(`/ownership-plans/${planId}/excusals`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      onExcused();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not excuse this day.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="Excuse a day" onClose={onClose}>
+      <p className="mb-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        Excusing a day does <strong>not</strong> change what the driver owes. He still owes that
+        money and pays it later — this only stops the day from counting as a missed day on his
+        record.
+      </p>
+
+      <label className="mb-3 block text-sm font-medium text-gray-700">
+        Date
+        <input
+          type="date"
+          value={excusedDate}
+          onChange={(e) => setExcusedDate(e.target.value)}
+          className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+        />
+      </label>
+
+      <label className="mb-4 block text-sm font-medium text-gray-700">
+        Reason (required)
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          placeholder="e.g. Msiba wa jamaa - alimjulisha msimamizi wake (family bereavement - told his supervisor)"
+          className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+        />
+      </label>
+
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={!canSubmit}
+          className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {submitting ? 'Excusing…' : 'Excuse day'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+interface MergedLedgerRow {
+  date: string;
+  ledger: OwnershipPlanLedgerRow | null;
+  excusal: DayExcusal | null;
+}
+
+// The most recently decided/created excusal for a date stands for that date
+// in the merged row - an APPROVED one wins over a stale DECLINED attempt
+// from an earlier excuse-then-revoke, since it's the one actually in effect.
+function primaryExcusalForDate(excusals: DayExcusal[], date: string): DayExcusal | null {
+  const forDate = excusals.filter((e) => e.excusedDate.slice(0, 10) === date);
+  if (forDate.length === 0) return null;
+  const approved = forDate.find((e) => e.status === 'APPROVED');
+  if (approved) return approved;
+  return [...forDate].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+// Every ledger date, plus every excusal date the ledger doesn't have a row
+// for yet (Stage G5 Part 1 - a future excusal predating the generator).
+function buildMergedRows(
+  ledgerRows: OwnershipPlanLedgerRow[],
+  excusals: DayExcusal[],
+): MergedLedgerRow[] {
+  const dates = new Set<string>();
+  for (const row of ledgerRows) dates.add(row.assignedDate.slice(0, 10));
+  for (const excusal of excusals) dates.add(excusal.excusedDate.slice(0, 10));
+
+  return [...dates].sort().map((date) => ({
+    date,
+    ledger: ledgerRows.find((row) => row.assignedDate.slice(0, 10) === date) ?? null,
+    excusal: primaryExcusalForDate(excusals, date),
+  }));
+}
+
 function LedgerSection({ planId }: { planId: string }) {
-  const [rows, setRows] = useState<OwnershipPlanLedgerRow[] | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<OwnershipPlanLedgerRow[] | null>(null);
+  const [excusals, setExcusals] = useState<DayExcusal[] | null>(null);
+  const [excuseDialogDate, setExcuseDialogDate] = useState<string | null | undefined>(undefined);
+  const [revoking, setRevoking] = useState<DayExcusal | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const [ledgerData, excusalsData] = await Promise.all([
+        apiFetch<OwnershipPlanLedgerRow[]>(`/ownership-plans/${planId}/ledger`),
+        apiFetch<DayExcusal[]>(`/ownership-plans/${planId}/excusals`),
+      ]);
+      setLedgerRows(ledgerData);
+      setExcusals(excusalsData);
+    } catch {
+      setLedgerRows([]);
+      setExcusals([]);
+    }
+  }
 
   useEffect(() => {
-    apiFetch<OwnershipPlanLedgerRow[]>(`/ownership-plans/${planId}/ledger`)
-      .then(setRows)
-      .catch(() => setRows([]));
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId]);
+
+  async function handleRevoke(excusal: DayExcusal) {
+    setActionError(null);
+    try {
+      await apiFetch(`/ownership-plans/${planId}/excusals/${excusal.id}/decline`, {
+        method: 'PATCH',
+      });
+      setRevoking(null);
+      await load();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError ? err.message : 'Could not decline/revoke this excusal.',
+      );
+      setRevoking(null);
+    }
+  }
+
+  const rows =
+    ledgerRows !== null && excusals !== null ? buildMergedRows(ledgerRows, excusals) : null;
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-medium text-gray-900">Instalment ledger</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-medium text-gray-900">Instalment ledger</h2>
+        <button
+          type="button"
+          onClick={() => setExcuseDialogDate(null)}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Excuse a day
+        </button>
+      </div>
+
+      {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}
+
       <div className="max-h-[32rem] overflow-y-auto overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="sticky top-0 bg-gray-50">
@@ -160,31 +354,81 @@ function LedgerSection({ planId }: { planId: string }) {
               <th className="px-4 py-2 text-right font-medium text-gray-500">Owed</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Paid</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Running position</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Excusal</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {rows === null ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                   No instalments generated yet.
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.assignedDate}>
-                  <td className="px-4 py-2 text-gray-600">{row.assignedDate}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">{formatTZS(row.owed)}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">{formatTZS(row.paid)}</td>
+                <tr
+                  key={row.date}
+                  className={row.excusal?.status === 'APPROVED' ? 'bg-green-50' : ''}
+                >
+                  <td className="px-4 py-2 text-gray-600">{row.date}</td>
+                  <td className="px-4 py-2 text-right text-gray-600">
+                    {row.ledger ? formatTZS(row.ledger.owed) : '—'}
+                  </td>
+                  <td className="px-4 py-2 text-right text-gray-600">
+                    {row.ledger ? formatTZS(row.ledger.paid) : '—'}
+                  </td>
                   <td
-                    className={`px-4 py-2 text-right ${runningPositionClass(row.runningPosition)}`}
+                    className={`px-4 py-2 text-right ${row.ledger ? runningPositionClass(row.ledger.runningPosition) : 'text-gray-400'}`}
                   >
-                    {formatTZS(row.runningPosition)}
+                    {row.ledger ? formatTZS(row.ledger.runningPosition) : '—'}
+                  </td>
+                  <td className="px-4 py-2">
+                    {row.excusal ? (
+                      <div>
+                        <StatusBadge
+                          status={row.excusal.status}
+                          styles={DAY_EXCUSAL_STATUS_STYLES}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          {DAY_EXCUSAL_STATUS_LABELS[row.excusal.status] ?? row.excusal.status}
+                          {row.excusal.reason && ` — ${row.excusal.reason}`}
+                        </p>
+                        {row.excusal.status !== 'REQUESTED' && row.excusal.decidedByName && (
+                          <p className="text-xs text-gray-400">
+                            by {row.excusal.decidedByName}
+                            {row.excusal.decidedAt && ` · ${row.excusal.decidedAt.slice(0, 10)}`}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {row.excusal && row.excusal.status !== 'DECLINED' ? (
+                      <button
+                        type="button"
+                        onClick={() => setRevoking(row.excusal)}
+                        className="text-xs font-medium text-red-600 hover:underline"
+                      >
+                        {row.excusal.status === 'APPROVED' ? 'Revoke' : 'Decline'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setExcuseDialogDate(row.date)}
+                        className="text-xs font-medium text-gray-600 hover:underline"
+                      >
+                        Excuse
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -192,6 +436,33 @@ function LedgerSection({ planId }: { planId: string }) {
           </tbody>
         </table>
       </div>
+
+      {excuseDialogDate !== undefined && (
+        <ExcuseDayDialog
+          planId={planId}
+          initialDate={excuseDialogDate}
+          onClose={() => setExcuseDialogDate(undefined)}
+          onExcused={() => {
+            setExcuseDialogDate(undefined);
+            void load();
+          }}
+        />
+      )}
+
+      {revoking && (
+        <ConfirmDialog
+          title={revoking.status === 'APPROVED' ? 'Revoke this excusal?' : 'Decline this request?'}
+          message={
+            revoking.status === 'APPROVED'
+              ? `${revoking.excusedDate.slice(0, 10)} will go back to counting as a missed day if unpaid. This does not change any money owed.`
+              : `The request for ${revoking.excusedDate.slice(0, 10)} will be declined.`
+          }
+          confirmLabel={revoking.status === 'APPROVED' ? 'Revoke' : 'Decline'}
+          danger
+          onConfirm={() => void handleRevoke(revoking)}
+          onCancel={() => setRevoking(null)}
+        />
+      )}
     </section>
   );
 }

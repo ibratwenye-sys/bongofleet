@@ -64,14 +64,44 @@ export class OwnershipPlanExcusalService {
     });
   }
 
+  /**
+   * Stage G5 Part 2 - the dashboard needs to show WHO approved/declined an
+   * excusal, not just their id. decidedByUserId/requestedByUserId are plain
+   * scalars (same convention as driverId/motorcycleId elsewhere in this
+   * module - see DayExcusal's own schema comment), so this batches a single
+   * extra User lookup for whichever ids actually appear, rather than a
+   * Prisma relation include or a query per row.
+   */
   async list(planId: string, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
     await this.findPlanOrThrow(planId);
 
-    return this.prisma.client.dayExcusal.findMany({
+    const excusals = await this.prisma.client.dayExcusal.findMany({
       where: { ownershipPlanId: planId },
       orderBy: { excusedDate: 'desc' },
     });
+
+    const userIds = [
+      ...new Set(
+        excusals
+          .flatMap((e) => [e.decidedByUserId, e.requestedByUserId])
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const users =
+      userIds.length > 0
+        ? await this.prisma.client.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, firstName: true, lastName: true },
+          })
+        : [];
+    const nameById = new Map(users.map((u) => [u.id, `${u.firstName} ${u.lastName}`]));
+
+    return excusals.map((e) => ({
+      ...e,
+      decidedByName: e.decidedByUserId ? (nameById.get(e.decidedByUserId) ?? null) : null,
+      requestedByName: e.requestedByUserId ? (nameById.get(e.requestedByUserId) ?? null) : null,
+    }));
   }
 
   /**

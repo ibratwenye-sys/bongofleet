@@ -348,7 +348,11 @@ export class OwnershipPlanService {
    * completed-payment sums for exactly those assignments (grouped in memory
    * back to their plan), and Stage G4's APPROVED excusals (grouped by plan,
    * independent of the assignment rows - an excusal can predate the
-   * assignment it will eventually apply to).
+   * assignment it will eventually apply to). That same excusals query now
+   * also feeds recentExcusalCount (Stage G5 Part 3) - derivePlanFigures
+   * reads the count out of the same excusedDatesByPlan rows, so recency
+   * windowing is a second READ of data already in memory, not a fourth
+   * query.
    */
   private async batchDerivedFigures(plans: PlanRow[]): Promise<Map<string, DerivedPlanFigures>> {
     const today = dateOnly();
