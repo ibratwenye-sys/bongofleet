@@ -1,29 +1,19 @@
 import Redis from 'ioredis';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { requestContext } from '../../src/common/context/request-context';
-import { throttleKeyPrefix } from '../../src/redis/throttler-redis.service';
 
-// Stage H0 Part 4 - a standalone, UNPREFIXED connection (not resolved
-// through the Nest app's DI container, since cleanDatabase only ever
-// receives a PrismaService). Deliberately plain, not built with `keyPrefix:
-// throttleKeyPrefix('test')` the way the app's own ThrottlerRedisService is -
-// ioredis does not apply keyPrefix to the KEYS command's pattern argument
-// (confirmed empirically; it silently matches and would silently mismatch
-// on delete across the ENTIRE keyspace, not just this namespace), so the
-// prefix is baked into the search pattern by hand below instead, and the
-// same plain connection does the delete - no prefixing round-trip to get
-// out of sync with itself.
-//
-// Built lazily, on first use inside cleanDatabase() rather than at
-// module-import time - REDIS_URL isn't populated into process.env until
-// ConfigModule's dotenv load runs during the file's own beforeAll(), which
-// happens after this module is first imported.
-let throttleTestRedis: Redis | null = null;
-function getThrottleTestRedis(): Redis {
-  if (!throttleTestRedis) {
-    throttleTestRedis = new Redis(process.env.REDIS_URL as string);
+// Stage H0c Part 1 - REDIS_URL is overridden to a dedicated, isolated test
+// database (see test/utils/test-redis.ts) before any e2e test file's module
+// loads (test/setup-e2e.ts), so this connection is never the dev/prod
+// keyspace. Built lazily, on first use inside cleanDatabase(), for the same
+// reason as the old throttle-only connection this replaces: REDIS_URL isn't
+// populated into process.env until setup-e2e.ts/ConfigModule have run.
+let testRedis: Redis | null = null;
+function getTestRedis(): Redis {
+  if (!testRedis) {
+    testRedis = new Redis(process.env.REDIS_URL as string);
   }
-  return throttleTestRedis;
+  return testRedis;
 }
 
 const TABLES_FK_SAFE_ORDER = [
@@ -44,19 +34,12 @@ const TABLES_FK_SAFE_ORDER = [
 ];
 
 /**
- * Resets state between tests: every Postgres table, AND (Stage H0 Part 4)
- * every throttle counter in Redis's `throttle:test:` namespace. The name
- * predates the Redis half, kept as-is rather than renamed so the ~17 e2e
- * spec files that already call this in their own beforeEach don't all need
- * touching for this to take effect everywhere at once.
- *
- * The Redis half matters for the same reason the Postgres half does: e2e
- * spec files reuse the same default email ("owner@acme-fleet.test", from
- * signupOwner()) across many `it()` blocks and across files, all from the
- * test client's one IP. Without a flush between tests, that identifier's
- * login/signup throttle counters would accumulate across unrelated tests
- * and eventually 429 something that isn't actually testing the limiter -
- * exactly the kind of workaround Stage H0 exists to make unnecessary.
+ * Resets state between tests: every Postgres table, AND (Stage H0c Part 1)
+ * the entire isolated test Redis database. Now that the test Redis is a
+ * genuinely separate database (not a shared keyspace scoped by prefix - see
+ * test/utils/test-redis.ts), a plain FLUSHDB is simpler and safer than any
+ * pattern-matching sweep, and incidentally clears refresh-token keys too
+ * (Stage H0's throttle-only prefix sweep never touched those).
  */
 export async function cleanDatabase(prisma: PrismaService): Promise<void> {
   await requestContext.runUnscoped(async () => {
@@ -80,9 +63,18 @@ export async function cleanDatabase(prisma: PrismaService): Promise<void> {
     }
   });
 
-  const redis = getThrottleTestRedis();
-  const keys = await redis.keys(`${throttleKeyPrefix('test')}*`);
-  if (keys.length > 0) {
-    await redis.del(...keys);
+  const redis = getTestRedis();
+  // Same defense-in-depth as the Postgres check above: refuse to FLUSHDB
+  // anything that looks like the dev/default database (index 0), even
+  // though testRedisUrl() already refuses to let REDIS_URL resolve there
+  // for e2e tests in the first place - this is the second, independent
+  // guard right at the destructive call site.
+  if ((redis.options.db ?? 0) === 0) {
+    throw new Error(
+      'cleanDatabase() refused to FLUSHDB Redis database 0: e2e tests must run against a ' +
+        'dedicated test database (see test/utils/test-redis.ts) - REDIS_URL was not overridden ' +
+        'to one.',
+    );
   }
+  await redis.flushdb();
 }

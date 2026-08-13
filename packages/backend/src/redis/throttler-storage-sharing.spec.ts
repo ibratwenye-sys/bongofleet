@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { deleteKeysByPrefix } from './redis-key-sweep.util';
 
 /**
  * Stage H0 Part 4/6 - the whole point of moving off in-memory storage: two
@@ -28,15 +29,12 @@ describe('ThrottlerStorageRedisService shares state across instances (Stage H0 P
 
   afterAll(async () => {
     // A plain (unprefixed) connection, not connectionA/B - ioredis does not
-    // apply keyPrefix to KEYS's pattern argument, so a prefixed connection's
-    // .keys('*') matches (and would then try to re-prefix-and-delete) the
-    // ENTIRE keyspace, not just this namespace. The prefix is baked into the
-    // pattern by hand instead.
+    // apply keyPrefix to a SCAN pattern, so a prefixed connection's sweep
+    // would match (and then mismatch-delete against) the ENTIRE keyspace,
+    // not just this namespace. deleteKeysByPrefix (Stage H0c Part 3) bakes
+    // the prefix into the pattern by hand and walks it via SCAN, never KEYS.
     const plain = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-    const keys = await plain.keys(`${prefix}*`);
-    if (keys.length > 0) {
-      await plain.del(...keys);
-    }
+    await deleteKeysByPrefix(plain, prefix);
     await plain.quit();
     await connectionA.quit();
     await connectionB.quit();
