@@ -35,3 +35,13 @@ export const REFRESH_THROTTLE = { limit: 20, ttl: 60_000 };
  *  logins - but still loose enough for someone to retry after fixing a
  *  validation typo a couple of times. */
 export const SIGNUP_IDENTIFIER_THROTTLE = { limit: 3, ttl: 60_000 };
+
+/** Stage H0b Part 2 - signup attempts from ONE IP, across ANY identifiers.
+ *  Without this, varying the email sidesteps signup-identifier entirely and
+ *  leaves account creation bounded only by the global 100/min - more
+ *  permissive than login, which is backwards. Set to half of login-ip (15,
+ *  not 30): signup is the heavier, rarer operation (see
+ *  SIGNUP_IDENTIFIER_THROTTLE), so its backstop should be at least as
+ *  strict, and proportionally tighter is consistent with that same
+ *  reasoning rather than just matching login's number by coincidence. */
+export const SIGNUP_IP_THROTTLE = { limit: 15, ttl: 60_000 };

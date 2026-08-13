@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { LOGIN_IP_THROTTLE } from '../src/common/throttle/throttle.constants';
 import { cleanDatabase } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
@@ -185,5 +186,102 @@ describe('Rate limiting (e2e, Stage H0)', () => {
     await request(app.getHttpServer()).post('/auth/signup').send(body(3)).expect(409);
 
     await request(app.getHttpServer()).post('/auth/signup').send(body(4)).expect(429);
+  });
+
+  it('Part 2 (H0b): the pure-IP signup backstop triggers when many identifiers are tried from one host (15/min)', async () => {
+    for (let i = 0; i < 15; i += 1) {
+      await signup({ email: `signup-backstop-${i}@rl-test.local` });
+    }
+
+    // Each of these 15 identifiers was only used once - nowhere near
+    // signup-identifier's own limit of 3 - so only the pure-IP backstop
+    // explains a 429 on the 16th, distinct identifier.
+    await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(signupBody({ email: 'signup-backstop-final@rl-test.local' }))
+      .expect(429);
+  }, 30_000);
+
+  describe('trust proxy (Stage H0b Part 1)', () => {
+    it('with proxy trust disabled (the default), a spoofed X-Forwarded-For does not change the throttle key', async () => {
+      const r1 = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'trust-proxy-a@rl-test.local', password: 'whatever' })
+        .expect(401);
+      const remainingAfterR1 = Number(r1.headers['x-ratelimit-remaining-login-ip']);
+
+      // A spoofed XFF claiming to be a totally different address - if
+      // proxy trust were (wrongly) honoured here, this would look like a
+      // fresh client and start from a full budget instead of continuing to
+      // decrement the same one.
+      const r2 = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('X-Forwarded-For', '203.0.113.99')
+        .send({ email: 'trust-proxy-b@rl-test.local', password: 'whatever' })
+        .expect(401);
+      expect(Number(r2.headers['x-ratelimit-remaining-login-ip'])).toBe(remainingAfterR1 - 1);
+    });
+
+    describe('configured for one trusted hop', () => {
+      let trustedApp: INestApplication;
+
+      beforeAll(async () => {
+        const moduleFixture: TestingModule = await Test.createTestingModule({
+          imports: [AppModule],
+        }).compile();
+        trustedApp = await createTestApp(moduleFixture, { trustProxy: 1 });
+      });
+
+      afterAll(async () => {
+        await trustedApp.close();
+      });
+
+      it("req.ip resolves to the client address the proxy forwarded, not the proxy's own", async () => {
+        const r1 = await request(trustedApp.getHttpServer())
+          .post('/auth/login')
+          .set('X-Forwarded-For', '198.51.100.11')
+          .send({ email: 'trusted-a@rl-test.local', password: 'whatever' })
+          .expect(401);
+        expect(Number(r1.headers['x-ratelimit-remaining-login-ip'])).toBe(
+          LOGIN_IP_THROTTLE.limit - 1,
+        );
+
+        // A different forwarded address is tracked as a different client -
+        // not collapsed onto the proxy's own loopback socket address, which
+        // would make this continue decrementing the same counter as above.
+        const r2 = await request(trustedApp.getHttpServer())
+          .post('/auth/login')
+          .set('X-Forwarded-For', '198.51.100.22')
+          .send({ email: 'trusted-b@rl-test.local', password: 'whatever' })
+          .expect(401);
+        expect(Number(r2.headers['x-ratelimit-remaining-login-ip'])).toBe(
+          LOGIN_IP_THROTTLE.limit - 1,
+        );
+      });
+
+      it('a client sending TWO forwarded addresses cannot make itself appear to be the first one', async () => {
+        // Establish "198.51.100.33" as a tracked client via a legitimate
+        // single-hop forward.
+        await request(trustedApp.getHttpServer())
+          .post('/auth/login')
+          .set('X-Forwarded-For', '198.51.100.33')
+          .send({ email: 'spoof-target@rl-test.local', password: 'whatever' })
+          .expect(401);
+
+        // An attacker prepends that same address, hoping to be read as the
+        // client. With exactly one hop trusted, Express reads the
+        // RIGHTMOST entry instead - the attacker's own, appended address -
+        // so this is tracked as a fresh, different client: a full budget
+        // minus one, not "198.51.100.33"'s budget minus two.
+        const spoofed = await request(trustedApp.getHttpServer())
+          .post('/auth/login')
+          .set('X-Forwarded-For', '198.51.100.33, 203.0.113.77')
+          .send({ email: 'attacker@rl-test.local', password: 'whatever' })
+          .expect(401);
+        expect(Number(spoofed.headers['x-ratelimit-remaining-login-ip'])).toBe(
+          LOGIN_IP_THROTTLE.limit - 1,
+        );
+      });
+    });
   });
 });

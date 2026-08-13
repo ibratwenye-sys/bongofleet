@@ -9,6 +9,7 @@ import {
   LOGIN_IP_THROTTLE,
   REFRESH_THROTTLE,
   SIGNUP_IDENTIFIER_THROTTLE,
+  SIGNUP_IP_THROTTLE,
 } from './throttle.constants';
 import {
   trackByIp,
@@ -74,6 +75,12 @@ export function buildThrottlerOptions(
         name: 'signup-identifier',
         ...SIGNUP_IDENTIFIER_THROTTLE,
         getTracker: (req) => trackByIpAndIdentifier(req),
+        skipIf: (context) => !isSignup(context),
+      },
+      {
+        name: 'signup-ip',
+        ...SIGNUP_IP_THROTTLE,
+        getTracker: (req) => trackByIp(req),
         skipIf: (context) => !isSignup(context),
       },
       {

@@ -14,6 +14,11 @@ export const envValidationSchema = Joi.object({
 
   CORS_ORIGINS: Joi.string().allow('').default(''),
 
+  // Parsed and validated for real in trust-proxy.util.ts (hop count vs
+  // address/subnet vs the disallowed "true") - this only checks it's a
+  // string, same division of labor as CORS_ORIGINS above.
+  TRUST_PROXY: Joi.string().allow('').default(''),
+
   UPLOADS_DIR: Joi.string().default('./uploads'),
 
   // --- Outgoing email (document expiry alerts etc.) ---

@@ -10,6 +10,7 @@ import {
   LOGIN_IP_THROTTLE,
   REFRESH_THROTTLE,
   SIGNUP_IDENTIFIER_THROTTLE,
+  SIGNUP_IP_THROTTLE,
 } from './throttle.constants';
 
 function fakeConfig(values: Record<string, string>): ConfigService {
@@ -37,9 +38,16 @@ describe('buildThrottlerOptions (Stage H0)', () => {
   const options = buildThrottlerOptions(storage, config, jwt) as { throttlers: ThrottlerOptions[] };
   const throttlers = options.throttlers;
 
-  it("produces exactly the five named throttlers, with the constants' own limits/ttls", () => {
+  it("produces exactly the six named throttlers, with the constants' own limits/ttls", () => {
     expect(throttlers.map((t) => t.name).sort()).toEqual(
-      ['default', 'login-identifier', 'login-ip', 'refresh', 'signup-identifier'].sort(),
+      [
+        'default',
+        'login-identifier',
+        'login-ip',
+        'refresh',
+        'signup-identifier',
+        'signup-ip',
+      ].sort(),
     );
     expect(throttlerNamed(throttlers, 'default')).toMatchObject(GLOBAL_THROTTLE);
     expect(throttlerNamed(throttlers, 'login-identifier')).toMatchObject(LOGIN_IDENTIFIER_THROTTLE);
@@ -48,6 +56,11 @@ describe('buildThrottlerOptions (Stage H0)', () => {
     expect(throttlerNamed(throttlers, 'signup-identifier')).toMatchObject(
       SIGNUP_IDENTIFIER_THROTTLE,
     );
+    expect(throttlerNamed(throttlers, 'signup-ip')).toMatchObject(SIGNUP_IP_THROTTLE);
+  });
+
+  it('signup-ip is at least as strict as login-ip (Stage H0b Part 2)', () => {
+    expect(SIGNUP_IP_THROTTLE.limit).toBeLessThanOrEqual(LOGIN_IP_THROTTLE.limit);
   });
 
   it("'default' never skips - it's the global ceiling, checked on every route", () => {
@@ -59,6 +72,7 @@ describe('buildThrottlerOptions (Stage H0)', () => {
     ['login-identifier', AuthController.prototype.login],
     ['login-ip', AuthController.prototype.login],
     ['signup-identifier', AuthController.prototype.signup],
+    ['signup-ip', AuthController.prototype.signup],
     ['refresh', AuthController.prototype.refresh],
   ])('%s only runs on its own route, skipping every other handler', (name, ownHandler) => {
     const t = throttlerNamed(throttlers, name);
@@ -104,12 +118,12 @@ describe('buildThrottlerOptions (Stage H0)', () => {
     expect(await signupT.getTracker!(req, context)).toBe('ip:10.0.0.1:id:a@test.local');
   });
 
-  it('login-ip resolves through trackByIp', async () => {
-    const t = throttlerNamed(throttlers, 'login-ip');
-    const tracker = await t.getTracker!(
-      { ip: '10.0.0.1', body: { email: 'anything' } },
-      contextFor(() => {}),
-    );
-    expect(tracker).toBe('ip:10.0.0.1');
+  it('login-ip and signup-ip both resolve through trackByIp', async () => {
+    const loginIpT = throttlerNamed(throttlers, 'login-ip');
+    const signupIpT = throttlerNamed(throttlers, 'signup-ip');
+    const req = { ip: '10.0.0.1', body: { email: 'anything' } };
+    const context = contextFor(() => {});
+    expect(await loginIpT.getTracker!(req, context)).toBe('ip:10.0.0.1');
+    expect(await signupIpT.getTracker!(req, context)).toBe('ip:10.0.0.1');
   });
 });
