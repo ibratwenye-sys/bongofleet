@@ -255,7 +255,7 @@ describe('Payment (e2e)', () => {
       const otherTenantAccount = await request(app.getHttpServer())
         .post('/payment-accounts')
         .set('Authorization', `Bearer ${ownerBToken}`)
-        .send({ kind: 'MOBILE_MONEY', provider: 'M-Pesa', accountNumber: '+255700000097' })
+        .send({ kind: 'MOBILE_MONEY', provider: 'M-Pesa', accountNumber: '+255700000002' })
         .expect(201);
 
       await request(app.getHttpServer())
