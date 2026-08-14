@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 /**
@@ -44,12 +44,12 @@ describe('OwnershipPlan guarantorId + ledger (e2e, Stage G Part 3/3b)', () => {
   beforeEach(async () => {
     await cleanDatabase(prisma);
     seedCounter = 0;
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   async function createDriverAndVehicle(accessToken: string, tag: string) {
     seedCounter += 1;

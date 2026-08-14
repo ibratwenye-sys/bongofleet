@@ -5,7 +5,7 @@ import { UserRole } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 async function signupOwner(app: INestApplication, overrides: Partial<Record<string, string>> = {}) {
@@ -92,12 +92,12 @@ describe('Payment (e2e)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('records a payment and reconciles it to COMPLETED, stamping paidAt', async () => {
     const { accessToken: ownerToken, tenantId } = await signupOwner(app);
@@ -297,12 +297,12 @@ describe('Payment module does not affect the auth rate limiter', () => {
     app = await createTestApp(moduleFixture);
     prisma = moduleFixture.get(PrismaService);
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('still 429s on the 6th rapid /auth/login attempt', async () => {
     await signupOwner(app);

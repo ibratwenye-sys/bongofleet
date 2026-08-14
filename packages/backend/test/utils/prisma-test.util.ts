@@ -2,6 +2,23 @@ import Redis from 'ioredis';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { requestContext } from '../../src/common/context/request-context';
 
+// Jest's hook timeout (beforeEach/beforeAll/afterAll) defaults to 5000ms - a
+// number picked for typical test setup, not for a TRUNCATE CASCADE across the
+// full schema plus a Redis round trip on every single test. 20s is a budget
+// sized to that actual work, not a hiding place for a genuine hang: the e2e
+// job's 5-minute step timeout is what still catches a real deadlock or a
+// connection that never resolves. If cleanDatabase() starts routinely
+// approaching this number, that is a performance problem to fix, not a cue to
+// raise it further - see the timing log below, which fires long before this
+// budget is exhausted.
+export const CLEAN_DATABASE_HOOK_TIMEOUT_MS = 20_000;
+
+// Below this, a slow call isn't worth a log line. Above it, we want to know
+// immediately whether cleanDatabase() was merely slow or effectively hung -
+// see the CI report on the tenant-isolation.e2e-spec.ts flake (2026-08-14/15)
+// that had no evidence either way once the hook had already timed out.
+const SLOW_CALL_LOG_THRESHOLD_MS = 2000;
+
 const TABLES_FK_SAFE_ORDER = [
   'maintenance_reminders',
   'assignment_alerts',
@@ -41,6 +58,9 @@ const TABLES_FK_SAFE_ORDER = [
  * Redis; it can never be the thing still open when Jest tries to exit.
  */
 export async function cleanDatabase(prisma: PrismaService): Promise<void> {
+  const callStart = Date.now();
+
+  const truncateStart = Date.now();
   await requestContext.runUnscoped(async () => {
     // Hard safety net: this helper TRUNCATEs every table, so refuse to run
     // unless we're connected to a dedicated *_test database. This makes it
@@ -61,8 +81,15 @@ export async function cleanDatabase(prisma: PrismaService): Promise<void> {
       await prisma.client.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE`);
     }
   });
+  const truncateMs = Date.now() - truncateStart;
 
-  const redis = new Redis(process.env.REDIS_URL as string);
+  // lazyConnect so `connect` can be timed separately from `flushdb` - a plain
+  // `new Redis(url)` starts connecting in the background immediately, folding
+  // connect time invisibly into whatever command runs first.
+  const redis = new Redis(process.env.REDIS_URL as string, { lazyConnect: true });
+  let connectMs = 0;
+  let flushMs = 0;
+  let quitMs = 0;
   try {
     // Same defense-in-depth as the Postgres check above: refuse to FLUSHDB
     // anything that looks like the dev/default database (index 0), even
@@ -76,8 +103,33 @@ export async function cleanDatabase(prisma: PrismaService): Promise<void> {
           'to one.',
       );
     }
+
+    const connectStart = Date.now();
+    await redis.connect();
+    connectMs = Date.now() - connectStart;
+
+    const flushStart = Date.now();
     await redis.flushdb();
+    flushMs = Date.now() - flushStart;
   } finally {
+    const quitStart = Date.now();
     await redis.quit();
+    quitMs = Date.now() - quitStart;
+  }
+
+  const totalMs = Date.now() - callStart;
+  if (totalMs > SLOW_CALL_LOG_THRESHOLD_MS) {
+    const phases: Array<[string, number]> = [
+      ['truncate', truncateMs],
+      ['redis-connect', connectMs],
+      ['redis-flush', flushMs],
+      ['redis-quit', quitMs],
+    ];
+    const [slowestPhase, slowestMs] = phases.reduce((a, b) => (b[1] > a[1] ? b : a));
+    console.warn(
+      `[cleanDatabase] slow call: ${totalMs}ms total, slowest phase: ${slowestPhase} ` +
+        `(${slowestMs}ms) [truncate=${truncateMs}ms redis-connect=${connectMs}ms ` +
+        `redis-flush=${flushMs}ms redis-quit=${quitMs}ms]`,
+    );
   }
 }

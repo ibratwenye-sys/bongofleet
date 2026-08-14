@@ -5,7 +5,7 @@ import { UserRole } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 async function signupOwner(app: INestApplication, overrides: Partial<Record<string, string>> = {}) {
@@ -56,12 +56,12 @@ describe('Motorcycle (e2e)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('creates, lists, updates, and deactivates a motorcycle', async () => {
     const { accessToken } = await signupOwner(app);

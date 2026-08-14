@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 async function signupOwner(app: INestApplication, email: string, company: string) {
@@ -35,12 +35,12 @@ describe('Expenses (e2e)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('supports the full expense lifecycle with validation and filtering', async () => {
     const token = await signupOwner(app, 'owner@fleet.test', 'Fleet');

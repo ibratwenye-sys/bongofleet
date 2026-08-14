@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { LOGIN_IP_THROTTLE } from '../src/common/throttle/throttle.constants';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 /**
@@ -30,12 +30,12 @@ describe('Rate limiting (e2e, Stage H0)', () => {
   beforeEach(async () => {
     await cleanDatabase(prisma);
     seedCounter = 0;
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   function signupBody(overrides: Partial<Record<string, string>> = {}) {
     seedCounter += 1;

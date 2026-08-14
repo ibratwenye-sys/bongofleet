@@ -4,7 +4,7 @@ import { UserRole } from '@prisma/client';
 import { PrismaModule } from '../src/prisma/prisma.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { requestContext } from '../src/common/context/request-context';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 
 describe('Tenant isolation (integration)', () => {
   let moduleRef: TestingModule;
@@ -55,12 +55,12 @@ describe('Tenant isolation (integration)', () => {
         }),
       ]),
     );
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await moduleRef.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('a query scoped to tenant A never returns tenant B rows', async () => {
     requestContext.enterWith({ tenantId: tenantA.id, userId: 'irrelevant', role: UserRole.OWNER });

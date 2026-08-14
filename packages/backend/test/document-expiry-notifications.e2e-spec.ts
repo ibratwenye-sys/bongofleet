@@ -6,7 +6,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { MailerService } from '../src/modules/notification/mailer.service';
 import { DocumentExpiryNotificationService } from '../src/modules/notification/document-expiry-notification.service';
 import { requestContext } from '../src/common/context/request-context';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 const TINY_PNG = Buffer.from(
@@ -83,12 +83,12 @@ describe('Document expiry notifications (e2e)', () => {
   beforeEach(async () => {
     await cleanDatabase(prisma);
     jest.restoreAllMocks();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('emails each tenant only its own expiring documents, records alerts, and never repeats them', async () => {
     const sendSpy = jest.spyOn(mailer, 'send');

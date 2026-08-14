@@ -5,7 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { refreshKey } from '../src/modules/auth/auth.constants';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 // No verification needed - these are the app's own freshly-issued tokens
@@ -42,12 +42,12 @@ describe('Auth (e2e)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('signs up, logs in, reads /me, refreshes, and logs out', async () => {
     const signupRes = await request(app.getHttpServer())

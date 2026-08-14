@@ -6,7 +6,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { MailerService } from '../src/modules/notification/mailer.service';
 import { MissedPaymentNotificationService } from '../src/modules/notification/missed-payment-notification.service';
 import { requestContext } from '../src/common/context/request-context';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 function isoDaysFromNow(days: number): string {
@@ -104,12 +104,12 @@ describe('Missed-payment notifications (e2e)', () => {
   beforeEach(async () => {
     await cleanDatabase(prisma);
     jest.restoreAllMocks();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('alerts unpaid and underpaid past days once, ignores paid days, today, and other tenants', async () => {
     const sendSpy = jest.spyOn(mailer, 'send');

@@ -6,7 +6,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { requestContext } from '../src/common/context/request-context';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 describe('Tenant settings (e2e, Stage G Part 2)', () => {
@@ -23,12 +23,12 @@ describe('Tenant settings (e2e, Stage G Part 2)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   async function signupOwner(overrides: Partial<Record<string, string>> = {}) {
     const body = {

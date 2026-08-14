@@ -7,7 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { requestContext } from '../src/common/context/request-context';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 function bufferParser(res: request.Response, callback: (err: Error | null, body: Buffer) => void) {
@@ -72,13 +72,13 @@ describe('OwnershipPlan (e2e)', () => {
   beforeEach(async () => {
     await cleanDatabase(prisma);
     driverSeedCounter = 0;
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
     await fs.rm(process.env.UPLOADS_DIR ?? './uploads', { recursive: true, force: true });
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   async function createDriverAndVehicle(accessToken: string, tag: string) {
     driverSeedCounter += 1;

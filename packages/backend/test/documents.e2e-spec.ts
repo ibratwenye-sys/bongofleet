@@ -4,7 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { cleanDatabase } from './utils/prisma-test.util';
+import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
 
 // A minimal valid 1x1 transparent PNG, used as real (not fake) image bytes for
@@ -49,13 +49,13 @@ describe('Documents & Guarantors (e2e)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(prisma);
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanDatabase(prisma);
     await app.close();
     await fs.rm(process.env.UPLOADS_DIR ?? './uploads', { recursive: true, force: true });
-  });
+  }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('uploads, lists, downloads, and tracks expiry for documents; manages guarantors; enforces tenant isolation', async () => {
     const { accessToken } = await signupOwner(app);
