@@ -4,8 +4,10 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
  * Stage H0c Part 1/4 - cleanDatabase() FLUSHDBs whatever Redis REDIS_URL
  * resolves to, so this is the second, independent guard (alongside
  * testRedisUrl()'s own collision check) that must fail loudly rather than
- * ever flushing database 0. jest.resetModules() per test: the module under
- * test memoizes its Redis connection at module scope.
+ * ever flushing database 0. jest.resetModules() per test so each test
+ * re-reads process.env.REDIS_URL fresh (the module has no state of its own
+ * to reset - cleanDatabase() opens and quits its own Redis connection on
+ * every call, see the CI open-handle report on why that changed).
  */
 describe('cleanDatabase Redis guard (Stage H0c Part 1)', () => {
   const ORIGINAL_ENV = { ...process.env };

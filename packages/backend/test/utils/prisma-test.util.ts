@@ -2,20 +2,6 @@ import Redis from 'ioredis';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { requestContext } from '../../src/common/context/request-context';
 
-// Stage H0c Part 1 - REDIS_URL is overridden to a dedicated, isolated test
-// database (see test/utils/test-redis.ts) before any e2e test file's module
-// loads (test/setup-e2e.ts), so this connection is never the dev/prod
-// keyspace. Built lazily, on first use inside cleanDatabase(), for the same
-// reason as the old throttle-only connection this replaces: REDIS_URL isn't
-// populated into process.env until setup-e2e.ts/ConfigModule have run.
-let testRedis: Redis | null = null;
-function getTestRedis(): Redis {
-  if (!testRedis) {
-    testRedis = new Redis(process.env.REDIS_URL as string);
-  }
-  return testRedis;
-}
-
 const TABLES_FK_SAFE_ORDER = [
   'maintenance_reminders',
   'assignment_alerts',
@@ -40,6 +26,19 @@ const TABLES_FK_SAFE_ORDER = [
  * test/utils/test-redis.ts), a plain FLUSHDB is simpler and safer than any
  * pattern-matching sweep, and incidentally clears refresh-token keys too
  * (Stage H0's throttle-only prefix sweep never touched those).
+ *
+ * The Redis connection is opened and quit within this one call, on every
+ * call, rather than reused across calls via a module-level singleton (what
+ * this used to do, since Stage H0). That singleton was never closed by
+ * anything - not by design, there was simply no correct place to do it:
+ * setupFilesAfterEnv's own afterAll fires BEFORE each spec file's afterAll
+ * (verified empirically), and ~18 of 19 e2e spec files call cleanDatabase()
+ * again in their own afterAll as final teardown - so closing the shared
+ * connection from a global afterAll would only have the file's own
+ * afterAll immediately reopen it via the lazy getter, moments before that
+ * file's module registry (and the new connection with it) is torn down
+ * unclosed. A fresh connection per call costs a few ms against a local
+ * Redis; it can never be the thing still open when Jest tries to exit.
  */
 export async function cleanDatabase(prisma: PrismaService): Promise<void> {
   await requestContext.runUnscoped(async () => {
@@ -63,18 +62,22 @@ export async function cleanDatabase(prisma: PrismaService): Promise<void> {
     }
   });
 
-  const redis = getTestRedis();
-  // Same defense-in-depth as the Postgres check above: refuse to FLUSHDB
-  // anything that looks like the dev/default database (index 0), even
-  // though testRedisUrl() already refuses to let REDIS_URL resolve there
-  // for e2e tests in the first place - this is the second, independent
-  // guard right at the destructive call site.
-  if ((redis.options.db ?? 0) === 0) {
-    throw new Error(
-      'cleanDatabase() refused to FLUSHDB Redis database 0: e2e tests must run against a ' +
-        'dedicated test database (see test/utils/test-redis.ts) - REDIS_URL was not overridden ' +
-        'to one.',
-    );
+  const redis = new Redis(process.env.REDIS_URL as string);
+  try {
+    // Same defense-in-depth as the Postgres check above: refuse to FLUSHDB
+    // anything that looks like the dev/default database (index 0), even
+    // though testRedisUrl() already refuses to let REDIS_URL resolve there
+    // for e2e tests in the first place - this is the second, independent
+    // guard right at the destructive call site.
+    if ((redis.options.db ?? 0) === 0) {
+      throw new Error(
+        'cleanDatabase() refused to FLUSHDB Redis database 0: e2e tests must run against a ' +
+          'dedicated test database (see test/utils/test-redis.ts) - REDIS_URL was not overridden ' +
+          'to one.',
+      );
+    }
+    await redis.flushdb();
+  } finally {
+    await redis.quit();
   }
-  await redis.flushdb();
 }

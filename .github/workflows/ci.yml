@@ -10,10 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     # Hard backstop for the whole job, independent of the e2e step's own
-    # 15-minute timeout below - install/lint/unit/build together normally
+    # 5-minute timeout below - install/lint/unit/build together normally
     # finish in a couple of minutes, so this only bites if something beyond
     # the e2e step itself is stuck.
-    timeout-minutes: 25
+    timeout-minutes: 12
 
     services:
       # Version matches docker-compose.yml, so CI exercises the same engine
@@ -133,22 +133,19 @@ jobs:
       # loudly instead of quietly shipping a stale shared-lib.
       - name: E2E tests
         run: pnpm --filter @bongofleet/backend test:e2e
-        # The e2e suite has a known delay exiting after its tests finish
-        # (open TCP handles from pg/ioredis still tearing down when Jest
-        # checks, one second after the run completes - see the CI setup
-        # report for what was and wasn't found chasing this). Worse here
-        # than locally: the first real run on this workflow passed all 19
-        # suites / 91 tests in ~90s, then hung for 3+ minutes afterward and
-        # got killed by an earlier 5-minute version of this timeout before
-        # it ever exited on its own - so whatever this is, it's more than a
-        # cosmetic one-second delay in this environment, and the true upper
-        # bound on the hang is still unknown. 15 minutes is comfortably
-        # above what's been observed, while still bounded - this is a
-        # backstop against a genuine hang, not a workaround for this one.
-        # Not --forceExit: if a connection genuinely isn't closing, forcing
-        # the test process to exit would hide the exact leak that's also
-        # live in production.
-        timeout-minutes: 15
+        # Root cause found and fixed: test/utils/prisma-test.util.ts's
+        # cleanDatabase() held a module-level ioredis singleton across every
+        # call, in every e2e spec file, and nothing ever quit it - a real
+        # unbounded leak (not a teardown delay), present since Stage H0,
+        # unchanged by H0c's rename of the same connection. Confirmed by
+        # exit, not by timeout: the fixed suite (all 19 suites / 91 tests)
+        # now exits on its own with no lingering handle. This timeout is
+        # back to a tight backstop against a genuine future hang, not
+        # padding for this one - do not widen it to make a future failure
+        # here go away without the same by-exit proof this one got. Not
+        # --forceExit, same reasoning as always: hiding a real leak here
+        # would hide the same leak in the running application.
+        timeout-minutes: 5
 
       - name: Build dashboard
         run: pnpm --filter @bongofleet/dashboard build
