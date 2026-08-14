@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Hard backstop for the whole job, independent of the e2e step's own
+    # timeout below - install/lint/unit/build together normally finish in a
+    # few minutes, so this only bites if something is genuinely stuck.
+    timeout-minutes: 20
+
+    services:
+      # Version matches docker-compose.yml, so CI exercises the same engine
+      # version the app actually runs against everywhere else.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bongofleet
+          POSTGRES_PASSWORD: bongofleet_ci_password
+          POSTGRES_DB: bongofleet
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bongofleet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      # Plain dev-shaped names, matching REDIS_URL/DATABASE_URL below - the
+      # e2e suite (test/utils/test-database.ts, test/utils/test-redis.ts)
+      # derives and refuses-if-colliding its own *_test database and its own
+      # Redis db 15 from these at runtime (Stage H0c). Nothing here should
+      # point at a test target directly; that guard is the point.
+      DATABASE_URL: postgresql://bongofleet:bongofleet_ci_password@localhost:5432/bongofleet
+      REDIS_URL: redis://localhost:6379
+      # Not real secrets - this is an ephemeral CI database with no data
+      # worth protecting. Long enough to satisfy JWT signing, nothing more.
+      JWT_ACCESS_SECRET: ci-only-access-secret-32-characters-minimum-not-a-real-value
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-32-characters-minimum-not-a-real-value
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # First step, before any install/build, so a bad commit fails in
+      # seconds and never wastes a build on content that must not have been
+      # pushed at all. This repo is PUBLIC: once real personal data lands in
+      # history, removing it means rewriting that history, not just adding a
+      # follow-up commit - so this is worth failing a build over.
+      - name: Personal-data sweep
+        run: |
+          set +e
+          matches=$(grep -rnE "[0-9]{8}-[0-9]{5}-[0-9]{5}-[0-9]{2}|\+255[0-9]{9}|NMB [0-9]{6,}|Lipa [0-9]{6,}" \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=.pnpm-store \
+            --exclude=pnpm-lock.yaml \
+            . | grep -vE "00000000-00000-00000-00|\+25570000000[0-9]")
+          set -e
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo "::error::Personal-data sweep found content shaped like a real NIDA number, phone number, or bank/mobile-money account outside the sanctioned placeholder set. This repo is PUBLIC - once real personal data is pushed, removing it requires rewriting git history, not a follow-up commit. Fix the line(s) above (use the existing 00000000-00000-00000-00 / +2557000000xx placeholders), or extend this step's exclusion pattern if it is genuinely a new sanctioned placeholder - do not delete this step to get past it."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # Pinned to the major version pnpm-lock.yaml's lockfileVersion 9.0
+          # was written by, not "latest" - a lockfile-format bump under us
+          # would break --frozen-lockfile installs without warning.
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches packages/backend/Dockerfile's `FROM node:22-alpine` - the
+          # actual version this app runs on in the deployed image, not just
+          # the >=20.0.0 floor in the root package.json's "engines" field.
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Unit tests
+        run: pnpm --filter @bongofleet/backend test
+
+      # No explicit shared-lib build step anywhere in this workflow, on
+      # purpose: pnpm/package.json's own pretest, pretest:e2e, and (for the
+      # dashboard build below) prebuild hooks are what are supposed to keep
+      # shared-lib/dist/ fresh (see Stage F3a). A clean CI checkout starts
+      # with no dist/ at all, so this is the one environment where, if those
+      # hooks are broken, nothing else papers over it - the build fails
+      # loudly instead of quietly shipping a stale shared-lib.
+      - name: E2E tests
+        run: pnpm --filter @bongofleet/backend test:e2e
+        # The e2e suite has a known delay exiting after its tests finish
+        # (open TCP handles from pg/ioredis still tearing down when Jest
+        # checks, one second after the run completes - see the CI setup
+        # report for what was and wasn't found chasing this). This timeout
+        # is the backstop for that becoming an actual hang instead of a
+        # cosmetic delay; it fails the step loudly rather than silently
+        # consuming the rest of the job's budget. Not --forceExit: if a
+        # connection genuinely isn't closing, forcing the test process to
+        # exit would hide the exact leak that's also live in production.
+        timeout-minutes: 5
+
+      - name: Build dashboard
+        run: pnpm --filter @bongofleet/dashboard build
