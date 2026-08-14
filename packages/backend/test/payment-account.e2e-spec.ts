@@ -208,7 +208,7 @@ describe('PaymentAccount (e2e)', () => {
     const unreferenced = await request(app.getHttpServer())
       .post('/payment-accounts')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ kind: 'MOBILE_MONEY', provider: 'Airtel Money', accountNumber: '+255700000098' })
+      .send({ kind: 'MOBILE_MONEY', provider: 'Airtel Money', accountNumber: '+255700000002' })
       .expect(201);
 
     const driverLogin = await request(app.getHttpServer())

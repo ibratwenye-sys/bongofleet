@@ -63,6 +63,15 @@ jobs:
       # pushed at all. This repo is PUBLIC: once real personal data lands in
       # history, removing it means rewriting that history, not just adding a
       # follow-up commit - so this is worth failing a build over.
+      #
+      # The exclusion list below holds EXACTLY the sanctioned placeholder
+      # values established in the H0b purge - the all-zero NIDA
+      # (00000000-00000-00000-00), the +2557000000xx phone range, the
+      # all-zero NMB account (0000000000), and the all-zero Lipa number
+      # (000000) - and nothing else. Anything that doesn't match gets edited
+      # to conform to one of these, not added as a new exception: every line
+      # added here is a permanent hole in the one check that guards a public
+      # repo from a history rewrite.
       - name: Personal-data sweep
         run: |
           set +e
@@ -71,11 +80,11 @@ jobs:
             --exclude-dir=node_modules \
             --exclude-dir=.pnpm-store \
             --exclude=pnpm-lock.yaml \
-            . | grep -vE "00000000-00000-00000-00|\+25570000000[0-9]")
+            . | grep -vE "00000000-00000-00000-00|\+25570000000[0-9]|NMB 0000000000|Lipa 000000")
           set -e
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo "::error::Personal-data sweep found content shaped like a real NIDA number, phone number, or bank/mobile-money account outside the sanctioned placeholder set. This repo is PUBLIC - once real personal data is pushed, removing it requires rewriting git history, not a follow-up commit. Fix the line(s) above (use the existing 00000000-00000-00000-00 / +2557000000xx placeholders), or extend this step's exclusion pattern if it is genuinely a new sanctioned placeholder - do not delete this step to get past it."
+            echo "::error::Personal-data sweep found content shaped like a real NIDA number, phone number, or bank/mobile-money account outside the sanctioned placeholder set. This repo is PUBLIC - once real personal data is pushed, removing it requires rewriting git history, not a follow-up commit. Fix the line(s) above to use the existing sanctioned placeholders (00000000-00000-00000-00 / +2557000000xx / NMB 0000000000 / Lipa 000000) - do not add a new exception to this step's exclusion pattern, and do not delete this step, to get past it."
             exit 1
           fi
 
