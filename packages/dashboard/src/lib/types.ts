@@ -38,6 +38,11 @@ export interface Assignment {
   assignedDate: string;
   targetAmount: string; // Prisma Decimal serializes as a string, not a number
   notes: string | null;
+  // Stage G6 Part 2 - non-null when the nightly hire-purchase generator
+  // created this assignment; distinguishes a rent-to-own charge from an
+  // ordinary daily-rental one. Was already on the API response, just not
+  // declared here until the rent-to-own payment flow needed to filter on it.
+  ownershipPlanId: string | null;
 }
 
 export interface CreateAssignmentPayload {
@@ -117,6 +122,22 @@ export interface Driver {
   emergencyContact: string | null;
   isActive: boolean;
   user: DriverUser;
+}
+
+// Stage G6 Part 2 - the searchable driver picker's result shape, distinct
+// from the full Driver type: only what's needed to disambiguate one driver
+// from another (name, phone, current vehicle plate) plus the id to submit.
+export interface DriverSearchResult {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  registrationNumber: string | null;
+}
+
+export interface DriverSearchResponse {
+  results: DriverSearchResult[];
+  hasMore: boolean;
 }
 
 export interface CreateDriverPayload {
@@ -459,6 +480,13 @@ export interface CreateOwnershipPlanPayload {
   lateFeeAmount?: number;
   breachAfterConsecutiveMissedDays?: number;
   notes?: string;
+}
+
+// Stage G6 Part 4 - just the one field the dashboard actually edits on an
+// existing plan. UpdateOwnershipPlanDto supports more, but nothing else has
+// a dashboard editor yet - not adding payload shape for UI that doesn't exist.
+export interface UpdateOwnershipPlanPayload {
+  contractEndDate?: string;
 }
 
 export interface OwnershipPlanLedgerRow {

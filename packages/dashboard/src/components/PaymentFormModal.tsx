@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import type { Assignment, CreatePaymentPayload, Driver, Motorcycle } from '../lib/types';
+import type {
+  Assignment,
+  CreatePaymentPayload,
+  Driver,
+  DriverSearchResult,
+  Motorcycle,
+} from '../lib/types';
 import { Modal } from './Modal';
+import { DriverPicker } from './DriverPicker';
 
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'BANK_TRANSFER'];
 
@@ -37,21 +44,45 @@ export function PaymentFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  // Stage G6 Part 2 - "rent-to-own" (search a driver, pay against their
+  // hire-purchase plan) vs "regular" (the original flat assignment picker,
+  // unchanged). Both still resolve to one dailyAssignmentId at submit time -
+  // payment.service.ts's overpayment allocation already spreads a
+  // rent-to-own payment across that plan's oldest unpaid assignments no
+  // matter which one of the plan's assignments is named here, so any of
+  // them is a valid anchor; the most recent is the least surprising choice.
+  const [mode, setMode] = useState<'rentToOwn' | 'regular'>('rentToOwn');
+  const [selectedDriver, setSelectedDriver] = useState<DriverSearchResult | null>(null);
   const [assignmentId, setAssignmentId] = useState(lockedAssignment?.id ?? '');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const driverPlanAssignments = useMemo(() => {
+    if (!selectedDriver) return [];
+    return assignments
+      .filter((a) => a.driverId === selectedDriver.id && a.ownershipPlanId !== null)
+      .sort((a, b) => (a.assignedDate < b.assignedDate ? 1 : -1));
+  }, [assignments, selectedDriver]);
+  const rentToOwnAssignment = driverPlanAssignments[0] ?? null;
+
   const selectedAssignment =
-    lockedAssignment ?? assignments.find((a) => a.id === assignmentId) ?? null;
+    lockedAssignment ??
+    (mode === 'rentToOwn'
+      ? rentToOwnAssignment
+      : (assignments.find((a) => a.id === assignmentId) ?? null));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (!selectedAssignment) {
-      setError('Select an assignment.');
+      setError(
+        mode === 'rentToOwn' && !lockedAssignment
+          ? 'Search for and select a driver with a rent-to-own charge.'
+          : 'Select an assignment.',
+      );
       return;
     }
     const amountNumber = Number(amount);
@@ -85,21 +116,62 @@ export function PaymentFormModal({
             {assignmentLabel(lockedAssignment, drivers, motorcycles)}
           </div>
         ) : (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Assignment</label>
-            <select
-              value={assignmentId}
-              onChange={(e) => setAssignmentId(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select an assignment…</option>
-              {assignments.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {assignmentLabel(a, drivers, motorcycles)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <>
+            <div className="flex gap-1 rounded border border-gray-200 bg-gray-50 p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setMode('rentToOwn')}
+                className={`flex-1 rounded px-2 py-1 font-medium ${
+                  mode === 'rentToOwn' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                Rent-to-own
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('regular')}
+                className={`flex-1 rounded px-2 py-1 font-medium ${
+                  mode === 'regular' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                Regular assignment
+              </button>
+            </div>
+
+            {mode === 'rentToOwn' ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
+                <DriverPicker value={selectedDriver} onSelect={setSelectedDriver} />
+                {selectedDriver && rentToOwnAssignment && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Latest charge: {rentToOwnAssignment.assignedDate.slice(0, 10)} — target{' '}
+                    {Number(rentToOwnAssignment.targetAmount).toLocaleString()} TZS
+                  </p>
+                )}
+                {selectedDriver && !rentToOwnAssignment && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    This driver has no rent-to-own plan charge to record against.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Assignment</label>
+                <select
+                  value={assignmentId}
+                  onChange={(e) => setAssignmentId(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Select an assignment…</option>
+                  {assignments.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {assignmentLabel(a, drivers, motorcycles)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
         )}
 
         <div>

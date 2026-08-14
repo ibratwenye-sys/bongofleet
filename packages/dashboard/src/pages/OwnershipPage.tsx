@@ -11,6 +11,7 @@ import type {
   OwnershipPlan,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { StatusBadge } from '../components/StatusBadge';
 
 const OWNERSHIP_PLAN_STATUS_STYLES: Record<string, string> = {
@@ -121,6 +122,13 @@ function CreatePlanFormModal({
   const [guarantors, setGuarantors] = useState<Guarantor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Stage G6 Part 1 - once the owner has touched the end-date field
+  // (typed in it, or cleared it), stop overwriting their choice with the
+  // estimate. Before that, the estimate IS the field's value: prefilling
+  // beats "offering" it via a button, because a blank end date should mean
+  // someone deliberately cleared it, not that nobody clicked a button.
+  const [endDateTouched, setEndDateTouched] = useState(false);
+  const [confirmingNoEndDate, setConfirmingNoEndDate] = useState(false);
 
   useEffect(() => {
     if (!form.driverId) {
@@ -159,6 +167,16 @@ function CreatePlanFormModal({
       })
     : null;
 
+  // Stage G6 Part 1 - prefill, not offer: as soon as there's enough input to
+  // project a calendar end date, that becomes the field's value. Stops the
+  // instant the owner touches the field themselves (see endDateTouched).
+  useEffect(() => {
+    if (!endDateTouched && estimate) {
+      setForm((prev) => ({ ...prev, contractEndDate: estimate.calendarEndDate }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimate?.calendarEndDate, endDateTouched]);
+
   function toggleWeekday(day: number) {
     setForm((prev) => ({
       ...prev,
@@ -168,27 +186,7 @@ function CreatePlanFormModal({
     }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (!form.driverId || !form.motorcycleId) {
-      setError('Driver and vehicle are required.');
-      return;
-    }
-    if (!form.totalPrice || totalPrice <= 0) {
-      setError('Enter a valid total price.');
-      return;
-    }
-    if (!form.dailyAmount || dailyAmount <= 0) {
-      setError('Enter a valid daily amount.');
-      return;
-    }
-    if (form.activeWeekdays.length === 0) {
-      setError('At least one active weekday is required.');
-      return;
-    }
-
+  async function submitPlan() {
     setSubmitting(true);
     try {
       const payload: CreateOwnershipPlanPayload = {
@@ -213,221 +211,274 @@ function CreatePlanFormModal({
     }
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!form.driverId || !form.motorcycleId) {
+      setError('Driver and vehicle are required.');
+      return;
+    }
+    if (!form.totalPrice || totalPrice <= 0) {
+      setError('Enter a valid total price.');
+      return;
+    }
+    if (!form.dailyAmount || dailyAmount <= 0) {
+      setError('Enter a valid daily amount.');
+      return;
+    }
+    if (form.activeWeekdays.length === 0) {
+      setError('At least one active weekday is required.');
+      return;
+    }
+
+    // Stage G6 Part 1/3 - a blank end date at this point was a deliberate
+    // clear (prefill already put the estimate there otherwise), but the cost
+    // is real and the printed contract is the one place it can't be quietly
+    // fixed later. Say what it costs, concretely, before it's submitted.
+    if (!form.contractEndDate) {
+      setConfirmingNoEndDate(true);
+      return;
+    }
+
+    await submitPlan();
+  }
+
   return (
-    <Modal title="Create ownership plan" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="max-h-[75vh] space-y-3 overflow-y-auto pr-1">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
-          <select
-            value={form.driverId}
-            onChange={(e) => setForm({ ...form, driverId: e.target.value, guarantorId: '' })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Select a driver…</option>
-            {drivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.user.firstName} {d.user.lastName} — {d.licenseNumber}
+    <>
+      <Modal title="Create ownership plan" onClose={onClose}>
+        <form onSubmit={handleSubmit} className="max-h-[75vh] space-y-3 overflow-y-auto pr-1">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
+            <select
+              value={form.driverId}
+              onChange={(e) => setForm({ ...form, driverId: e.target.value, guarantorId: '' })}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Select a driver…</option>
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.user.firstName} {d.user.lastName} — {d.licenseNumber}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
+            <select
+              value={form.motorcycleId}
+              onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Select a vehicle…</option>
+              {motorcycles.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.registrationNumber} {[m.make, m.model].filter(Boolean).join(' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Guarantor (optional)
+            </label>
+            <select
+              value={form.guarantorId}
+              onChange={(e) => setForm({ ...form, guarantorId: e.target.value })}
+              disabled={!form.driverId}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+            >
+              <option value="">
+                {form.driverId ? 'No guarantor on this contract' : 'Select a driver first…'}
               </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
-          <select
-            value={form.motorcycleId}
-            onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Select a vehicle…</option>
-            {motorcycles.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.registrationNumber} {[m.make, m.model].filter(Boolean).join(' ')}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Guarantor (optional)
-          </label>
-          <select
-            value={form.guarantorId}
-            onChange={(e) => setForm({ ...form, guarantorId: e.target.value })}
-            disabled={!form.driverId}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-          >
-            <option value="">
-              {form.driverId ? 'No guarantor on this contract' : 'Select a driver first…'}
-            </option>
-            {guarantors.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.firstName} {g.lastName} — {g.phone}
-              </option>
-            ))}
-          </select>
-        </div>
+              {guarantors.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.firstName} {g.lastName} — {g.phone}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Total price (TZS)
-            </label>
-            <input
-              type="number"
-              value={form.totalPrice}
-              onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Total price (TZS)
+              </label>
+              <input
+                type="number"
+                value={form.totalPrice}
+                onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Down payment (TZS)
+              </label>
+              <input
+                type="number"
+                value={form.downPayment}
+                onChange={(e) => setForm({ ...form, downPayment: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Daily amount (TZS)
+              </label>
+              <input
+                type="number"
+                value={form.dailyAmount}
+                onChange={(e) => setForm({ ...form, dailyAmount: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Down payment (TZS)
-            </label>
-            <input
-              type="number"
-              value={form.downPayment}
-              onChange={(e) => setForm({ ...form, downPayment: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Daily amount (TZS)
-            </label>
-            <input
-              type="number"
-              value={form.dailyAmount}
-              onChange={(e) => setForm({ ...form, dailyAmount: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Active weekdays</label>
-          <div className="flex gap-2">
-            {WEEKDAY_LABELS.map((label, day) => (
-              <button
-                type="button"
-                key={day}
-                onClick={() => toggleWeekday(day)}
-                className={`rounded border px-2 py-1 text-xs font-medium ${
-                  form.activeWeekdays.includes(day)
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-300 text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Start date</label>
-            <input
-              type="date"
-              value={form.startDate}
-              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
+            <label className="mb-1 block text-sm font-medium text-gray-700">Active weekdays</label>
+            <div className="flex gap-2">
+              {WEEKDAY_LABELS.map((label, day) => (
+                <button
+                  type="button"
+                  key={day}
+                  onClick={() => toggleWeekday(day)}
+                  className={`rounded border px-2 py-1 text-xs font-medium ${
+                    form.activeWeekdays.includes(day)
+                      ? 'border-gray-900 bg-gray-900 text-white'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Grace days (optional)
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.graceDays}
-              onChange={(e) => setForm({ ...form, graceDays: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
 
-        {/* Two distinct figures, never merged: paymentDayCount is how many
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Start date</label>
+              <input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Grace days (optional)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.graceDays}
+                onChange={(e) => setForm({ ...form, graceDays: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Two distinct figures, never merged: paymentDayCount is how many
             days the driver actually pays; calendarEndDate is the calendar
             date that lands on. A plan that skips a weekday takes MORE
             calendar days than payment days. */}
-        <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-          {estimate ? (
-            <div className="space-y-1">
-              <p className="text-gray-700">
-                <span className="font-medium">{estimate.paymentDayCount}</span> payment days
-                {estimate.finalInstalment > 0 && (
-                  <>
-                    {' '}
-                    (last day {formatTZS(estimate.finalInstalment)}, the rest at{' '}
-                    {formatTZS(dailyAmount)})
-                  </>
-                )}
+          <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm">
+            {estimate ? (
+              <div className="space-y-1">
+                <p className="text-gray-700">
+                  <span className="font-medium">{estimate.paymentDayCount}</span> payment days
+                  {estimate.finalInstalment > 0 && (
+                    <>
+                      {' '}
+                      (last day {formatTZS(estimate.finalInstalment)}, the rest at{' '}
+                      {formatTZS(dailyAmount)})
+                    </>
+                  )}
+                </p>
+                <p className="text-gray-700">
+                  Projected calendar end date:{' '}
+                  <span className="font-medium">{estimate.calendarEndDate}</span> — filled in below
+                  automatically; edit it if the agreed term is different.
+                </p>
+              </div>
+            ) : (
+              <p className="text-gray-500">
+                Enter total price, daily amount, start date, and at least one active weekday to see
+                the projected term.
               </p>
-              <p className="text-gray-700">
-                Projected calendar end date:{' '}
-                <span className="font-medium">{estimate.calendarEndDate}</span>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Contract end date
+            </label>
+            <input
+              type="date"
+              value={form.contractEndDate}
+              onChange={(e) => {
+                setEndDateTouched(true);
+                setForm({ ...form, contractEndDate: e.target.value });
+              }}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+            {/* Stage G6 Part 2 - the consequence has to be visible at the field,
+              live, while the owner is still looking at it - a submit-time
+              warning is too late for someone who half-typed a date and moved
+              on without noticing it didn't take. */}
+            {!form.contractEndDate && (
+              <p className="mt-1 text-xs text-amber-700">
+                No end date - this plan will have no agreed term, and the contract will print a
+                blank where the end date belongs.
               </p>
-              <button
-                type="button"
-                onClick={() =>
-                  setForm((prev) => ({ ...prev, contractEndDate: estimate.calendarEndDate }))
-                }
-                className="text-sm font-medium text-gray-700 hover:underline"
-              >
-                Use as contract end date
-              </button>
-            </div>
-          ) : (
-            <p className="text-gray-500">
-              Enter total price, daily amount, start date, and at least one active weekday to see
-              the projected term.
-            </p>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Contract end date (optional)
-          </label>
-          <input
-            type="date"
-            value={form.contractEndDate}
-            onChange={(e) => setForm({ ...form, contractEndDate: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Notes (optional)</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Notes (optional)</label>
-          <textarea
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            rows={2}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {submitting ? 'Creating…' : 'Create plan'}
-          </button>
-        </div>
-      </form>
-    </Modal>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {submitting ? 'Creating…' : 'Create plan'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+      {confirmingNoEndDate && (
+        <ConfirmDialog
+          title="No contract end date"
+          message="This plan will have no agreed end date, and the generated contract will print a blank where the term should be. Create it anyway?"
+          confirmLabel="Create anyway"
+          danger
+          onConfirm={() => {
+            setConfirmingNoEndDate(false);
+            void submitPlan();
+          }}
+          onCancel={() => setConfirmingNoEndDate(false)}
+        />
+      )}
+    </>
   );
 }
 

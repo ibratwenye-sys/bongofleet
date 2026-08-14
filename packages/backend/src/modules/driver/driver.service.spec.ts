@@ -12,6 +12,7 @@ describe('DriverService', () => {
     client: {
       user: { findFirst: jest.Mock };
       driver: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
+      dailyAssignment: { findMany: jest.Mock };
       $transaction: jest.Mock;
     };
   };
@@ -50,6 +51,7 @@ describe('DriverService', () => {
       client: {
         user: { findFirst: jest.fn() },
         driver: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+        dailyAssignment: { findMany: jest.fn() },
         $transaction: jest.fn(),
       },
     };
@@ -182,6 +184,93 @@ describe('DriverService', () => {
       expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: {} }),
       );
+    });
+  });
+
+  describe('search', () => {
+    function driverRow(id: string, firstName: string, lastName: string, phone: string) {
+      return { id, user: { id: `user-${id}`, firstName, lastName, phone, isActive: true } };
+    }
+
+    it('issues exactly one dailyAssignment query for the whole page of results, not one per result', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([
+        driverRow('d1', 'Juma', 'A', '+254711111111'),
+        driverRow('d2', 'Juma', 'B', '+254711111112'),
+        driverRow('d3', 'Juma', 'C', '+254711111113'),
+      ]);
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'Juma' }, owner);
+
+      expect(prisma.client.dailyAssignment.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the dailyAssignment query entirely when there are no driver matches', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'nobody' }, owner);
+
+      expect(prisma.client.dailyAssignment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('requests limit+1 rows and reports hasMore when more matched than the limit', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([
+        driverRow('d1', 'Juma', 'A', '+254711111111'),
+        driverRow('d2', 'Juma', 'B', '+254711111112'),
+        driverRow('d3', 'Juma', 'C', '+254711111113'),
+      ]);
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([]);
+
+      const result = await service.search({ q: 'Juma', limit: 2 }, owner);
+
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 3 }),
+      );
+      expect(result.results).toHaveLength(2);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('reports hasMore false when exactly the limit (or fewer) matched', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([
+        driverRow('d1', 'Juma', 'A', '+254711111111'),
+      ]);
+      prisma.client.dailyAssignment.findMany.mockResolvedValue([]);
+
+      const result = await service.search({ q: 'Juma', limit: 2 }, owner);
+
+      expect(result.results).toHaveLength(1);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it('returns an empty result with no query at all for a blank/whitespace-only q', async () => {
+      const result = await service.search({ q: '   ' }, owner);
+
+      expect(result).toEqual({ results: [], hasMore: false });
+      expect(prisma.client.driver.findMany).not.toHaveBeenCalled();
+    });
+
+    it('splits a multi-word query into tokens that each must match some field', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'Juma Bakari' }, owner);
+
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            AND: [
+              expect.objectContaining({ OR: expect.any(Array) }),
+              expect.objectContaining({ OR: expect.any(Array) }),
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('throws Forbidden when called by a RIDER, with no Prisma calls made', async () => {
+      await expect(service.search({ q: 'Juma' }, driverActor)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.client.driver.findMany).not.toHaveBeenCalled();
     });
   });
 

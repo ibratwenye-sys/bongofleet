@@ -1,8 +1,14 @@
 /**
  * Idempotent dev seed: ensures the owner login exists (owner@bongofleet.com /
  * Test1234!) plus a little demo data so the dashboard - especially Reports -
- * has something to show. Safe to run repeatedly: if the owner already exists,
- * it does nothing.
+ * has something to show, PLUS (Stage G6) an ownership-plan showcase: three
+ * plans in visibly different states, so a reviewer can see the streak/
+ * excusal work on screen without building any data by hand.
+ *
+ * Safe to run repeatedly - each section has its own guard, checked
+ * independently, so re-running after the owner already exists still fills in
+ * the ownership-plan showcase if that part hasn't run yet (and does nothing
+ * if it has).
  *
  * Run with:  pnpm --filter @bongofleet/backend seed
  * Targets whatever DATABASE_URL points at (your dev database), NOT the test DB.
@@ -19,10 +25,336 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 const OWNER_EMAIL = 'owner@bongofleet.com';
 const OWNER_PASSWORD = 'Test1234!';
 
+// Stage G6 - obviously-fake sample values only, per Ibrahim's own
+// instruction. Never a real-shaped NIDA, phone, or account number.
+const PLACEHOLDER_NATIONAL_ID = '00000000-00000-00000-00';
+
 function dateOnly(daysAgo: number): Date {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - daysAgo);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+async function seedOwnerAndBasicDemoData(
+  prisma: PrismaClient,
+): Promise<{ tenantId: string; ownerUserId: string }> {
+  const existingOwner = await prisma.user.findFirst({ where: { email: OWNER_EMAIL } });
+  if (existingOwner) {
+    // eslint-disable-next-line no-console
+    console.log(`Owner ${OWNER_EMAIL} already exists - reusing tenant ${existingOwner.tenantId}.`);
+    return { tenantId: existingOwner.tenantId, ownerUserId: existingOwner.id };
+  }
+
+  const passwordHash = await hashPassword(OWNER_PASSWORD);
+
+  const tenant = await prisma.tenant.create({ data: { name: 'My Fleet' } });
+
+  const owner = await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      email: OWNER_EMAIL,
+      phone: '+255700000000',
+      passwordHash,
+      role: 'OWNER',
+      firstName: 'Ibrahim',
+      lastName: 'Owner',
+    },
+  });
+
+  // A driver (login + profile), a motorcycle, one assignment paid in full, an
+  // expense, and a maintenance log - enough for Reports to show real numbers.
+  const driverUser = await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      email: 'driver1@bongofleet.com',
+      phone: '+255700000001',
+      passwordHash: await hashPassword('Driver1234!'),
+      role: 'RIDER',
+      firstName: 'Juma',
+      lastName: 'Driver',
+    },
+  });
+  const driver = await prisma.driver.create({
+    data: { tenantId: tenant.id, userId: driverUser.id, licenseNumber: 'LIC-DEMO-1' },
+  });
+  const motorcycle = await prisma.motorcycle.create({
+    data: { tenantId: tenant.id, registrationNumber: 'T123 ABC', currentMileage: 8000 },
+  });
+  const assignment = await prisma.dailyAssignment.create({
+    data: {
+      tenantId: tenant.id,
+      driverId: driver.id,
+      motorcycleId: motorcycle.id,
+      assignedDate: dateOnly(1),
+      targetAmount: 15000,
+    },
+  });
+  await prisma.dailyPayment.create({
+    data: {
+      tenantId: tenant.id,
+      dailyAssignmentId: assignment.id,
+      driverId: driver.id,
+      amount: 15000,
+      status: 'COMPLETED',
+      paidAt: new Date(),
+    },
+  });
+  await prisma.expense.create({
+    data: {
+      tenantId: tenant.id,
+      motorcycleId: motorcycle.id,
+      category: 'Fuel',
+      amount: 4000,
+      incurredAt: dateOnly(1),
+    },
+  });
+  await prisma.maintenanceLog.create({
+    data: {
+      tenantId: tenant.id,
+      motorcycleId: motorcycle.id,
+      description: 'Oil change',
+      cost: 12000,
+      performedAt: dateOnly(1),
+      mileageAtService: 8000,
+      nextServiceDate: dateOnly(-30),
+      nextServiceMileage: 11000,
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log(`Seeded owner ${OWNER_EMAIL} (password ${OWNER_PASSWORD}) + demo fleet data.`);
+  return { tenantId: tenant.id, ownerUserId: owner.id };
+}
+
+async function seedDriverAndVehicle(
+  prisma: PrismaClient,
+  tenantId: string,
+  tag: string,
+  firstName: string,
+  lastName: string,
+  phoneSuffix: string,
+  registration: string,
+) {
+  const user = await prisma.user.create({
+    data: {
+      tenantId,
+      email: `driver-${tag}@bongofleet.com`,
+      phone: `+25570000${phoneSuffix}`,
+      passwordHash: await hashPassword('Driver1234!'),
+      role: 'RIDER',
+      firstName,
+      lastName,
+    },
+  });
+  const driver = await prisma.driver.create({
+    data: {
+      tenantId,
+      userId: user.id,
+      licenseNumber: `LIC-DEMO-${tag.toUpperCase()}`,
+      nationalId: PLACEHOLDER_NATIONAL_ID,
+    },
+  });
+  const motorcycle = await prisma.motorcycle.create({
+    data: { tenantId, registrationNumber: registration, currentMileage: 5000 },
+  });
+  return { driver, motorcycle };
+}
+
+/**
+ * Stage G6 Part 2 - three ownership plans in visibly different states, so
+ * the streak/excusal work (Stage G-G5) is something a reviewer can actually
+ * look at instead of imagining from the diff:
+ *
+ *   - Amina: healthy and ahead (green "On track"/"ahead", no streak).
+ *   - Baraka: a few days behind, past this plan's own grace period but well
+ *     short of breach (amber, not red).
+ *   - Charles: a missed streak past the breach threshold (red) - WITH an
+ *     APPROVED excusal in the middle of that run, so the ledger visibly
+ *     shows one excused day inside an otherwise-unexcused streak, and the
+ *     streak still reads as breached even so (an excusal is transparent to
+ *     the count, not a subtraction from it - see
+ *     computeConsecutiveMissedDays).
+ *
+ * Guarded on Amina's motorcycle registration existing - if this has already
+ * run for this tenant, does nothing.
+ */
+async function seedOwnershipPlanShowcase(
+  prisma: PrismaClient,
+  tenantId: string,
+  ownerUserId: string,
+): Promise<void> {
+  const already = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-OWN-A' },
+  });
+  if (already) {
+    // eslint-disable-next-line no-console
+    console.log('Ownership-plan showcase already seeded for this tenant - nothing to do.');
+    return;
+  }
+
+  const DAILY_AMOUNT = 12000;
+  const TOTAL_PRICE = 1_800_000;
+
+  async function createPlan(
+    driverId: string,
+    motorcycleId: string,
+    graceDays: number,
+    startDate: Date,
+  ) {
+    return prisma.ownershipPlan.create({
+      data: {
+        tenantId,
+        driverId,
+        motorcycleId,
+        dailyAmount: DAILY_AMOUNT,
+        totalPrice: TOTAL_PRICE,
+        downPayment: 0,
+        startDate,
+        activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        graceDays,
+        breachAfterConsecutiveMissedDays: 5,
+      },
+    });
+  }
+
+  async function createAssignment(
+    driverId: string,
+    motorcycleId: string,
+    planId: string,
+    daysAgo: number,
+  ) {
+    return prisma.dailyAssignment.create({
+      data: {
+        tenantId,
+        driverId,
+        motorcycleId,
+        ownershipPlanId: planId,
+        assignedDate: dateOnly(daysAgo),
+        targetAmount: DAILY_AMOUNT,
+      },
+    });
+  }
+
+  async function payInFull(driverId: string, assignmentId: string, amount = DAILY_AMOUNT) {
+    return prisma.dailyPayment.create({
+      data: {
+        tenantId,
+        dailyAssignmentId: assignmentId,
+        driverId,
+        amount,
+        status: 'COMPLETED',
+        paidAt: new Date(),
+      },
+    });
+  }
+
+  // --- Amina: healthy and ahead (10 days assigned, all paid, one extra day
+  // paid on top -> 1 day ahead, no missed streak) ---
+  const amina = await seedDriverAndVehicle(
+    prisma,
+    tenantId,
+    'a',
+    'Amina',
+    'Hassan',
+    '010',
+    'DEMO-OWN-A',
+  );
+  const planA = await createPlan(amina.driver.id, amina.motorcycle.id, 2, dateOnly(15));
+  for (let daysAgo = 10; daysAgo >= 1; daysAgo -= 1) {
+    const assignment = await createAssignment(
+      amina.driver.id,
+      amina.motorcycle.id,
+      planA.id,
+      daysAgo,
+    );
+    await payInFull(amina.driver.id, assignment.id);
+    if (daysAgo === 1) {
+      // The surplus that puts her a day ahead.
+      await payInFull(amina.driver.id, assignment.id);
+    }
+  }
+
+  // --- Baraka: a few days behind, past this plan's own grace (1 day) but
+  // nowhere near breach (3 days missed, threshold is 5) ---
+  const baraka = await seedDriverAndVehicle(
+    prisma,
+    tenantId,
+    'b',
+    'Baraka',
+    'Mwangi',
+    '011',
+    'DEMO-OWN-B',
+  );
+  const planB = await createPlan(baraka.driver.id, baraka.motorcycle.id, 1, dateOnly(15));
+  for (let daysAgo = 10; daysAgo >= 1; daysAgo -= 1) {
+    const assignment = await createAssignment(
+      baraka.driver.id,
+      baraka.motorcycle.id,
+      planB.id,
+      daysAgo,
+    );
+    if (daysAgo > 3) {
+      await payInFull(baraka.driver.id, assignment.id);
+    }
+    // daysAgo 3, 2, 1 (yesterday) left unpaid - a 3-day streak.
+  }
+
+  // --- Charles: a missed streak past breach (5), with day -4 excused in the
+  // middle of it. The excusal is transparent, not subtracted - the streak
+  // still reads 7 (offsets -8..-1 minus the excused -4), still >= 5, still
+  // red - while the ledger visibly shows the one excused day inside it. ---
+  const charles = await seedDriverAndVehicle(
+    prisma,
+    tenantId,
+    'c',
+    'Charles',
+    'Ndege',
+    '012',
+    'DEMO-OWN-C',
+  );
+  const planC = await createPlan(charles.driver.id, charles.motorcycle.id, 2, dateOnly(15));
+  let excusedAssignmentDate: Date | null = null;
+  for (let daysAgo = 8; daysAgo >= 1; daysAgo -= 1) {
+    await createAssignment(charles.driver.id, charles.motorcycle.id, planC.id, daysAgo);
+    if (daysAgo === 4) {
+      excusedAssignmentDate = dateOnly(daysAgo);
+    }
+    // Every day left unpaid - the whole run is missed except the excused one.
+  }
+  if (excusedAssignmentDate) {
+    await prisma.dayExcusal.create({
+      data: {
+        tenantId,
+        ownershipPlanId: planC.id,
+        excusedDate: excusedAssignmentDate,
+        reason:
+          'Msiba wa jamaa - alimjulisha msimamizi wake (family bereavement - told his supervisor)',
+        status: 'APPROVED',
+        decidedByUserId: ownerUserId,
+        decidedAt: new Date(),
+      },
+    });
+  }
+
+  // --- A placeholder payment account, so the contract/payment-account UI
+  // has something obviously-fake to show rather than nothing. ---
+  await prisma.paymentAccount.create({
+    data: {
+      tenantId,
+      kind: 'BANK',
+      provider: 'Demo Bank',
+      accountNumber: '0000000000',
+      accountName: 'Demo Fleet Ltd',
+      isActive: true,
+      sortOrder: 0,
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log(
+    'Seeded ownership-plan showcase: Amina (ahead), Baraka (behind, amber), ' +
+      'Charles (breached, red, with one excused day mid-run).',
+  );
 }
 
 async function main(): Promise<void> {
@@ -37,91 +369,8 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
   try {
-    const existing = await prisma.user.findFirst({ where: { email: OWNER_EMAIL } });
-    if (existing) {
-      // eslint-disable-next-line no-console
-      console.log(`Owner ${OWNER_EMAIL} already exists - nothing to seed.`);
-      return;
-    }
-
-    const passwordHash = await hashPassword(OWNER_PASSWORD);
-
-    const tenant = await prisma.tenant.create({ data: { name: 'My Fleet' } });
-
-    await prisma.user.create({
-      data: {
-        tenantId: tenant.id,
-        email: OWNER_EMAIL,
-        phone: '+255700000000',
-        passwordHash,
-        role: 'OWNER',
-        firstName: 'Ibrahim',
-        lastName: 'Owner',
-      },
-    });
-
-    // A driver (login + profile), a motorcycle, one assignment paid in full, an
-    // expense, and a maintenance log - enough for Reports to show real numbers.
-    const driverUser = await prisma.user.create({
-      data: {
-        tenantId: tenant.id,
-        email: 'driver1@bongofleet.com',
-        phone: '+255700000001',
-        passwordHash: await hashPassword('Driver1234!'),
-        role: 'RIDER',
-        firstName: 'Juma',
-        lastName: 'Driver',
-      },
-    });
-    const driver = await prisma.driver.create({
-      data: { tenantId: tenant.id, userId: driverUser.id, licenseNumber: 'LIC-DEMO-1' },
-    });
-    const motorcycle = await prisma.motorcycle.create({
-      data: { tenantId: tenant.id, registrationNumber: 'T123 ABC', currentMileage: 8000 },
-    });
-    const assignment = await prisma.dailyAssignment.create({
-      data: {
-        tenantId: tenant.id,
-        driverId: driver.id,
-        motorcycleId: motorcycle.id,
-        assignedDate: dateOnly(1),
-        targetAmount: 15000,
-      },
-    });
-    await prisma.dailyPayment.create({
-      data: {
-        tenantId: tenant.id,
-        dailyAssignmentId: assignment.id,
-        driverId: driver.id,
-        amount: 15000,
-        status: 'COMPLETED',
-        paidAt: new Date(),
-      },
-    });
-    await prisma.expense.create({
-      data: {
-        tenantId: tenant.id,
-        motorcycleId: motorcycle.id,
-        category: 'Fuel',
-        amount: 4000,
-        incurredAt: dateOnly(1),
-      },
-    });
-    await prisma.maintenanceLog.create({
-      data: {
-        tenantId: tenant.id,
-        motorcycleId: motorcycle.id,
-        description: 'Oil change',
-        cost: 12000,
-        performedAt: dateOnly(1),
-        mileageAtService: 8000,
-        nextServiceDate: dateOnly(-30),
-        nextServiceMileage: 11000,
-      },
-    });
-
-    // eslint-disable-next-line no-console
-    console.log(`Seeded owner ${OWNER_EMAIL} (password ${OWNER_PASSWORD}) + demo fleet data.`);
+    const { tenantId, ownerUserId } = await seedOwnerAndBasicDemoData(prisma);
+    await seedOwnershipPlanShowcase(prisma, tenantId, ownerUserId);
   } finally {
     await prisma.$disconnect();
   }

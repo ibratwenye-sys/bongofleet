@@ -9,6 +9,7 @@ import type {
   OwnershipPlan,
   OwnershipPlanLedgerRow,
   PaymentAccount,
+  UpdateOwnershipPlanPayload,
 } from '../lib/types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
@@ -33,12 +34,23 @@ function runningPositionClass(value: string): string {
   return 'text-gray-600';
 }
 
-function ContractSection({ planId }: { planId: string }) {
+function ContractSection({
+  planId,
+  hasContractEndDate,
+}: {
+  planId: string;
+  hasContractEndDate: boolean;
+}) {
   const [contracts, setContracts] = useState<Document[] | null>(null);
   const [activePaymentAccounts, setActivePaymentAccounts] = useState<PaymentAccount[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [confirmingNoPaymentAccount, setConfirmingNoPaymentAccount] = useState(false);
+  // Stage G6 Part 5 - same guard, same reason, as the payment-account one
+  // below: a legal document going to a driver with a blank term is worse
+  // than one that's never printed. Checked first so both warnings never
+  // stack in one dialog - onConfirm falls through to the next check.
+  const [confirmingNoEndDate, setConfirmingNoEndDate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -86,7 +98,7 @@ function ContractSection({ planId }: { planId: string }) {
     }
   }
 
-  function handleDownloadClick() {
+  function proceedPastEndDateCheck() {
     // Carry-in from the contract work: that PDF prints "Hakuna akaunti ya
     // malipo iliyowekwa" (no payment account configured) when the tenant has
     // none active - a document that reads that way should never reach a
@@ -96,6 +108,17 @@ function ContractSection({ planId }: { planId: string }) {
       return;
     }
     void handleDownload();
+  }
+
+  function handleDownloadClick() {
+    // Stage G6 Part 5 - same reasoning as the payment-account guard: the PDF
+    // prints "Haijajazwa / Not on file" where the end date belongs when
+    // contractEndDate is null, and that shouldn't reach a driver by accident.
+    if (!hasContractEndDate) {
+      setConfirmingNoEndDate(true);
+      return;
+    }
+    proceedPastEndDateCheck();
   }
 
   const latest = contracts?.[0] ?? null;
@@ -112,6 +135,13 @@ function ContractSection({ planId }: { planId: string }) {
           <p className="mb-3 text-sm text-gray-600">
             Latest: {latest.fileName} — generated {latest.uploadedAt.slice(0, 10)}
             {contracts.length > 1 && ` (${contracts.length} versions on file)`}
+          </p>
+        )}
+
+        {!hasContractEndDate && (
+          <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            No contract end date is set for this plan - the contract will print &quot;Haijajazwa /
+            Not on file&quot; where the end date belongs.
           </p>
         )}
 
@@ -143,6 +173,20 @@ function ContractSection({ planId }: { planId: string }) {
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
+
+      {confirmingNoEndDate && (
+        <ConfirmDialog
+          title="No contract end date"
+          message='This plan has no agreed end date. The contract will print "Haijajazwa / Not on file" where the driver expects to see the term. Download anyway?'
+          confirmLabel="Download anyway"
+          danger
+          onConfirm={() => {
+            setConfirmingNoEndDate(false);
+            proceedPastEndDateCheck();
+          }}
+          onCancel={() => setConfirmingNoEndDate(false)}
+        />
+      )}
 
       {confirmingNoPaymentAccount && (
         <ConfirmDialog
@@ -467,6 +511,97 @@ function LedgerSection({ planId }: { planId: string }) {
   );
 }
 
+/**
+ * Stage G6 Part 4 - a plan created with no contract end date (JUMA BAKARI's,
+ * and both seeded demo plans that predate this field) had no way to get one
+ * short of cancelling and recreating the plan. This is the one place
+ * UpdateOwnershipPlanDto.contractEndDate is reachable from the dashboard for
+ * a plan that already exists.
+ */
+function ContractEndDateEditor({
+  plan,
+  onUpdated,
+}: {
+  plan: OwnershipPlan;
+  onUpdated: (plan: OwnershipPlan) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(plan.contractEndDate?.slice(0, 10) ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEditing() {
+    setValue(plan.contractEndDate?.slice(0, 10) ?? '');
+    setError(null);
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    if (!value) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: UpdateOwnershipPlanPayload = { contractEndDate: value };
+      const updated = await apiFetch<OwnershipPlan>(`/ownership-plans/${plan.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      onUpdated(updated);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the end date.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span>
+        {plan.contractEndDate ? (
+          `ends ${plan.contractEndDate.slice(0, 10)}`
+        ) : (
+          <span className="text-amber-700">no end date set</span>
+        )}{' '}
+        <button
+          type="button"
+          onClick={startEditing}
+          className="text-gray-600 underline hover:text-gray-900"
+        >
+          {plan.contractEndDate ? 'edit' : 'set end date'}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="rounded border border-gray-300 px-2 py-1 text-sm"
+      />
+      <button
+        type="button"
+        onClick={() => void handleSave()}
+        disabled={saving || !value}
+        className="rounded bg-gray-900 px-2 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="text-xs text-gray-500 hover:underline"
+      >
+        Cancel
+      </button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </span>
+  );
+}
+
 export function OwnershipPlanDetailPage() {
   const { planId } = useParams<{ planId: string }>();
   const [plan, setPlan] = useState<OwnershipPlan | null>(null);
@@ -495,8 +630,8 @@ export function OwnershipPlanDetailPage() {
       </h1>
       <p className="mb-4 text-sm text-gray-600">
         {formatTZS(plan.dailyAmount)}/day · {formatTZS(plan.totalPrice)} total ·{' '}
-        {formatTZS(plan.downPayment)} down · started {plan.startDate.slice(0, 10)}
-        {plan.contractEndDate && ` · ends ${plan.contractEndDate.slice(0, 10)}`}
+        {formatTZS(plan.downPayment)} down · started {plan.startDate.slice(0, 10)} ·{' '}
+        <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
       </p>
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -518,7 +653,7 @@ export function OwnershipPlanDetailPage() {
         </div>
       </div>
 
-      <ContractSection planId={planId} />
+      <ContractSection planId={planId} hasContractEndDate={plan.contractEndDate !== null} />
       <LedgerSection planId={planId} />
     </div>
   );

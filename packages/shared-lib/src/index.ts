@@ -8,3 +8,8 @@ export {
   excusalWindowStart,
   countRecentExcusals,
 } from './hire-purchase/excusal-window';
+export {
+  DRIVER_SEARCH_DEBOUNCE_MS,
+  DRIVER_SEARCH_RESULT_LIMIT,
+  normalizeSearchQuery,
+} from './driver-search/driver-search';
