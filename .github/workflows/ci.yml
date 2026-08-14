@@ -106,6 +106,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Unlike shared-lib's dist/, nothing in package.json (no pretest,
+      # no postinstall) regenerates @prisma/client automatically - only
+      # packages/backend/Dockerfile did this before now, as its own explicit
+      # RUN step. A clean pnpm install leaves @prisma/client exporting
+      # nothing (no Prisma, no UserRole, no enums at all), which every
+      # backend module imports - lint and both test suites need this to
+      # exist before they can even parse. This only reads prisma/schema.prisma
+      # to emit client code; it never connects to a database.
+      - name: Generate Prisma client
+        run: pnpm --filter @bongofleet/backend run db:generate
+
       - name: Lint
         run: pnpm -r lint
 
