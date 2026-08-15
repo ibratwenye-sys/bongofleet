@@ -629,9 +629,9 @@ export function OwnershipPlanDetailPage() {
         {plan.motorcycle?.registrationNumber ?? 'Vehicle'}
       </h1>
       <p className="mb-4 text-sm text-gray-600">
-        {formatTZS(plan.dailyAmount)}/day · {formatTZS(plan.totalPrice)} total ·{' '}
-        {formatTZS(plan.downPayment)} down · started {plan.startDate.slice(0, 10)} ·{' '}
-        <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
+        {formatTZS(plan.dailyAmount)}/day for {plan.instalmentCount} days · declared value{' '}
+        {formatTZS(plan.totalPrice)} · {formatTZS(plan.downPayment)} down · started{' '}
+        {plan.startDate.slice(0, 10)} · <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
       </p>
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">

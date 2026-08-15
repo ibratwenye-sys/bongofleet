@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { estimatePlanTerm } from '@bongofleet/shared-lib';
+import { estimatePlanTerm, type PlanTermOption } from '@bongofleet/shared-lib';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -77,6 +77,11 @@ function recentExcusalLabel(recentExcusalCount: number): string {
   return `${recentExcusalCount} in last 90 days`;
 }
 
+/** Stage G8 - the owner always enters the daily amount, then picks which of
+ *  the other two (days or total) they enter; the remaining one is computed
+ *  live, never both entered by hand. */
+type TermMode = 'days' | 'total';
+
 interface CreateFormState {
   driverId: string;
   motorcycleId: string;
@@ -84,6 +89,15 @@ interface CreateFormState {
   totalPrice: string;
   downPayment: string;
   dailyAmount: string;
+  termMode: TermMode;
+  days: string;
+  total: string;
+  // Set only when termMode is 'total' and the total does not divide evenly
+  // by dailyAmount - the day count the owner picked from the two
+  // neighbouring whole-day options. Cleared whenever total/dailyAmount
+  // changes, so a stale pick from a previous total can never silently ride
+  // along to a new one.
+  pickedDays: number | null;
   startDate: string;
   contractEndDate: string;
   activeWeekdays: number[];
@@ -113,6 +127,10 @@ function CreatePlanFormModal({
     totalPrice: '',
     downPayment: '',
     dailyAmount: '',
+    termMode: 'days',
+    days: '',
+    total: '',
+    pickedDays: null,
     startDate: todayDateInput(),
     contractEndDate: '',
     activeWeekdays: DEFAULT_ACTIVE_WEEKDAYS,
@@ -140,42 +158,88 @@ function CreatePlanFormModal({
       .catch(() => setGuarantors([]));
   }, [form.driverId]);
 
-  // Stage G Part 1/4b - the same estimatePlanTerm() the backend tests
-  // against the real daily-charge generator. Never reimplemented here:
-  // paymentDayCount and calendarEndDate are recomputed live as the owner
-  // types, straight from shared-lib.
   const totalPrice = Number(form.totalPrice);
   const downPayment = Number(form.downPayment || 0);
   const dailyAmount = Number(form.dailyAmount);
-  const canEstimate =
-    form.totalPrice !== '' &&
+  const canEstimateBase =
     form.dailyAmount !== '' &&
-    Number.isFinite(totalPrice) &&
-    Number.isFinite(downPayment) &&
     Number.isFinite(dailyAmount) &&
     dailyAmount > 0 &&
     form.startDate !== '' &&
     form.activeWeekdays.length > 0;
 
-  const estimate = canEstimate
-    ? estimatePlanTerm({
-        totalPrice,
-        downPayment,
-        dailyAmount,
-        startDate: form.startDate,
-        activeWeekdays: form.activeWeekdays,
-      })
-    : null;
+  // Stage G8 - the owner enters daily amount plus EITHER days OR total
+  // (form.termMode); the other is computed live via estimatePlanTerm
+  // (shared-lib), the same function the backend tests against the real
+  // daily-charge generator. Never reimplemented here.
+  //
+  // "total" mode is the only one that can fail to divide evenly - "days"
+  // mode is exact by construction (total = daily x days). When it doesn't
+  // divide evenly, nothing is rounded and nothing is blocked: both
+  // neighbouring whole-day options are shown (notExactOptions below) and the
+  // owner picks one (form.pickedDays). Once a day count is settled - by
+  // typing it directly, or by picking an option - resolvedDays is that
+  // number, and everything else (the exact total, the calendar end date) is
+  // derived from it via one more estimatePlanTerm call, in "days" mode,
+  // which is always exact.
+  let resolvedDays: number | null = null;
+  let notExactOptions: [PlanTermOption, PlanTermOption] | null = null;
+
+  if (canEstimateBase) {
+    if (form.termMode === 'days') {
+      const days = Number(form.days);
+      if (form.days !== '' && Number.isFinite(days) && days > 0) {
+        resolvedDays = days;
+      }
+    } else {
+      const total = Number(form.total);
+      if (form.total !== '' && Number.isFinite(total) && total > 0) {
+        const result = estimatePlanTerm({
+          dailyAmount,
+          total,
+          startDate: form.startDate,
+          activeWeekdays: form.activeWeekdays,
+        });
+        if (result.exact) {
+          resolvedDays = result.days;
+        } else {
+          notExactOptions = result.options;
+          if (
+            form.pickedDays === result.options[0].days ||
+            form.pickedDays === result.options[1].days
+          ) {
+            resolvedDays = form.pickedDays;
+          }
+        }
+      }
+    }
+  }
+
+  const estimate =
+    canEstimateBase && resolvedDays !== null
+      ? estimatePlanTerm({
+          dailyAmount,
+          days: resolvedDays,
+          startDate: form.startDate,
+          activeWeekdays: form.activeWeekdays,
+        })
+      : null;
+
+  // estimate is always the exact-days shape here (constructed from a settled
+  // resolvedDays via the "days" input variant, never "total"), but
+  // estimatePlanTerm's return type doesn't know that statically - narrow it
+  // once, here.
+  const resolvedTerm = estimate?.exact ? estimate : null;
 
   // Stage G6 Part 1 - prefill, not offer: as soon as there's enough input to
   // project a calendar end date, that becomes the field's value. Stops the
   // instant the owner touches the field themselves (see endDateTouched).
   useEffect(() => {
-    if (!endDateTouched && estimate) {
-      setForm((prev) => ({ ...prev, contractEndDate: estimate.calendarEndDate }));
+    if (!endDateTouched && resolvedTerm) {
+      setForm((prev) => ({ ...prev, contractEndDate: resolvedTerm.calendarEndDate }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimate?.calendarEndDate, endDateTouched]);
+  }, [resolvedTerm?.calendarEndDate, endDateTouched]);
 
   function toggleWeekday(day: number) {
     setForm((prev) => ({
@@ -187,15 +251,17 @@ function CreatePlanFormModal({
   }
 
   async function submitPlan() {
+    if (resolvedDays === null) return; // handleSubmit already guarded this
     setSubmitting(true);
     try {
       const payload: CreateOwnershipPlanPayload = {
         driverId: form.driverId,
         motorcycleId: form.motorcycleId,
         guarantorId: form.guarantorId || undefined,
+        dailyAmount,
+        instalmentCount: resolvedDays,
         totalPrice,
         downPayment: form.downPayment ? downPayment : undefined,
-        dailyAmount,
         startDate: form.startDate,
         contractEndDate: form.contractEndDate || undefined,
         activeWeekdays: form.activeWeekdays,
@@ -220,7 +286,7 @@ function CreatePlanFormModal({
       return;
     }
     if (!form.totalPrice || totalPrice <= 0) {
-      setError('Enter a valid total price.');
+      setError('Enter a valid declared value.');
       return;
     }
     if (!form.dailyAmount || dailyAmount <= 0) {
@@ -229,6 +295,14 @@ function CreatePlanFormModal({
     }
     if (form.activeWeekdays.length === 0) {
       setError('At least one active weekday is required.');
+      return;
+    }
+    if (resolvedDays === null) {
+      setError(
+        form.termMode === 'total' && notExactOptions
+          ? 'Pick one of the two day-count options below before creating the plan.'
+          : 'Enter the number of days or the total to determine the term.',
+      );
       return;
     }
 
@@ -299,10 +373,10 @@ function CreatePlanFormModal({
             </select>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Total price (TZS)
+                Declared value (TZS)
               </label>
               <input
                 type="number"
@@ -310,6 +384,9 @@ function CreatePlanFormModal({
                 onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                The vehicle's value, for the contract only - independent of the payment plan below.
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -319,17 +396,6 @@ function CreatePlanFormModal({
                 type="number"
                 value={form.downPayment}
                 onChange={(e) => setForm({ ...form, downPayment: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Daily amount (TZS)
-              </label>
-              <input
-                type="number"
-                value={form.dailyAmount}
-                onChange={(e) => setForm({ ...form, dailyAmount: e.target.value })}
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
@@ -355,59 +421,143 @@ function CreatePlanFormModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Start date</label>
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Start date</label>
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          {/* Stage G8 - the payment plan itself: daily amount, then a clear
+            choice of which of days/total the owner is entering, with the
+            other computed live and exactly (total = daily x days, always;
+            never the reverse division rounded away). */}
+          <div className="rounded border border-gray-300 bg-white p-3">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Daily amount (TZS)
+            </label>
+            <input
+              type="number"
+              value={form.dailyAmount}
+              onChange={(e) => setForm({ ...form, dailyAmount: e.target.value })}
+              className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+
+            <span className="mb-1 block text-sm font-medium text-gray-700">
+              Then enter the term as
+            </span>
+            <div className="mb-3 flex overflow-hidden rounded border border-gray-300 text-sm">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, termMode: 'days', pickedDays: null })}
+                className={`flex-1 px-3 py-2 font-medium ${
+                  form.termMode === 'days'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Number of days
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, termMode: 'total', pickedDays: null })}
+                className={`flex-1 border-l border-gray-300 px-3 py-2 font-medium ${
+                  form.termMode === 'total'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Total (TZS)
+              </button>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Grace days (optional)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={form.graceDays}
-                onChange={(e) => setForm({ ...form, graceDays: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
+
+            {form.termMode === 'days' ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Number of days
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.days}
+                  onChange={(e) => setForm({ ...form, days: e.target.value })}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Total (TZS)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.total}
+                  onChange={(e) => setForm({ ...form, total: e.target.value, pickedDays: null })}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            <div className="mt-3 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
+              {notExactOptions ? (
+                <div className="space-y-2">
+                  <p className="text-gray-700">
+                    {formatTZS(Number(form.total))} does not divide evenly by{' '}
+                    {formatTZS(dailyAmount)}/day. Pick the term to use - settle the difference with
+                    the driver now, not on the printed contract:
+                  </p>
+                  <div className="flex gap-2">
+                    {notExactOptions.map((option) => (
+                      <button
+                        type="button"
+                        key={option.days}
+                        onClick={() => setForm({ ...form, pickedDays: option.days })}
+                        className={`flex-1 rounded border px-3 py-2 text-left ${
+                          form.pickedDays === option.days
+                            ? 'border-gray-900 bg-white ring-1 ring-gray-900'
+                            : 'border-gray-300 bg-white hover:bg-gray-100'
+                        }`}
+                      >
+                        <span className="block font-medium text-gray-900">{option.days} days</span>
+                        <span className="block text-gray-600">{formatTZS(option.total)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : resolvedTerm ? (
+                <div className="space-y-1">
+                  <p className="text-gray-700">
+                    <span className="font-medium">{resolvedTerm.days}</span> payment days ={' '}
+                    <span className="font-medium">{formatTZS(resolvedTerm.total)}</span>, exactly.
+                  </p>
+                  <p className="text-gray-700">
+                    Projected calendar end date:{' '}
+                    <span className="font-medium">{resolvedTerm.calendarEndDate}</span> — filled in
+                    below automatically; edit it if the agreed term is different.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-gray-500">
+                  Enter the daily amount, start date, at least one active weekday, and the term
+                  above to see the projected total and end date.
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Two distinct figures, never merged: paymentDayCount is how many
-            days the driver actually pays; calendarEndDate is the calendar
-            date that lands on. A plan that skips a weekday takes MORE
-            calendar days than payment days. */}
-          <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-            {estimate ? (
-              <div className="space-y-1">
-                <p className="text-gray-700">
-                  <span className="font-medium">{estimate.paymentDayCount}</span> payment days
-                  {estimate.finalInstalment > 0 && (
-                    <>
-                      {' '}
-                      (last day {formatTZS(estimate.finalInstalment)}, the rest at{' '}
-                      {formatTZS(dailyAmount)})
-                    </>
-                  )}
-                </p>
-                <p className="text-gray-700">
-                  Projected calendar end date:{' '}
-                  <span className="font-medium">{estimate.calendarEndDate}</span> — filled in below
-                  automatically; edit it if the agreed term is different.
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-500">
-                Enter total price, daily amount, start date, and at least one active weekday to see
-                the projected term.
-              </p>
-            )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Grace days (optional)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={form.graceDays}
+              onChange={(e) => setForm({ ...form, graceDays: e.target.value })}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
           </div>
 
           <div>

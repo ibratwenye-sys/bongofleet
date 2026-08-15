@@ -442,6 +442,11 @@ export interface OwnershipPlan {
   motorcycleId: string;
   guarantorId: string | null;
   dailyAmount: string;
+  // Stage G7 - the agreed number of payment days. totalOwed = dailyAmount *
+  // instalmentCount, exactly - never derived from totalPrice/downPayment.
+  instalmentCount: number;
+  // Declared value of the vehicle and the deposit taken - printed on the
+  // contract only; independent of instalmentCount/totalOwed.
   totalPrice: string;
   downPayment: string;
   startDate: string;
@@ -471,6 +476,11 @@ export interface CreateOwnershipPlanPayload {
   motorcycleId: string;
   guarantorId?: string;
   dailyAmount: number;
+  // Stage G7 - the agreed number of payment days. totalOwed = dailyAmount *
+  // instalmentCount, exactly - see estimatePlanTerm (shared-lib).
+  instalmentCount: number;
+  // Declared value of the vehicle and the deposit taken - independent of
+  // instalmentCount/totalOwed; never used in the create-plan form's math.
   totalPrice: number;
   downPayment?: number;
   startDate: string;
