@@ -94,3 +94,35 @@ things that have actually gone wrong here before are:
    `packages/backend/tsconfig.build.json` not excluding a stray top-level
    directory, which shifted TypeScript's inferred `rootDir` - see that
    file's git history if it recurs with a different directory).
+
+## Playwright smoke suite - open the real bundled app, not just eyeball it
+
+Stage H2. Three bugs in a row (the create-plan toggle freeze, a dev-only
+infinite loop, and the End/Days left columns reading blank) shipped on a
+green build because nothing in CI or this file ever opened the actual
+production bundle in a real browser - only the dev server (above) or raw
+source. This suite does: it runs `vite build` then `vite preview` and drives
+that with a real Chromium instance (`packages/dashboard/e2e/smoke.spec.ts`).
+
+Assumes steps 1 and 2 above (backend up on current code, demo data seeded).
+Then, from `packages/dashboard`:
+
+```bash
+pnpm test:e2e
+```
+
+That's the one command - it builds the dashboard, starts `vite preview` on
+port 4173, and runs the suite against it. No second terminal needed; unlike
+step 3 above, Playwright manages the preview server itself.
+
+**Local-only gotcha:** the root `.env` (gitignored) sets `CORS_ORIGINS`
+explicitly, which overrides `docker-compose.yml`'s default entirely - so
+even after `docker-compose.yml` was fixed to allow `http://localhost:4173`
+(Stage H2), the backend kept rejecting the preview build's login until
+`.env`'s own `CORS_ORIGINS` line was also given that origin and the backend
+container recreated (`docker compose up -d backend`) to pick it up. CI never
+hits this: it sets env vars directly in the workflow, with no `.env` file to
+shadow them.
+
+If it fails, `packages/dashboard/test-results/<test-name>/trace.zip` has a
+full trace - `pnpm exec playwright show-trace <path>` opens it.

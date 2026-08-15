@@ -9,11 +9,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Hard backstop for the whole job, independent of the e2e step's own
-    # 5-minute timeout below - install/lint/unit/build together normally
-    # finish in a couple of minutes, so this only bites if something beyond
-    # the e2e step itself is stuck.
-    timeout-minutes: 12
+    # Hard backstop for the whole job, independent of the backend e2e step's
+    # own 5-minute timeout below - install/lint/unit/build/dashboard-e2e
+    # together normally finish well inside this, so it only bites if
+    # something is stuck. Raised from 12 at Stage H2 for the Playwright
+    # smoke suite added below it (backend build, migrations, browser
+    # install, and the suite itself) - see that stage's own comments for
+    # what each added step costs.
+    timeout-minutes: 20
 
     services:
       # Version matches docker-compose.yml, so CI exercises the same engine
@@ -149,3 +152,71 @@ jobs:
 
       - name: Build dashboard
         run: pnpm --filter @bongofleet/dashboard build
+
+      # Stage H2 - three bugs (the create-plan toggle freeze, a dev-only
+      # infinite loop, and the End/Days left columns reading blank) each
+      # shipped on this same green build because nothing above ever opened
+      # the actual bundled app in a real browser: lint, unit tests, and the
+      # backend's own e2e suite all read source or an in-process server, and
+      # "Build dashboard" above only proves the bundle compiles, not that it
+      # runs. Everything from here down does that - against `vite preview`,
+      # the same production build a person would click through, driven by a
+      # backend built and started the same way (`start:prod`, not
+      # `start:dev`), never the dev server.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Keyed on the lockfile, not package.json, so this tracks the
+          # exact pinned @playwright/test version (1.61.1) the browser
+          # binaries must match - a range would let package.json and the
+          # cached browser drift apart silently.
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        # Only chromium is configured (playwright.config.ts's `projects`) -
+        # installing the other two engines here would be a pure CI-time cost
+        # for browsers nothing in this suite launches. --with-deps still runs
+        # every time (cheap when the apt packages are already present) since
+        # the cache above only covers the browser binary, not OS libraries.
+        run: pnpm --filter @bongofleet/dashboard exec playwright install --with-deps chromium
+
+      - name: Build backend
+        run: pnpm --filter @bongofleet/backend build
+
+      - name: Apply database migrations
+        run: pnpm --filter @bongofleet/backend run db:migrate:deploy
+
+      - name: Start backend (production build)
+        # start:prod runs `node dist/main`, the same entrypoint the deployed
+        # container uses - not start:dev, which the dashboard's own dev
+        # server bypassed the same way when Stage G9's freeze went unnoticed.
+        # CORS_ORIGINS is intentionally left unset: NODE_ENV=test (job env,
+        # above) means main.ts's own DEV_DEFAULT_CORS_ORIGINS applies, which
+        # is the real thing under test here, not a CI-only workaround layered
+        # on top of it.
+        run: |
+          pnpm --filter @bongofleet/backend run start:prod &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "backend is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::backend did not become healthy within 30s"
+          exit 1
+
+      - name: Seed demo data
+        run: pnpm --filter @bongofleet/backend run seed
+
+      - name: Dashboard Playwright smoke suite
+        run: pnpm --filter @bongofleet/dashboard test:e2e
+
+      - name: Upload Playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: packages/dashboard/test-results/
+          retention-days: 7

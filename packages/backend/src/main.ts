@@ -8,6 +8,12 @@ import { parseTrustProxy } from './common/trust-proxy.util';
 
 const DEV_DEFAULT_CORS_ORIGINS = [
   'http://localhost:5173', // dashboard (Vite dev server)
+  // Stage H2 - `vite preview`'s default port, serving the dashboard's
+  // production build. The Playwright smoke suite (packages/dashboard/e2e)
+  // runs against this, not the dev server, on purpose - without this
+  // origin allowed, every login in that suite fails at the CORS layer,
+  // silently, before the request ever reaches a route.
+  'http://localhost:4173', // dashboard (Vite preview / production build)
   'http://localhost:19006', // mobile-app (Expo web dev server)
 ];
 

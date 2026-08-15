@@ -9,7 +9,8 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "preview": "vite preview",
-    "test": "echo \"no tests yet\" && exit 0"
+    "test": "echo \"no unit tests yet - see pnpm test:e2e for the Playwright smoke suite\" && exit 0",
+    "test:e2e": "vite build && playwright test"
   },
   "dependencies": {
     "@bongofleet/shared-lib": "workspace:*",
@@ -18,6 +19,7 @@
     "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.3.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

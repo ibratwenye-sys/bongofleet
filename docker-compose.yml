@@ -69,7 +69,15 @@ services:
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # Stage H2 - this explicit CORS_ORIGINS is set at all (rather than
+      # leaving it unset so main.ts's own DEV_DEFAULT_CORS_ORIGINS applies),
+      # so it must carry every dev-time origin main.ts's default list does,
+      # not just the Vite dev server's - localhost:4173 is `vite preview`
+      # (the production build the Playwright smoke suite, packages/dashboard/e2e,
+      # runs against). Falling out of sync here silently breaks login for
+      # whichever origin got left off, with no error beyond a browser
+      # console CORS message - see main.ts's own comment on the same line.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173}
       UPLOADS_DIR: /workspace/uploads
     ports:
       - "3000:3000"

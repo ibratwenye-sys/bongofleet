@@ -27,6 +27,9 @@ Thumbs.db
 
 # Testing
 coverage/
+test-results/
+playwright-report/
+blob-report/
 
 # React Native / Expo
 .expo/
