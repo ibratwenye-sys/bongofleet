@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { countRecentExcusals } from '@bongofleet/shared-lib';
+import { countRecentExcusals, estimatePlanTerm } from '@bongofleet/shared-lib';
 
 /**
  * Raw inputs the derivation needs. amountDue/amountPaid are sums the caller
@@ -34,6 +34,10 @@ export interface PlanPosition {
    * computeRemainingToBill. */
   amountBilled: Prisma.Decimal;
   contractEndDate: Date | null;
+  /** Stage H1 - needed alongside instalmentCount and activeWeekdays to derive
+   *  an end date when contractEndDate was never typed in - see
+   *  derivedEndDate below. */
+  startDate: Date;
   activeWeekdays: number[];
   /** Every assignment's date + what was actually paid against it - used only
    *  to derive consecutiveMissedDays (see computeConsecutiveMissedDays).
@@ -77,7 +81,26 @@ export interface DerivedPlanFigures {
   recentExcusalCount: number;
   remainingToOwn: string;
   remainingToBill: string;
-  daysLeft: number | null;
+  /** Stage H1 - before Stage G7, instalmentCount didn't exist and a plan's
+   *  term was only ever known if contractEndDate had been typed in, so a
+   *  blank contractEndDate genuinely meant "no term is knowable" and null
+   *  here was correct. That's no longer true: instalmentCount is now
+   *  authoritative (totalOwed = dailyAmount * instalmentCount, always - see
+   *  totalOwed above), so the end date - and therefore daysLeft - is always
+   *  derivable from instalmentCount + startDate + activeWeekdays even when
+   *  nothing was typed into the contract. Counted against contractEndDate
+   *  when it's set (the agreed date can differ from the derived one - a
+   *  driver who ran ahead or behind schedule may have had it renegotiated),
+   *  falling back to derivedEndDate otherwise. Never null now. */
+  daysLeft: number;
+  /** Stage H1 - the date the plan's OWN terms (instalmentCount payment days
+   *  from startDate, over activeWeekdays) project as the end date - the same
+   *  calendarEndDate the create-plan form previews via estimatePlanTerm,
+   *  recomputed here from the plan as saved rather than re-read from the
+   *  form. Always populated, independent of whether contractEndDate was
+   *  typed in - the UI's job is to show both and label which is which, not
+   *  this function's. */
+  derivedEndDate: string;
   projectedCompletion: string;
 }
 
@@ -334,9 +357,27 @@ export function derivePlanFigures(
   // fine here - countRecentExcusals truncates to UTC midnight itself.
   const recentExcusalCount = countRecentExcusals(input.excusedDates, today);
 
-  const daysLeft = input.contractEndDate
-    ? countActiveWeekdaysAfter(todayOnly, input.contractEndDate, input.activeWeekdays)
-    : null;
+  // Stage H1 - the same "Nth active weekday from startDate" walk the
+  // create-plan form previews live via estimatePlanTerm (shared-lib),
+  // recomputed here from the plan's saved terms. dailyAmount only affects
+  // the `total` field of the result, which is discarded - days is what
+  // determines calendarEndDate, and the "days" direction of estimatePlanTerm
+  // is always exact (see totalOwed above) - result.exact is always true here,
+  // but its return type doesn't know that statically (it's the same union
+  // "total" mode uses), so narrow it like every other caller does.
+  const termFromInstalments = estimatePlanTerm({
+    dailyAmount: input.dailyAmount.toNumber(),
+    days: input.instalmentCount,
+    startDate: isoDate(input.startDate),
+    activeWeekdays: input.activeWeekdays,
+  });
+  if (!termFromInstalments.exact) {
+    throw new Error('estimatePlanTerm: the "days" direction must always be exact');
+  }
+  const derivedEndDate = termFromInstalments.calendarEndDate;
+
+  const effectiveEndDate = input.contractEndDate ?? new Date(`${derivedEndDate}T00:00:00.000Z`);
+  const daysLeft = countActiveWeekdaysAfter(todayOnly, effectiveEndDate, input.activeWeekdays);
 
   const daysToCompletion = Prisma.Decimal.max(remainingToOwn, 0)
     .dividedBy(input.dailyAmount)
@@ -360,6 +401,7 @@ export function derivePlanFigures(
     remainingToOwn: remainingToOwn.toFixed(2),
     remainingToBill: remainingToBill.toFixed(2),
     daysLeft,
+    derivedEndDate,
     projectedCompletion: isoDate(projectedCompletion),
   };
 }

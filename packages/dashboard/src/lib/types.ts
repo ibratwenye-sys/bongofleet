@@ -467,7 +467,16 @@ export interface OwnershipPlan {
   // Stage G5 Part 3 - APPROVED excusals in the last 90 days. A signal, not a
   // limit - there is no cap this feeds into.
   recentExcusalCount: number;
-  daysLeft: number | null;
+  // Stage H1 - instalmentCount is authoritative (totalOwed = dailyAmount x
+  // instalmentCount, always), so the end date - and therefore daysLeft - is
+  // always derivable even when contractEndDate was never typed in. Never
+  // null now; see derivedEndDate below and ownership-plan.derivation.ts.
+  daysLeft: number;
+  // The date the plan's OWN terms (instalmentCount days from startDate, over
+  // activeWeekdays) project as the end date - always populated, independent
+  // of contractEndDate. When contractEndDate is set, the two may legitimately
+  // differ (a renegotiated term) - show both, never silently pick one.
+  derivedEndDate: string;
   projectedCompletion: string;
 }
 

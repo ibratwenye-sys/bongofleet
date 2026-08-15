@@ -274,6 +274,7 @@ describe('PaymentService', () => {
         amountPaid: new Prisma.Decimal(72000),
         amountBilled: new Prisma.Decimal(12000),
         contractEndDate: null,
+        startDate: new Date('2026-06-01T00:00:00.000Z'),
         activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
         assignmentPayments: [],
         excusedDates: [],

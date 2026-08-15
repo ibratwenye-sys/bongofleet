@@ -73,6 +73,7 @@ type PlanRow = {
   dailyAmount: Prisma.Decimal;
   instalmentCount: number;
   contractEndDate: Date | null;
+  startDate: Date;
   activeWeekdays: number[];
 };
 
@@ -437,6 +438,7 @@ export class OwnershipPlanService {
             amountPaid: amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             amountBilled: amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             contractEndDate: plan.contractEndDate,
+            startDate: plan.startDate,
             activeWeekdays: plan.activeWeekdays,
             assignmentPayments: assignmentPaymentsByPlan.get(plan.id) ?? [],
             excusedDates: excusedDatesByPlan.get(plan.id) ?? [],

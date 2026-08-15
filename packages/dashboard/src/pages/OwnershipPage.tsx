@@ -77,6 +77,33 @@ function recentExcusalLabel(recentExcusalCount: number): string {
   return `${recentExcusalCount} in last 90 days`;
 }
 
+/** Stage H1 - contractEndDate (what was actually typed into the contract)
+ *  and derivedEndDate (what the plan's own terms - instalmentCount days from
+ *  startDate - work out to) are never the same field: an owner reading this
+ *  column needs to be able to tell which one they're looking at, not just
+ *  see a date. contractEndDate is now never re-derived on the client and
+ *  derivedEndDate is never presented as if it were agreed - see
+ *  ownership-plan.derivation.ts. */
+function EndDateCell({
+  contractEndDate,
+  derivedEndDate,
+}: {
+  contractEndDate: string | null;
+  derivedEndDate: string;
+}) {
+  if (contractEndDate) {
+    return <span>{contractEndDate.slice(0, 10)}</span>;
+  }
+  return (
+    <span
+      className="italic text-gray-500"
+      title="Not typed into the contract - worked out from the plan's own terms (days, start date, active weekdays)."
+    >
+      {derivedEndDate} (derived)
+    </span>
+  );
+}
+
 /** Stage G8 - the owner always enters the daily amount, then picks which of
  *  the other two (days or total) they enter; the remaining one is computed
  *  live, never both entered by hand. */
@@ -781,9 +808,12 @@ export function OwnershipPage() {
                     </td>
                     <td className="px-4 py-2 text-gray-600">{plan.startDate.slice(0, 10)}</td>
                     <td className="px-4 py-2 text-gray-600">
-                      {plan.contractEndDate ? plan.contractEndDate.slice(0, 10) : '—'}
+                      <EndDateCell
+                        contractEndDate={plan.contractEndDate}
+                        derivedEndDate={plan.derivedEndDate}
+                      />
                     </td>
-                    <td className="px-4 py-2 text-right text-gray-600">{plan.daysLeft ?? '—'}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{plan.daysLeft}</td>
                     <td className="px-4 py-2 text-gray-600">{plan.projectedCompletion}</td>
                     <td className="px-4 py-2">
                       <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />

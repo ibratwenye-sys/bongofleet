@@ -561,7 +561,9 @@ function ContractEndDateEditor({
         {plan.contractEndDate ? (
           `ends ${plan.contractEndDate.slice(0, 10)}`
         ) : (
-          <span className="text-amber-700">no end date set</span>
+          <span className="text-amber-700">
+            no end date set - system estimate {plan.derivedEndDate}
+          </span>
         )}{' '}
         <button
           type="button"
@@ -645,7 +647,7 @@ export function OwnershipPlanDetailPage() {
         </div>
         <div className="rounded border border-gray-200 bg-white p-3">
           <p className="text-xs text-gray-500">Days left</p>
-          <p className="text-lg font-semibold text-gray-900">{plan.daysLeft ?? '—'}</p>
+          <p className="text-lg font-semibold text-gray-900">{plan.daysLeft}</p>
         </div>
         <div className="rounded border border-gray-200 bg-white p-3">
           <p className="text-xs text-gray-500">Projected completion</p>

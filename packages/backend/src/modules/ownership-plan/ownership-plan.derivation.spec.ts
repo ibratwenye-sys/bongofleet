@@ -22,6 +22,7 @@ function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
     amountPaid: new Prisma.Decimal(0),
     amountBilled: new Prisma.Decimal(0),
     contractEndDate: null,
+    startDate: day(-60),
     activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
     assignmentPayments: [],
     excusedDates: [],
@@ -116,9 +117,53 @@ describe('derivePlanFigures', () => {
     expect(result.projectedCompletion).toBe('2026-08-10');
   });
 
-  it('daysLeft is null when the plan has no contractEndDate', () => {
-    const result = derivePlanFigures(basePosition({ contractEndDate: null }), TODAY);
-    expect(result.daysLeft).toBeNull();
+  describe('derivedEndDate and daysLeft when contractEndDate is not typed in (Stage H1)', () => {
+    it('derivedEndDate is the instalmentCount-th active weekday from startDate, and daysLeft counts down against it', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: null,
+          startDate: new Date('2026-08-01T00:00:00.000Z'), // TODAY itself
+          instalmentCount: 10,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        }),
+        TODAY,
+      );
+      // 10th active day from 2026-08-01 inclusive (all weekdays active) =
+      // start + 9 days = 2026-08-10.
+      expect(result.derivedEndDate).toBe('2026-08-10');
+      // Active days strictly after TODAY up to and including 2026-08-10:
+      // Aug 2..10 = 9 - never null, and never counts startDate's own day.
+      expect(result.daysLeft).toBe(9);
+    });
+
+    it('daysLeft is 0, not negative, once the derived end date has already passed', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: null,
+          startDate: new Date('2026-07-01T00:00:00.000Z'),
+          instalmentCount: 30,
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        }),
+        TODAY, // 2026-08-01 - one day after the derived end date below
+      );
+      expect(result.derivedEndDate).toBe('2026-07-30');
+      expect(result.daysLeft).toBe(0);
+    });
+
+    it('an agreed contractEndDate still wins over the derived one when both are present', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: new Date('2026-09-01T00:00:00.000Z'), // renegotiated later than the plan's own math
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          instalmentCount: 10, // derivedEndDate would be 2026-08-10
+          activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        }),
+        TODAY,
+      );
+      expect(result.derivedEndDate).toBe('2026-08-10');
+      // daysLeft counts against the agreed 2026-09-01, not the derived date.
+      expect(result.daysLeft).toBe(31);
+    });
   });
 
   it('remainingToOwn and projectedCompletion are unaffected by daysBehind/daysAhead', () => {

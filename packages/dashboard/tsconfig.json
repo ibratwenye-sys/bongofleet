@@ -11,7 +11,16 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    // Stage H1 - matches vite.config.mts's resolve.alias: without this, tsc
+    // resolves @bongofleet/shared-lib via its package.json "main"
+    // (dist/index.d.ts) while Vite compiles the source directly, so the
+    // typechecker and the bundler would silently disagree about what the
+    // package exports - the same staleness bug in a different guise.
+    "baseUrl": ".",
+    "paths": {
+      "@bongofleet/shared-lib": ["../shared-lib/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

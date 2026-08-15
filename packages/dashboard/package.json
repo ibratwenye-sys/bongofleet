@@ -4,9 +4,7 @@
   "private": true,
   "description": "BongoFleet fleet-owner web dashboard",
   "scripts": {
-    "predev": "pnpm --filter @bongofleet/shared-lib build",
-    "dev": "vite --force",
-    "prebuild": "pnpm --filter @bongofleet/shared-lib build",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",

@@ -272,6 +272,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -284,6 +285,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 134, // totalOwed = 15,000 x 134 = 2,010,000
           totalPrice: new Prisma.Decimal(2_000_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -328,6 +330,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 42, // totalOwed = 12,000 x 42 = 504,000
           totalPrice: new Prisma.Decimal(500000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -340,6 +343,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 42, // totalOwed = 12,000 x 42 = 504,000
           totalPrice: new Prisma.Decimal(500000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -386,6 +390,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -398,6 +403,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -456,6 +462,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -521,6 +528,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -533,6 +541,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -545,6 +554,7 @@ describe('OwnershipPlanService', () => {
           instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
           contractEndDate: null,
           activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
           status: OwnershipPlanStatus.ACTIVE,
@@ -590,6 +600,7 @@ describe('OwnershipPlanService', () => {
       instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(0),
+      startDate: new Date('2026-06-01T00:00:00.000Z'),
       contractEndDate: new Date('2027-02-12T00:00:00.000Z'),
       activeWeekdays: [1, 2, 3, 4, 5, 6],
       status: OwnershipPlanStatus.ACTIVE,
