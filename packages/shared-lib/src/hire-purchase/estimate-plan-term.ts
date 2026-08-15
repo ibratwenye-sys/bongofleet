@@ -109,6 +109,13 @@ function toIsoDate(date: Date): string {
  *  arithmetic step (whole weeks skipped via addDaysUTC, not iteration) and
  *  leaves at most a 7-day remainder walk - O(1) instead of O(n). */
 function nthActiveWeekdayFrom(start: Date, n: number, activeWeekdays: number[]): Date {
+  // A non-finite n (NaN/Infinity) can otherwise reach the walk below and
+  // never terminate: cursor becomes an Invalid Date, whose getUTCDay() is
+  // NaN, which activeWeekdays.includes() never matches - a hard, silent
+  // infinite loop instead of a catchable error. Fail fast instead.
+  if (!Number.isFinite(n)) {
+    throw new Error(`nthActiveWeekdayFrom: n must be a finite number, got ${n}`);
+  }
   if (n <= 0) return start;
   if (activeWeekdays.length === 0) {
     throw new Error('nthActiveWeekdayFrom: activeWeekdays must not be empty');

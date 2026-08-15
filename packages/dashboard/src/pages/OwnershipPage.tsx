@@ -109,6 +109,23 @@ function todayDateInput(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// estimatePlanTerm throws on inputs it can't compute a term from (e.g. an
+// empty activeWeekdays array). Every call here sits directly in the render
+// path, so a throw would unmount the whole modal instead of just leaving the
+// estimate blank - catch it at the boundary and treat it the same as "not
+// enough input yet" rather than ever letting it reach React.
+function safeEstimatePlanTerm(
+  input: Parameters<typeof estimatePlanTerm>[0],
+): ReturnType<typeof estimatePlanTerm> | null {
+  try {
+    return estimatePlanTerm(input);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('estimatePlanTerm could not compute a term for the current input', err);
+    return null;
+  }
+}
+
 function CreatePlanFormModal({
   drivers,
   motorcycles,
@@ -194,15 +211,15 @@ function CreatePlanFormModal({
     } else {
       const total = Number(form.total);
       if (form.total !== '' && Number.isFinite(total) && total > 0) {
-        const result = estimatePlanTerm({
+        const result = safeEstimatePlanTerm({
           dailyAmount,
           total,
           startDate: form.startDate,
           activeWeekdays: form.activeWeekdays,
         });
-        if (result.exact) {
+        if (result?.exact) {
           resolvedDays = result.days;
-        } else {
+        } else if (result) {
           notExactOptions = result.options;
           if (
             form.pickedDays === result.options[0].days ||
@@ -217,7 +234,7 @@ function CreatePlanFormModal({
 
   const estimate =
     canEstimateBase && resolvedDays !== null
-      ? estimatePlanTerm({
+      ? safeEstimatePlanTerm({
           dailyAmount,
           days: resolvedDays,
           startDate: form.startDate,
