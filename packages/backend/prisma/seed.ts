@@ -207,6 +207,10 @@ async function seedOwnershipPlanShowcase(
         driverId,
         motorcycleId,
         dailyAmount: DAILY_AMOUNT,
+        // Stage G7 - matches TOTAL_PRICE / DAILY_AMOUNT exactly (1,800,000 /
+        // 12,000 = 150); totalOwed is dailyAmount x instalmentCount now, not
+        // derived from totalPrice/downPayment.
+        instalmentCount: 150,
         totalPrice: TOTAL_PRICE,
         downPayment: 0,
         startDate,

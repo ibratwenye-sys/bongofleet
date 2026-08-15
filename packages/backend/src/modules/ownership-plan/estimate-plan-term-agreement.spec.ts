@@ -1,11 +1,19 @@
 /**
- * Stage G Part 1 - the same invariant Stage F3c used for the contract total:
- * agreement with the biller, not a hand-computed number. estimatePlanTerm()
- * (shared-lib, also used by the dashboard's create-plan form) must produce a
- * paymentDayCount, finalInstalment, and calendarEndDate that agree with what
- * the real Stage E nightly generator (OwnershipPlanGeneratorService) actually
- * produces for that plan, run to completion - not a second, independently
- * hand-computed formula that could quietly drift from the real one.
+ * Stage G Part 1, carried forward by Stage G7 - the same invariant Stage F3c
+ * used for the contract total: agreement with the biller, not a
+ * hand-computed number. estimatePlanTerm() (shared-lib, also used by the
+ * dashboard's create-plan form) must produce a days/total/calendarEndDate
+ * that agrees with what the real Stage E nightly generator
+ * (OwnershipPlanGeneratorService) actually produces for that plan, run to
+ * completion - not a second, independently hand-computed formula that could
+ * quietly drift from the real one.
+ *
+ * Stage G7 rewrote estimatePlanTerm to work in both directions (days ->
+ * total, exact always; total -> days, exact when it divides evenly,
+ * otherwise two neighbouring whole-day options) and dropped
+ * totalPrice/downPayment/finalInstalment entirely - totalOwed is now
+ * dailyAmount x instalmentCount, so there is no remainder left for either
+ * side to disagree about.
  *
  * The fake Prisma harness below is the same trimmed shape used in
  * ownership-plan-contract-total-agreement.spec.ts, kept local per that
@@ -39,8 +47,7 @@ interface FakePlan {
   driverId: string;
   motorcycleId: string;
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  instalmentCount: number;
   startDate: Date;
   activeWeekdays: number[];
   status: OwnershipPlanStatus;
@@ -174,7 +181,7 @@ async function billToCompletion(
   state: { assignments: FakeAssignment[] },
 ): Promise<void> {
   let cursor = plan.startDate;
-  const hardStop = addDays(plan.startDate, 400);
+  const hardStop = addDays(plan.startDate, 500); // safety net; must exceed the largest instalmentCount tested (430)
   for (
     let quietDays = 0;
     quietDays < 2 && cursor.getTime() < hardStop.getTime();
@@ -186,12 +193,12 @@ async function billToCompletion(
   }
 }
 
-describe('estimatePlanTerm agrees with the Stage E daily-charge generator (Stage G Part 1)', () => {
-  it.each<[string, number, number, number, number[]]>([
-    ['exact multiple, every day active', 1_800_000, 0, 12_000, [0, 1, 2, 3, 4, 5, 6]],
-    ['non-multiple, every day active', 1_800_000, 200_000, 12_000, [0, 1, 2, 3, 4, 5, 6]],
-    ['non-multiple, Sunday skipped', 1_800_000, 191_500, 12_000, [1, 2, 3, 4, 5, 6]],
-  ])('%s', async (_label, totalPrice, downPayment, dailyAmount, activeWeekdays) => {
+describe('estimatePlanTerm agrees with the Stage E daily-charge generator (Stage G7)', () => {
+  it.each<[string, number, number, number[]]>([
+    ['every day active', 12_000, 150, [0, 1, 2, 3, 4, 5, 6]],
+    ['Sunday skipped', 12_000, 150, [1, 2, 3, 4, 5, 6]],
+    ["Ibrahim's own worked example", 12_000, 430, [0, 1, 2, 3, 4, 5, 6]],
+  ])('days -> total: %s', async (_label, dailyAmount, instalmentCount, activeWeekdays) => {
     const startDate = utc(2026, 8, 3); // a Monday
     const plan: FakePlan = {
       id: 'plan-1',
@@ -199,8 +206,7 @@ describe('estimatePlanTerm agrees with the Stage E daily-charge generator (Stage
       driverId: 'driver-1',
       motorcycleId: 'veh-1',
       dailyAmount: new Prisma.Decimal(dailyAmount),
-      totalPrice: new Prisma.Decimal(totalPrice),
-      downPayment: new Prisma.Decimal(downPayment),
+      instalmentCount,
       startDate,
       activeWeekdays,
       status: OwnershipPlanStatus.ACTIVE,
@@ -215,40 +221,120 @@ describe('estimatePlanTerm agrees with the Stage E daily-charge generator (Stage
       (a, b) => a.assignedDate.getTime() - b.assignedDate.getTime(),
     );
     const lastAssignment = byDate[byDate.length - 1];
+    const billedSum = byDate.reduce((sum, a) => sum.plus(a.targetAmount), new Prisma.Decimal(0));
 
     const estimate = estimatePlanTerm({
-      totalPrice,
-      downPayment,
       dailyAmount,
+      days: instalmentCount,
       startDate: isoDate(startDate),
       activeWeekdays,
     });
 
-    expect(estimate.paymentDayCount).toBe(byDate.length);
+    expect(estimate.exact).toBe(true);
+    if (!estimate.exact) return; // narrows the type for TS; unreachable given the assertion above
+    expect(estimate.days).toBe(byDate.length);
+    expect(estimate.total).toBe(billedSum.toNumber());
     expect(estimate.calendarEndDate).toBe(isoDate(lastAssignment.assignedDate));
 
-    const totalOwed = totalPrice - downPayment;
-    const isExactMultiple = totalOwed % dailyAmount === 0;
-    if (isExactMultiple) {
-      expect(estimate.finalInstalment).toBe(0);
-      expect(lastAssignment.targetAmount.toFixed(2)).toBe(dailyAmount.toFixed(2));
-    } else {
-      expect(estimate.finalInstalment).toBeGreaterThan(0);
-      expect(lastAssignment.targetAmount.toFixed(2)).toBe(estimate.finalInstalment.toFixed(2));
+    // Every charge the generator actually created is a full instalment - the
+    // fact the "days -> total" direction can print, by construction.
+    for (const a of byDate) {
+      expect(a.targetAmount.toFixed(2)).toBe(dailyAmount.toFixed(2));
     }
   });
 
-  it('returns zero days/instalment for a totalOwed of zero, rather than dividing by it', () => {
+  it.each<[string, number, number, number[]]>([
+    ['every day active', 12_000, 150, [0, 1, 2, 3, 4, 5, 6]],
+    ['Sunday skipped', 12_000, 150, [1, 2, 3, 4, 5, 6]],
+  ])(
+    'total -> days, exact division: %s',
+    async (_label, dailyAmount, instalmentCount, activeWeekdays) => {
+      const startDate = utc(2026, 8, 3);
+      const plan: FakePlan = {
+        id: 'plan-1',
+        tenantId: 'tenant-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        dailyAmount: new Prisma.Decimal(dailyAmount),
+        instalmentCount,
+        startDate,
+        activeWeekdays,
+        status: OwnershipPlanStatus.ACTIVE,
+        completedAt: null,
+      };
+      const { client, state } = createFakePrisma(plan);
+      const service = await buildService({ client });
+
+      await billToCompletion(service, plan, state);
+
+      const byDate = [...state.assignments].sort(
+        (a, b) => a.assignedDate.getTime() - b.assignedDate.getTime(),
+      );
+      const lastAssignment = byDate[byDate.length - 1];
+
+      const estimate = estimatePlanTerm({
+        dailyAmount,
+        total: dailyAmount * instalmentCount,
+        startDate: isoDate(startDate),
+        activeWeekdays,
+      });
+
+      expect(estimate.exact).toBe(true);
+      if (!estimate.exact) return;
+      expect(estimate.days).toBe(byDate.length);
+      expect(estimate.calendarEndDate).toBe(isoDate(lastAssignment.assignedDate));
+    },
+  );
+
+  it('total -> days, non-dividing total: returns two neighbouring whole-day options, not a rounded figure', () => {
+    // 1,000,000 / 12,000 = 83.33 - does not divide evenly.
     const estimate = estimatePlanTerm({
-      totalPrice: 1_800_000,
-      downPayment: 1_800_000,
       dailyAmount: 12_000,
+      total: 1_000_000,
       startDate: '2026-08-03',
       activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
     });
 
-    expect(estimate.paymentDayCount).toBe(0);
-    expect(estimate.finalInstalment).toBe(0);
+    expect(estimate.exact).toBe(false);
+    if (estimate.exact) return;
+    const [lower, upper] = estimate.options;
+    expect(lower.days).toBe(83);
+    expect(lower.total).toBe(996_000);
+    expect(upper.days).toBe(84);
+    expect(upper.total).toBe(1_008_000);
+    // Both totals are exact multiples of dailyAmount - neither is the
+    // requested (non-dividing) total itself.
+    expect(lower.total % 12_000).toBe(0);
+    expect(upper.total % 12_000).toBe(0);
+  });
+
+  it('returns zero days/total for zero days requested, rather than a negative or NaN result', () => {
+    const estimate = estimatePlanTerm({
+      dailyAmount: 12_000,
+      days: 0,
+      startDate: '2026-08-03',
+      activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+    });
+
+    expect(estimate.exact).toBe(true);
+    if (!estimate.exact) return;
+    expect(estimate.days).toBe(0);
+    expect(estimate.total).toBe(0);
+    expect(estimate.calendarEndDate).toBe('2026-08-03');
+  });
+
+  it('returns zero days/total for a total of zero, rather than dividing by it', () => {
+    const estimate = estimatePlanTerm({
+      dailyAmount: 12_000,
+      total: 0,
+      startDate: '2026-08-03',
+      activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+    });
+
+    expect(estimate.exact).toBe(true);
+    if (!estimate.exact) return;
+    expect(estimate.days).toBe(0);
+    expect(estimate.total).toBe(0);
     expect(estimate.calendarEndDate).toBe('2026-08-03');
   });
 });

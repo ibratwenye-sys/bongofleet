@@ -192,8 +192,8 @@ export class PaymentService {
       new Prisma.Decimal(0),
     );
     const remainingUnreserved = computeRemainingUnreserved(
-      new Prisma.Decimal(plan.totalPrice),
-      new Prisma.Decimal(plan.downPayment),
+      new Prisma.Decimal(plan.dailyAmount),
+      plan.instalmentCount,
       amountReserved,
     );
     if (remainingUnreserved.lessThanOrEqualTo(0)) {

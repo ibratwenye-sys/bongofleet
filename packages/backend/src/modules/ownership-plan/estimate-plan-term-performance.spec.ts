@@ -1,18 +1,19 @@
 /**
- * Stage G2 Part 2 - nthActiveWeekdayFrom (inside estimatePlanTerm, shared-lib)
- * used to walk one calendar day at a time, unguarded against an empty
- * activeWeekdays. Both were real hazards specifically because this function
- * runs in the browser on every keystroke of the create-plan form, where no
- * DTO validates activeWeekdays first - not because either input can occur
- * server-side. These tests exercise exactly those two hazards, plus a
- * property check that the O(1) arithmetic replacement agrees with the old
- * O(n) walk everywhere the walk itself was correct.
+ * Stage G2 Part 2, carried forward by Stage G7 - nthActiveWeekdayFrom (inside
+ * estimatePlanTerm, shared-lib) used to walk one calendar day at a time,
+ * unguarded against an empty activeWeekdays. Both were real hazards
+ * specifically because this function runs in the browser on every keystroke
+ * of the create-plan form, where no DTO validates activeWeekdays first - not
+ * because either input can occur server-side. These tests exercise exactly
+ * those two hazards, plus a property check that the O(1) arithmetic
+ * replacement agrees with the old O(n) walk everywhere the walk itself was
+ * correct.
+ *
+ * Stage G7 replaced the totalPrice/downPayment-derived day count with a
+ * day count given directly (the "days" input) - the day-by-day walk itself,
+ * and therefore its performance characteristics, are unchanged.
  */
 import { estimatePlanTerm } from '@bongofleet/shared-lib';
-
-function toCents(amount: number): number {
-  return Math.round(amount * 100);
-}
 
 function utcDateOnly(iso: string): Date {
   const d = new Date(iso);
@@ -45,37 +46,23 @@ function oldNthActiveWeekdayFromWalk(start: Date, n: number, activeWeekdays: num
   }
 }
 
-// Mirrors estimatePlanTerm's own (unchanged) paymentDayCount arithmetic, so
-// the property test can hand the old walk the same n estimatePlanTerm used
-// internally.
-function paymentDayCountFor(totalPrice: number, downPayment: number, dailyAmount: number): number {
-  const totalOwedCents = toCents(totalPrice) - toCents(downPayment);
-  if (totalOwedCents <= 0) return 0;
-  const dailyAmountCents = toCents(dailyAmount);
-  const fullDays = Math.floor(totalOwedCents / dailyAmountCents);
-  const remainderCents = totalOwedCents - fullDays * dailyAmountCents;
-  return remainderCents > 0 ? fullDays + 1 : fullDays;
-}
-
 describe('estimatePlanTerm / nthActiveWeekdayFrom (Stage G2 Part 2)', () => {
   it('Part 2a: throws immediately on an empty activeWeekdays, rather than hanging', () => {
     expect(() =>
       estimatePlanTerm({
-        totalPrice: 1_800_000,
-        downPayment: 0,
         dailyAmount: 12_000,
+        days: 150,
         startDate: '2026-08-03',
         activeWeekdays: [],
       }),
     ).toThrow();
   });
 
-  it('Part 2b: a dailyAmount of 1 against a large total returns promptly, not just correctly', () => {
+  it('Part 2b: a large day count returns promptly, not just correctly', () => {
     const startedAt = Date.now();
     const estimate = estimatePlanTerm({
-      totalPrice: 1_800_000,
-      downPayment: 0,
       dailyAmount: 1,
+      days: 1_800_000,
       startDate: '2026-08-03',
       activeWeekdays: [1, 2, 3, 4, 5, 6],
     });
@@ -86,10 +73,12 @@ describe('estimatePlanTerm / nthActiveWeekdayFrom (Stage G2 Part 2)', () => {
     // keystroke. The arithmetic replacement should be indistinguishable from
     // instant.
     expect(elapsedMs).toBeLessThan(100);
-    expect(estimate.paymentDayCount).toBe(1_800_000);
+    expect(estimate.exact).toBe(true);
+    if (!estimate.exact) return;
+    expect(estimate.days).toBe(1_800_000);
   });
 
-  it('Part 2c: the arithmetic replacement agrees with the old O(n) walk across a range of totals, daily amounts, weekday sets and start dates', () => {
+  it('Part 2c: the arithmetic replacement agrees with the old O(n) walk across a range of day counts, weekday sets and start dates', () => {
     const weekdaySets: number[][] = [
       [0, 1, 2, 3, 4, 5, 6],
       [1, 2, 3, 4, 5, 6],
@@ -97,41 +86,31 @@ describe('estimatePlanTerm / nthActiveWeekdayFrom (Stage G2 Part 2)', () => {
       [0, 6],
       [2],
     ];
-    const totals: Array<[number, number]> = [
-      [1_800_000, 0],
-      [1_800_000, 200_000],
-      [37_500, 12_300],
-      [12_000, 0],
-    ];
-    const dailyAmounts = [12_000, 5_500, 1_000, 999];
+    const dayCounts = [1, 5, 133, 150, 430, 1800];
     const startDates = ['2026-08-03', '2026-01-01', '2026-12-31'];
 
     let comparisons = 0;
     for (const activeWeekdays of weekdaySets) {
-      for (const [totalPrice, downPayment] of totals) {
-        for (const dailyAmount of dailyAmounts) {
-          for (const startDate of startDates) {
-            const n = paymentDayCountFor(totalPrice, downPayment, dailyAmount);
-            if (n === 0) continue;
+      for (const days of dayCounts) {
+        for (const startDate of startDates) {
+          const start = utcDateOnly(startDate);
+          const expected = toIsoDate(oldNthActiveWeekdayFromWalk(start, days, activeWeekdays));
 
-            const start = utcDateOnly(startDate);
-            const expected = toIsoDate(oldNthActiveWeekdayFromWalk(start, n, activeWeekdays));
+          const estimate = estimatePlanTerm({
+            dailyAmount: 12_000,
+            days,
+            startDate,
+            activeWeekdays,
+          });
 
-            const estimate = estimatePlanTerm({
-              totalPrice,
-              downPayment,
-              dailyAmount,
-              startDate,
-              activeWeekdays,
-            });
-
-            expect(estimate.calendarEndDate).toBe(expected);
-            comparisons += 1;
-          }
+          expect(estimate.exact).toBe(true);
+          if (!estimate.exact) continue;
+          expect(estimate.calendarEndDate).toBe(expected);
+          comparisons += 1;
         }
       }
     }
     // Guards against the loop bounds above silently shrinking to nothing.
-    expect(comparisons).toBeGreaterThan(200);
+    expect(comparisons).toBeGreaterThan(60);
   });
 });

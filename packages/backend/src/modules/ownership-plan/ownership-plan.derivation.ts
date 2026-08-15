@@ -25,8 +25,8 @@ export interface AssignmentPaidRow {
 
 export interface PlanPosition {
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  /** The agreed number of payment days - see totalOwed below. */
+  instalmentCount: number;
   amountDue: Prisma.Decimal;
   amountPaid: Prisma.Decimal;
   /** Sum of targetAmount over ALL of the plan's assignments, not just up to
@@ -145,9 +145,19 @@ function isoDate(date: Date): string {
 
 /** Exported for tests only, as the plain building block the three
  * computeRemaining* functions below share - not itself part of
- * DerivedPlanFigures. */
-export function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decimal): Prisma.Decimal {
-  return totalPrice.minus(downPayment);
+ * DerivedPlanFigures.
+ *
+ * Stage G7 - the daily amount and the number of payment days are what the
+ * owner and driver actually negotiate; the total is their product, exactly,
+ * always. This replaced totalPrice.minus(downPayment), which forced a
+ * division by dailyAmount that only sometimes came out even - every
+ * remainder, partial final day, and contract-total reconciliation this
+ * codebase has ever patched traced back to that division. totalPrice and
+ * downPayment remain on OwnershipPlan and on the printed contract (the
+ * declared value of the vehicle and the deposit taken), but must never again
+ * feed this or any other money calculation. */
+export function totalOwed(dailyAmount: Prisma.Decimal, instalmentCount: number): Prisma.Decimal {
+  return dailyAmount.times(instalmentCount);
 }
 
 /**
@@ -167,11 +177,11 @@ export function totalOwed(totalPrice: Prisma.Decimal, downPayment: Prisma.Decima
  * quantity payment.service.ts's overpayment guard actually tests against.
  */
 export function computeRemainingToOwn(
-  totalPrice: Prisma.Decimal,
-  downPayment: Prisma.Decimal,
+  dailyAmount: Prisma.Decimal,
+  instalmentCount: number,
   amountPaid: Prisma.Decimal,
 ): Prisma.Decimal {
-  return totalOwed(totalPrice, downPayment).minus(amountPaid);
+  return totalOwed(dailyAmount, instalmentCount).minus(amountPaid);
 }
 
 /**
@@ -184,11 +194,11 @@ export function computeRemainingToOwn(
  * debt just stops growing).
  */
 export function computeRemainingToBill(
-  totalPrice: Prisma.Decimal,
-  downPayment: Prisma.Decimal,
+  dailyAmount: Prisma.Decimal,
+  instalmentCount: number,
   amountBilled: Prisma.Decimal,
 ): Prisma.Decimal {
-  return totalOwed(totalPrice, downPayment).minus(amountBilled);
+  return totalOwed(dailyAmount, instalmentCount).minus(amountBilled);
 }
 
 /**
@@ -201,11 +211,11 @@ export function computeRemainingToBill(
  * remainingToOwn, since amountReserved >= amountPaid.
  */
 export function computeRemainingUnreserved(
-  totalPrice: Prisma.Decimal,
-  downPayment: Prisma.Decimal,
+  dailyAmount: Prisma.Decimal,
+  instalmentCount: number,
   amountReserved: Prisma.Decimal,
 ): Prisma.Decimal {
-  return totalOwed(totalPrice, downPayment).minus(amountReserved);
+  return totalOwed(dailyAmount, instalmentCount).minus(amountReserved);
 }
 
 /**
@@ -297,13 +307,13 @@ export function derivePlanFigures(
     : 0;
 
   const remainingToOwn = computeRemainingToOwn(
-    input.totalPrice,
-    input.downPayment,
+    input.dailyAmount,
+    input.instalmentCount,
     input.amountPaid,
   );
   const remainingToBill = computeRemainingToBill(
-    input.totalPrice,
-    input.downPayment,
+    input.dailyAmount,
+    input.instalmentCount,
     input.amountBilled,
   );
 

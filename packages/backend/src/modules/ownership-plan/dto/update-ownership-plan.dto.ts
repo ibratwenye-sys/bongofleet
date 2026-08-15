@@ -32,6 +32,12 @@ export class UpdateOwnershipPlanDto {
   @IsPositive()
   dailyAmount?: number;
 
+  // Stage G7 - see create-ownership-plan.dto.ts.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  instalmentCount?: number;
+
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()

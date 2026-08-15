@@ -21,8 +21,7 @@ interface FakePlan {
   driverId: string;
   motorcycleId: string;
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  instalmentCount: number;
   startDate: Date;
   activeWeekdays: number[];
   status: OwnershipPlanStatus;
@@ -51,8 +50,7 @@ function makePlan(overrides: Partial<FakePlan> & { id: string; driverId: string 
     tenantId: 'tenant-1',
     motorcycleId: `veh-${overrides.driverId}`,
     dailyAmount: new Prisma.Decimal(12000),
-    totalPrice: new Prisma.Decimal(1_800_000),
-    downPayment: new Prisma.Decimal(0),
+    instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     startDate: utc(2026, 8, 3),
     activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
     status: OwnershipPlanStatus.ACTIVE,
@@ -219,12 +217,11 @@ describe('OwnershipPlanGeneratorService', () => {
     expect(state.assignments[0].targetAmount.toFixed(2)).toBe('12000.00');
   });
 
-  it('FINAL INSTALMENT: 4,000 remaining against a 12,000 daily amount generates a 4,000 assignment', async () => {
+  it('FINAL DAY: the last instalment the generator creates is a FULL day, never partial (Stage G7)', async () => {
     const plan = makePlan({
       id: 'plan-1',
       driverId: 'driver-1',
-      totalPrice: new Prisma.Decimal(1_800_000),
-      downPayment: new Prisma.Decimal(0),
+      instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     });
     const seedAssignment: FakeAssignment = {
       id: 'seed-1',
@@ -232,10 +229,10 @@ describe('OwnershipPlanGeneratorService', () => {
       driverId: 'driver-1',
       motorcycleId: plan.motorcycleId,
       assignedDate: utc(2026, 8, 3),
-      // amountBilled (Part 1) is the sum of targetAmount over ALL assignments,
-      // so a fully-current driver's billed history must match what's paid -
-      // 1,796,000 billed and paid, 4,000 of the 1,800,000 price left either way.
-      targetAmount: new Prisma.Decimal(1_796_000),
+      // 149 of 150 instalments already billed and paid - one full day left.
+      // totalOwed is always an exact multiple of dailyAmount now (Stage G7),
+      // so that last day can never be smaller than dailyAmount.
+      targetAmount: new Prisma.Decimal(1_788_000),
       ownershipPlanId: 'plan-1',
       reference: 'BF-SEED0001',
     };
@@ -245,7 +242,7 @@ describe('OwnershipPlanGeneratorService', () => {
       payments: [
         {
           dailyAssignmentId: 'seed-1',
-          amount: new Prisma.Decimal(1_796_000),
+          amount: new Prisma.Decimal(1_788_000),
           status: PaymentStatus.COMPLETED,
         },
       ],
@@ -256,16 +253,19 @@ describe('OwnershipPlanGeneratorService', () => {
 
     expect(result.assignmentsCreated).toBe(1);
     const created = state.assignments.find((a) => a.id !== 'seed-1');
-    expect(created?.targetAmount.toFixed(2)).toBe('4000.00');
+    expect(created?.targetAmount.toFixed(2)).toBe('12000.00'); // a full instalment, never partial
     expect(created?.assignedDate.getTime()).toBe(utc(2026, 8, 4).getTime());
+
+    // Fully billed now - a further run creates nothing more for this plan.
+    const again = await service.generate(utc(2026, 8, 5));
+    expect(again.assignmentsCreated).toBe(0);
   });
 
   it('COMPLETION: remainingToOwn reaching 0 marks the plan COMPLETED and stops billing it', async () => {
     const plan = makePlan({
       id: 'plan-1',
       driverId: 'driver-1',
-      totalPrice: new Prisma.Decimal(1_800_000),
-      downPayment: new Prisma.Decimal(0),
+      instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     });
     const seedAssignment: FakeAssignment = {
       id: 'seed-1',
@@ -304,12 +304,11 @@ describe('OwnershipPlanGeneratorService', () => {
   });
 
   describe('Part 1: remainingToBill caps arrears at the price of the vehicle', () => {
-    it('4,000 remaining, 12,000/day, driver pays nothing: 10 consecutive days bill 4,000 total in ONE assignment', async () => {
+    it('one instalment total, driver pays nothing: 10 consecutive days bill exactly ONE 12,000 assignment', async () => {
       const plan = makePlan({
         id: 'plan-1',
         driverId: 'driver-1',
-        totalPrice: new Prisma.Decimal(4000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 1, // totalOwed = 12,000
         startDate: utc(2026, 8, 3),
       });
       const { client, state } = createFakePrisma({ plans: [plan] });
@@ -326,7 +325,7 @@ describe('OwnershipPlanGeneratorService', () => {
         (sum, a) => sum.plus(a.targetAmount),
         new Prisma.Decimal(0),
       );
-      expect(totalBilled.toFixed(2)).toBe('4000.00');
+      expect(totalBilled.toFixed(2)).toBe('12000.00');
       expect(totalCreated).toBe(1);
       // The plan stays ACTIVE throughout - it is unpaid, not finished.
       expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE);
@@ -336,8 +335,7 @@ describe('OwnershipPlanGeneratorService', () => {
       const plan = makePlan({
         id: 'plan-1',
         driverId: 'driver-1',
-        totalPrice: new Prisma.Decimal(4000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 1, // totalOwed = 12,000
         startDate: utc(2026, 8, 3),
       });
       const { client, state } = createFakePrisma({ plans: [plan] });
@@ -348,21 +346,20 @@ describe('OwnershipPlanGeneratorService', () => {
       }
 
       // netPosition = amountPaid(0) - amountDue(sum of targetAmount to date).
-      // amountDue is capped at 4,000 forever (only one row was ever billed),
-      // so daysBehind = ceil(4000/12000) = 1, not 10 and not climbing.
+      // amountDue is capped at 12,000 forever (only one row was ever billed),
+      // so daysBehind = ceil(12000/12000) = 1, not 10 and not climbing.
       const amountDue = state.assignments.reduce(
         (sum, a) => sum.plus(a.targetAmount),
         new Prisma.Decimal(0),
       );
-      expect(amountDue.toFixed(2)).toBe('4000.00');
+      expect(amountDue.toFixed(2)).toBe('12000.00');
     });
 
-    it('backfill of 3 days on a 20,000-remaining, 12,000/day plan bills 12,000 then 8,000 then nothing, in one run', async () => {
+    it('backfill of 3 days on a 2-instalment plan bills 12,000 then 12,000 then nothing, in one run', async () => {
       const plan = makePlan({
         id: 'plan-1',
         driverId: 'driver-1',
-        totalPrice: new Prisma.Decimal(20000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 2, // totalOwed = 24,000
         startDate: utc(2026, 8, 3), // Mon
       });
       const { client, state } = createFakePrisma({ plans: [plan] });
@@ -376,7 +373,7 @@ describe('OwnershipPlanGeneratorService', () => {
         state.assignments.map((a) => [a.assignedDate.toISOString().slice(0, 10), a.targetAmount]),
       );
       expect(byDate.get('2026-08-03')?.toFixed(2)).toBe('12000.00');
-      expect(byDate.get('2026-08-04')?.toFixed(2)).toBe('8000.00');
+      expect(byDate.get('2026-08-04')?.toFixed(2)).toBe('12000.00'); // full instalment, never partial
       expect(byDate.has('2026-08-05')).toBe(false); // "then nothing" - the third day is not created.
       expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE); // billed out, not paid off.
     });
@@ -385,14 +382,13 @@ describe('OwnershipPlanGeneratorService', () => {
       const plan = makePlan({
         id: 'plan-1',
         driverId: 'driver-1',
-        totalPrice: new Prisma.Decimal(20000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 2, // totalOwed = 24,000
         startDate: utc(2026, 8, 3),
       });
       const { client, state } = createFakePrisma({ plans: [plan] });
       const service = await buildService({ client });
 
-      await service.generate(utc(2026, 8, 5)); // bills 12,000 + 8,000 = fully billed.
+      await service.generate(utc(2026, 8, 5)); // bills 12,000 + 12,000 = fully billed.
       expect(plan.status).toBe(OwnershipPlanStatus.ACTIVE);
       expect(state.assignments).toHaveLength(2);
 

@@ -155,6 +155,7 @@ describe('PaymentService', () => {
     const plan = {
       id: 'plan-1',
       dailyAmount: new Prisma.Decimal(12000),
+      instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(0),
     };
@@ -268,8 +269,7 @@ describe('PaymentService', () => {
       // 72,000 paid (12,000 already + 60,000 new) against a 12,000 amountDue.
       const figures = derivePlanFigures({
         dailyAmount: new Prisma.Decimal(12000),
-        totalPrice: new Prisma.Decimal(1_800_000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
         amountDue: new Prisma.Decimal(12000),
         amountPaid: new Prisma.Decimal(72000),
         amountBilled: new Prisma.Decimal(12000),
@@ -299,7 +299,7 @@ describe('PaymentService', () => {
     it('rejects a payment above the 90-day cap without confirmLargeAmount', async () => {
       prisma.client.ownershipPlan.findUnique.mockResolvedValue({
         ...plan,
-        totalPrice: new Prisma.Decimal(5_000_000),
+        instalmentCount: 500, // totalOwed = 6,000,000 - plenty of headroom
       });
       prisma.client.dailyAssignment.findUnique.mockResolvedValue({
         id: 'a-today',
@@ -336,7 +336,7 @@ describe('PaymentService', () => {
     it('rejects an overpayment that would exceed remainingToOwn, rather than completing the plan with an orphaned excess', async () => {
       prisma.client.ownershipPlan.findUnique.mockResolvedValue({
         ...plan,
-        totalPrice: new Prisma.Decimal(10000),
+        instalmentCount: 1, // totalOwed = 12,000
       });
       prisma.client.dailyAssignment.findUnique.mockResolvedValue({
         id: 'a-today',
@@ -347,7 +347,7 @@ describe('PaymentService', () => {
         planAssignment('a-today', '2026-07-01', 12000),
       ]);
 
-      // remainingToOwn = 10,000 - 0 = 10,000; 15,000 would overpay the vehicle.
+      // remainingToOwn = 12,000 - 0 = 12,000; 15,000 would overpay the vehicle.
       await expect(
         service.createPayment(
           { dailyAssignmentId: 'a-today', driverId: 'driver-1', amount: 15000 },
@@ -366,7 +366,7 @@ describe('PaymentService', () => {
     it('rejects the same overpayment at the same boundary whether or not the plan has a lateFeeAmount set', async () => {
       prisma.client.ownershipPlan.findUnique.mockResolvedValue({
         ...plan,
-        totalPrice: new Prisma.Decimal(10000),
+        instalmentCount: 1, // totalOwed = 12,000
         lateFeeAmount: new Prisma.Decimal(2000),
         breachAfterConsecutiveMissedDays: 5,
       });
@@ -391,7 +391,7 @@ describe('PaymentService', () => {
     it('two PENDING payments that individually pass a COMPLETED-only ceiling are jointly rejected by the second one', async () => {
       prisma.client.ownershipPlan.findUnique.mockResolvedValue({
         ...plan,
-        totalPrice: new Prisma.Decimal(20000),
+        instalmentCount: 2, // totalOwed = 24,000
       });
       prisma.client.dailyAssignment.findUnique.mockResolvedValue({
         id: 'a1',
@@ -408,9 +408,9 @@ describe('PaymentService', () => {
           ]),
         ]);
 
-      // remainingToOwn (COMPLETED-only) is 20,000 for BOTH calls, since
+      // remainingToOwn (COMPLETED-only) is 24,000 for BOTH calls, since
       // neither payment ever completes - a COMPLETED-only ceiling would wave
-      // both of these 15,000 payments through, jointly overpaying by 10,000.
+      // both of these 15,000 payments through, jointly overpaying by 6,000.
       const first = await service.createPayment(
         { dailyAssignmentId: 'a1', driverId: 'driver-1', amount: 15000 },
         owner,

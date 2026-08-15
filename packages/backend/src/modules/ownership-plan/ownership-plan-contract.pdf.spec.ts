@@ -10,7 +10,7 @@ import {
 import {
   FULL_SAMPLE_CONTEXT,
   SPARSE_SAMPLE_CONTEXT,
-  REMAINDER_SAMPLE_CONTEXT,
+  LARGE_SAMPLE_CONTEXT,
 } from '../../../scripts/contract-sample-fixture';
 
 function fullContext(overrides: Partial<ContractContext> = {}): ContractContext {
@@ -40,9 +40,10 @@ function fullContext(overrides: Partial<ContractContext> = {}): ContractContext 
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(200_000),
       dailyAmount: new Prisma.Decimal(12_000),
+      instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
       startDate: new Date('2026-03-03T00:00:00.000Z'),
       contractEndDate: new Date('2027-03-03T00:00:00.000Z'),
-      lateFeeAmount: new Prisma.Decimal(2_000),
+      lateFeeAmount: new Prisma.Decimal(1_000),
       breachAfterConsecutiveMissedDays: 5,
     },
     guarantor: {
@@ -85,8 +86,8 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).toContain('Dar es Salaam');
     expect(text).toContain('MH1JF5011KK012345');
     expect(text).toContain('Nyekundu');
-    expect(text).toContain('2,000/=');
-    expect(text).toContain('siku tano (5) mfululizo');
+    expect(text).toContain('1,000/=');
+    expect(text).toContain('siku 5 mfululizo');
     expect(text).toContain('0000000000');
     expect(text).toContain('000000');
   });
@@ -118,6 +119,7 @@ describe('buildContractContent / contractTextPairs', () => {
         totalPrice: new Prisma.Decimal(1_800_000),
         downPayment: new Prisma.Decimal(200_000),
         dailyAmount: new Prisma.Decimal(12_000),
+        instalmentCount: 150,
         startDate: new Date('2026-03-03T00:00:00.000Z'),
         contractEndDate: null,
         lateFeeAmount: null,
@@ -161,7 +163,8 @@ describe('buildContractContent / contractTextPairs', () => {
 
     expect(withoutFine).not.toContain('atalazimika kulipa faini');
     expect(withFine).toContain('atalazimika kulipa faini');
-    expect(withoutFine).toContain('kutofanya malipo kwa siku tano (5) mfululizo');
+    expect(withoutFine).toContain('2. Marejesho ya kila siku ni LAZIMA.');
+    expect(withoutFine).toContain('ndani ya siku 5 mfululizo');
   });
 
   it('renders the source-given fallback as two sentences when the tenant has no payment account configured, and leaves the populated path unchanged', () => {
@@ -213,13 +216,11 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).not.toContain('hewaniambayo');
   });
 
-  it('spells the instalment count in Swahili words beside the digits (Stage F3 Part 3)', () => {
-    // totalOwed = 1,800,000 - 200,000 = 1,600,000; floor(1,600,000 / 12,000) = 133
-    // full days, with a 4,000 remainder (Stage F3c Part 1 - this fixture was
-    // never an exact multiple; see the obligation day count changing here).
+  it('renders day counts as plain digits, not Swahili words (Stage G7 Part 3b)', () => {
     const text = allText(fullContext());
 
-    expect(text).toContain('kwa siku mia moja thelathini na tatu (133) mfululizo');
+    expect(text).toContain('kwa siku 150 mfululizo');
+    expect(text).not.toContain('siku mia');
   });
 
   it('formats every shilling amount as Tanzanian "/=" notation with Swahili words beside it', () => {
@@ -227,11 +228,8 @@ describe('buildContractContent / contractTextPairs', () => {
 
     // Declared value (recital): 1,800,000.
     expect(text).toContain('milioni moja na laki nane (1,800,000/=)');
-    // Late fee (clause 2): 2,000.
-    expect(text).toContain('elfu mbili (2,000/=)');
-    // Daily amount reappears with "/=" in the Part 4 total sentence (see
-    // below) - clause 1's own mention of it is the one exception, next test.
-    expect(text).toContain('elfu kumi na mbili (12,000/=)');
+    // Late fee (clause 2): 1,000.
+    expect(text).toContain('elfu moja (1,000/=)');
     // English lines never spell out words - digits and "/=" only.
     expect(text).toContain('Tanzanian shillings 1,800,000/=');
   });
@@ -242,50 +240,43 @@ describe('buildContractContent / contractTextPairs', () => {
     expect(text).toContain('shilingi elfu kumi na mbili (12,000) TZS kila siku');
     expect(text).toContain('proceeds of shillings 12,000 TZS every day');
     expect(text).not.toContain('12,000/= TZS');
-    // The same daily amount still carries "/=" in the Part 4 total sentence.
-    expect(text).toContain('kwa shilingi elfu kumi na mbili (12,000/=) kila siku');
-    expect(text).toContain('at 12,000/= each day');
+    // Every other amount in the document keeps "/=" - the late fee, for instance.
+    expect(text).toContain('elfu moja (1,000/=)');
+    expect(text).toContain('shillings 1,000/=');
   });
 
-  describe('Part 4 / Stage F3c Part 1 - total repayment sentence', () => {
-    it('states the total as totalOwed, never days x dailyAmount - this fixture was never an exact multiple, so the total, day count, and remainder all changed under the fix (Stage F3c)', () => {
-      // totalOwed = 1,800,000 - 200,000 = 1,600,000. floor(1,600,000 / 12,000)
-      // = 133 full days, remainder 1,600,000 - (133 x 12,000) = 4,000. The
-      // total is totalOwed (1,600,000) - NOT 133 x 12,000 (1,596,000) and NOT
-      // the old buggy 134 x 12,000 (1,608,000).
+  describe('Part 4 / Stage G7 Part 3a - total repayment sentence', () => {
+    it('states the total as dailyAmount x instalmentCount only - no breakdown, no final-day clause, because a final partial day can no longer exist', () => {
+      // totalOwed = 12,000 x 150 = 1,800,000, exactly.
       const text = allText(fullContext());
 
       expect(text).toContain(
-        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja na laki sita (1,600,000/=), yaani siku mia moja thelathini na tatu (133) kwa shilingi elfu kumi na mbili (12,000/=) kila siku na siku ya mwisho shilingi elfu nne (4,000/=).',
+        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja na laki nane (1,800,000/=).',
       );
-      expect(text).toContain(
-        'The total of all remittances is Tanzanian shillings 1,600,000/=, being 133 days at 12,000/= each day and a final day of 4,000/=.',
-      );
+      expect(text).toContain('The total of all remittances is Tanzanian shillings 1,800,000/=.');
+      expect(text).not.toContain('yaani siku');
+      expect(text).not.toContain('siku ya mwisho');
+      expect(text).not.toContain('final day');
     });
 
-    it('renders the old no-remainder sentence, with no trailing final-day clause, when totalOwed is an exact multiple of dailyAmount', () => {
-      // totalOwed = 1,800,000 - 240,000 = 1,560,000; 1,560,000 / 12,000 = 130 exactly.
+    it('the total tracks dailyAmount x instalmentCount exactly, decoupled from totalPrice/downPayment', () => {
+      // 12,000 x 130 = 1,560,000 - unrelated to this fixture's totalPrice
+      // (1,800,000) or downPayment (200,000), which stay untouched below.
       const ctx = fullContext({
-        plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(240_000) },
+        plan: { ...fullContext().plan, instalmentCount: 130 },
       });
       const text = allText(ctx);
 
       expect(text).toContain(
-        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja laki tano na elfu sitini (1,560,000/=), yaani siku mia moja na thelathini (130) kwa shilingi elfu kumi na mbili (12,000/=) kila siku.',
+        'Jumla ya marejesho yote ni shilingi za kitanzania milioni moja laki tano na elfu sitini (1,560,000/=).',
       );
-      expect(text).toContain(
-        'The total of all remittances is Tanzanian shillings 1,560,000/=, being 130 days at 12,000/= each day.',
-      );
-      expect(text).not.toContain('na siku ya mwisho');
-      expect(text).not.toContain('and a final day of');
-      // The obligation sentence's day count agrees with the total sentence's.
-      expect(text).toContain('kwa siku mia moja na thelathini (130) mfululizo');
+      expect(text).toContain('The total of all remittances is Tanzanian shillings 1,560,000/=.');
+      expect(text).toContain('kwa siku 130 mfululizo');
     });
 
-    it('drops the sentence entirely when instalmentCount is unavailable, rather than printing a partial or zero total', () => {
-      // downPayment === totalPrice => totalOwed = 0 => fullDays = 0 (unavailable).
+    it('drops the sentence entirely when instalmentCount is 0, rather than printing a zero total', () => {
       const ctx = fullContext({
-        plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(1_800_000) },
+        plan: { ...fullContext().plan, instalmentCount: 0 },
       });
       const text = allText(ctx);
 
@@ -338,7 +329,7 @@ describe('renderContractPdf', () => {
   });
 
   describe('every bilingual pair renders on a single page (Stage F3d Part 2/3)', () => {
-    // SAMPLE_CONTRACT_REMAINDER.pdf was observed to split
+    // A sample was once observed to split
     // "Sahihi: ______________    Mahali anapoishi: ..." from its own English
     // translation across the page 1/2 boundary - the same defect could hit
     // any pair, not just ones inside a group() block. Checked via the
@@ -347,7 +338,7 @@ describe('renderContractPdf', () => {
     it.each<[string, ContractContext]>([
       ['FULL', FULL_SAMPLE_CONTEXT],
       ['SPARSE', SPARSE_SAMPLE_CONTEXT],
-      ['REMAINDER', REMAINDER_SAMPLE_CONTEXT],
+      ['LARGE', LARGE_SAMPLE_CONTEXT],
     ])('%s sample: no pair starts on one page and ends on another', async (_label, ctx) => {
       const spans: PairPageSpan[] = [];
       await renderContractPdf(ctx, (span) => spans.push(span));

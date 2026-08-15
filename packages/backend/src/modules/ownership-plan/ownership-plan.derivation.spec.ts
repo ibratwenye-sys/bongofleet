@@ -17,8 +17,7 @@ const TODAY = new Date('2026-08-01T00:00:00.000Z'); // a Saturday
 function basePosition(overrides: Partial<PlanPosition> = {}): PlanPosition {
   return {
     dailyAmount: new Prisma.Decimal(12000),
-    totalPrice: new Prisma.Decimal(1_800_000),
-    downPayment: new Prisma.Decimal(0),
+    instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     amountDue: new Prisma.Decimal(0),
     amountPaid: new Prisma.Decimal(0),
     amountBilled: new Prisma.Decimal(0),
@@ -106,8 +105,7 @@ describe('derivePlanFigures', () => {
     // Saturday 2026-08-08, which is what a flat 7-calendar-day count would give.
     const result = derivePlanFigures(
       basePosition({
-        totalPrice: new Prisma.Decimal(84000),
-        downPayment: new Prisma.Decimal(0),
+        instalmentCount: 7, // totalOwed = 12,000 x 7 = 84,000
         amountPaid: new Prisma.Decimal(0),
         dailyAmount: new Prisma.Decimal(12000),
         activeWeekdays: [1, 2, 3, 4, 5, 6],
@@ -128,15 +126,14 @@ describe('derivePlanFigures', () => {
     // total balance left to pay off - the two figures are independent reads.
     const result = derivePlanFigures(
       basePosition({
-        totalPrice: new Prisma.Decimal(1_800_000),
-        downPayment: new Prisma.Decimal(200_000),
+        instalmentCount: 134, // totalOwed = 12,000 x 134 = 1,608,000
         amountDue: new Prisma.Decimal(36000),
         amountPaid: new Prisma.Decimal(0),
         dailyAmount: new Prisma.Decimal(12000),
       }),
       TODAY,
     );
-    expect(result.remainingToOwn).toBe('1600000.00');
+    expect(result.remainingToOwn).toBe('1608000.00');
     expect(result.daysBehind).toBe(3);
   });
 
@@ -144,8 +141,7 @@ describe('derivePlanFigures', () => {
     it('a fully current plan (amountPaid === amountBilled) has remainingToOwn === remainingToBill', () => {
       const result = derivePlanFigures(
         basePosition({
-          totalPrice: new Prisma.Decimal(1_800_000),
-          downPayment: new Prisma.Decimal(0),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           amountDue: new Prisma.Decimal(12000),
           amountPaid: new Prisma.Decimal(12000),
           amountBilled: new Prisma.Decimal(12000),
@@ -157,13 +153,14 @@ describe('derivePlanFigures', () => {
     });
 
     it('a non-paying driver: remainingToOwn stays at the arrears while remainingToBill tracks what has been billed', () => {
-      // 4,000 remaining, only 4,000 ever billed (the generator capped it there),
-      // nothing paid - remainingToOwn reflects the debt, remainingToBill is
-      // exhausted (the generator must not create more).
+      // 4,000 remaining (one instalment of a 4,000/day plan), only 4,000
+      // ever billed (the generator capped it there), nothing paid -
+      // remainingToOwn reflects the debt, remainingToBill is exhausted (the
+      // generator must not create more).
       const result = derivePlanFigures(
         basePosition({
-          totalPrice: new Prisma.Decimal(4000),
-          downPayment: new Prisma.Decimal(0),
+          dailyAmount: new Prisma.Decimal(4000),
+          instalmentCount: 1,
           amountDue: new Prisma.Decimal(4000),
           amountPaid: new Prisma.Decimal(0),
           amountBilled: new Prisma.Decimal(4000),
@@ -177,15 +174,19 @@ describe('derivePlanFigures', () => {
 
   describe('computeRemainingUnreserved (Stage F: PENDING/COMPLETED asymmetry)', () => {
     it('remainingToOwn is unaffected by a PENDING payment; remainingUnreserved is', () => {
-      const totalPrice = new Prisma.Decimal(20000);
-      const downPayment = new Prisma.Decimal(0);
+      const dailyAmount = new Prisma.Decimal(20000);
+      const instalmentCount = 1; // totalOwed = 20,000
       const amountPaidCompleted = new Prisma.Decimal(0); // the PENDING payment never completed
       const amountReserved = new Prisma.Decimal(15000); // PENDING + COMPLETED
 
-      const remainingToOwn = computeRemainingToOwn(totalPrice, downPayment, amountPaidCompleted);
+      const remainingToOwn = computeRemainingToOwn(
+        dailyAmount,
+        instalmentCount,
+        amountPaidCompleted,
+      );
       const remainingUnreserved = computeRemainingUnreserved(
-        totalPrice,
-        downPayment,
+        dailyAmount,
+        instalmentCount,
         amountReserved,
       );
 

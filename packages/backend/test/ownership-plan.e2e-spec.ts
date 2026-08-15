@@ -111,6 +111,7 @@ describe('OwnershipPlan (e2e)', () => {
     driverId,
     motorcycleId,
     dailyAmount: 12000,
+    instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     totalPrice: 1_800_000,
     startDate: '2026-03-03',
   });

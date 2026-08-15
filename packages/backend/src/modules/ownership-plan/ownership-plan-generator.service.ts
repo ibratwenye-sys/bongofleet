@@ -71,8 +71,7 @@ type PlanRow = {
   driverId: string;
   motorcycleId: string;
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  instalmentCount: number;
   startDate: Date;
   activeWeekdays: number[];
 };
@@ -222,8 +221,7 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
         driverId: true,
         motorcycleId: true,
         dailyAmount: true,
-        totalPrice: true,
-        downPayment: true,
+        instalmentCount: true,
         startDate: true,
         activeWeekdays: true,
       },
@@ -304,7 +302,11 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
     for (const plan of plans) {
       const amountPaid = amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0);
       const amountBilled = amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0);
-      const remainingToOwn = computeRemainingToOwn(plan.totalPrice, plan.downPayment, amountPaid);
+      const remainingToOwn = computeRemainingToOwn(
+        plan.dailyAmount,
+        plan.instalmentCount,
+        amountPaid,
+      );
 
       // Two separate checks with two separate outcomes (Part 1). Paid off
       // (remainingToOwn <= 0) -> COMPLETED, stop entirely: a fully paid
@@ -322,7 +324,11 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
       // running counter that decrements by each row this run creates, which
       // is what caps a non-paying driver's arrears at the price of the
       // vehicle instead of billing them forever.
-      let remainingToBill = computeRemainingToBill(plan.totalPrice, plan.downPayment, amountBilled);
+      let remainingToBill = computeRemainingToBill(
+        plan.dailyAmount,
+        plan.instalmentCount,
+        amountBilled,
+      );
       if (remainingToBill.lessThanOrEqualTo(0)) {
         continue;
       }
@@ -392,6 +398,13 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
           break;
         }
 
+        // Stage G7 - totalOwed is now always an exact multiple of dailyAmount
+        // (dailyAmount * instalmentCount), so remainingToBill is always either
+        // 0 (the loop already broke above) or >= dailyAmount here - this can
+        // never actually pick remainingToBill. Kept as a defensive min()
+        // rather than a bare assignment: it costs nothing and remains
+        // correct even against a pre-migration plan whose already-billed
+        // history doesn't line up exactly.
         const targetAmount = Prisma.Decimal.min(plan.dailyAmount, remainingToBill);
         toCreate.push({
           tenantId,

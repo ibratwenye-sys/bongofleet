@@ -71,8 +71,7 @@ async function assertGuarantorBelongsToDriver(
 type PlanRow = {
   id: string;
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  instalmentCount: number;
   contractEndDate: Date | null;
   activeWeekdays: number[];
 };
@@ -118,12 +117,6 @@ export class OwnershipPlanService {
     const activeWeekdays = dto.activeWeekdays ?? DEFAULT_ACTIVE_WEEKDAYS;
     assertNoDuplicateWeekdays(activeWeekdays);
 
-    const totalPrice = new Prisma.Decimal(dto.totalPrice);
-    const downPayment = new Prisma.Decimal(dto.downPayment ?? 0);
-    if (totalPrice.lessThanOrEqualTo(downPayment)) {
-      throw new BadRequestException('totalPrice must be greater than downPayment');
-    }
-
     const existingDriverPlan = await this.prisma.client.ownershipPlan.findFirst({
       where: {
         tenantId: actor.tenantId,
@@ -154,6 +147,7 @@ export class OwnershipPlanService {
           motorcycleId: dto.motorcycleId,
           guarantorId: dto.guarantorId,
           dailyAmount: dto.dailyAmount,
+          instalmentCount: dto.instalmentCount,
           totalPrice: dto.totalPrice,
           downPayment: dto.downPayment ?? 0,
           startDate: new Date(dto.startDate),
@@ -290,14 +284,9 @@ export class OwnershipPlanService {
     }
 
     if (dto.dailyAmount !== undefined) data.dailyAmount = dto.dailyAmount;
+    if (dto.instalmentCount !== undefined) data.instalmentCount = dto.instalmentCount;
     if (dto.totalPrice !== undefined) data.totalPrice = dto.totalPrice;
     if (dto.downPayment !== undefined) data.downPayment = dto.downPayment;
-
-    const resultingTotalPrice = new Prisma.Decimal(dto.totalPrice ?? existing.totalPrice);
-    const resultingDownPayment = new Prisma.Decimal(dto.downPayment ?? existing.downPayment);
-    if (resultingTotalPrice.lessThanOrEqualTo(resultingDownPayment)) {
-      throw new BadRequestException('totalPrice must be greater than downPayment');
-    }
 
     // contractEndDate is the date on the signed paper - only an explicit
     // owner edit here moves it. Paying early or falling behind never should.
@@ -443,8 +432,7 @@ export class OwnershipPlanService {
         derivePlanFigures(
           {
             dailyAmount: plan.dailyAmount,
-            totalPrice: plan.totalPrice,
-            downPayment: plan.downPayment,
+            instalmentCount: plan.instalmentCount,
             amountDue: amountDueByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             amountPaid: amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             amountBilled: amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0),

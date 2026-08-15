@@ -1,49 +1,73 @@
 /**
- * Stage G Part 1 - the one place that estimates how long a hire-purchase
- * plan will take, shared between the backend (validating/quoting a plan)
- * and the dashboard's create-plan form (showing the owner a live preview as
- * they type). Money is passed as plain numbers, not Prisma.Decimal - this
- * runs in the browser as well as Node, and Prisma.Decimal isn't available
- * there. Amounts are converted to integer cents internally so the division
- * below is exact, matching the backend's Prisma.Decimal arithmetic bit for
- * bit rather than drifting on floating-point division.
+ * Stage G7 - the daily amount and the number of payment days are what the
+ * owner and driver actually negotiate; the total is their product, exactly,
+ * always. This function works in both directions, matching how the
+ * conversation actually goes: Ibrahim enters the daily amount, then either
+ * the number of days or the total, and the other is computed.
  *
- * Three different quantities, three different names - never conflate them:
+ *   - days given: total = dailyAmount * days. Exact, no rounding, ever - this
+ *     direction can never fail to divide evenly, because there is no
+ *     division in it.
+ *   - total given: days = total / dailyAmount. When that does not divide
+ *     evenly, this does NOT round or truncate silently - it returns both
+ *     neighbouring whole-day options (their exact totals included) so the
+ *     owner and rider can settle the real number face to face, rather than
+ *     discovering a rounded figure for the first time on a printed contract.
  *
- *   - paymentDayCount: ceil(totalOwed / dailyAmount), the number of days the
- *     driver actually makes a payment on (every full day, plus the smaller
- *     final day if totalOwed isn't an exact multiple of dailyAmount).
- *   - calendarEndDate: the calendar date the paymentDayCount'th payment day
- *     falls on, counting only activeWeekdays and starting from startDate
- *     itself (startDate counts as day 1 if it is an active weekday - this
- *     matches OwnershipPlanGeneratorService's own naturalStart, which bills
- *     a fresh plan starting on startDate, never startDate + 1).
- *   - finalInstalment: the remainder when totalOwed does not divide evenly
- *     by dailyAmount - i.e. what the Stage E daily-charge generator actually
- *     bills on the last payment day. Zero when it divides exactly.
+ * Replaces the previous totalPrice/downPayment-based estimatePlanTerm, which
+ * derived totalOwed as totalPrice - downPayment and always divided it by
+ * dailyAmount, producing a finalInstalment remainder whenever it didn't
+ * divide evenly. That remainder - and every partial-final-day concept it fed
+ * - no longer exists: totalOwed is now dailyAmount * instalmentCount by
+ * construction, so a remainder can only arise here, upfront, while the term
+ * is still being negotiated, never after the fact on a contract.
  *
- * A plan that skips a weekday takes MORE calendar days than payment days -
- * "1,800,000 at 12,000/day" is 150 payment days, not "≈175 riding days"; a
- * design doc that phrases it that way is conflating paymentDayCount with
- * calendarEndDate's span. Never reproduce that.
+ * Amounts are converted to integer cents internally so the arithmetic is
+ * exact, matching the backend's Prisma.Decimal arithmetic bit for bit rather
+ * than drifting on floating-point division. Runs in the browser (the
+ * dashboard's create-plan form) as well as Node, so money is plain numbers,
+ * not Prisma.Decimal.
  */
 
-export interface EstimatePlanTermInput {
-  totalPrice: number;
-  downPayment: number;
+export interface EstimatePlanTermByDaysInput {
   dailyAmount: number;
+  days: number;
   /** ISO date (YYYY-MM-DD, or any Date-parseable string) the plan starts on. */
   startDate: string;
   /** 0=Sun..6=Sat, matching OwnershipPlan.activeWeekdays. */
   activeWeekdays: number[];
 }
 
-export interface PlanTermEstimate {
-  paymentDayCount: number;
+export interface EstimatePlanTermByTotalInput {
+  dailyAmount: number;
+  total: number;
+  /** ISO date (YYYY-MM-DD, or any Date-parseable string) the plan starts on. */
+  startDate: string;
+  /** 0=Sun..6=Sat, matching OwnershipPlan.activeWeekdays. */
+  activeWeekdays: number[];
+}
+
+export type EstimatePlanTermInput = EstimatePlanTermByDaysInput | EstimatePlanTermByTotalInput;
+
+/** One resolved term: an exact day count, its exact total, and the calendar
+ *  date the last payment day falls on. */
+export interface PlanTermOption {
+  days: number;
+  total: number;
   /** ISO date (YYYY-MM-DD), safe to send straight back as contractEndDate. */
   calendarEndDate: string;
-  finalInstalment: number;
 }
+
+export type EstimatePlanTermResult =
+  | ({ exact: true } & PlanTermOption)
+  | {
+      exact: false;
+      /** The two whole-day options neighbouring the requested total - the
+       *  smaller day count (undershoots the requested total) first, the
+       *  larger (overshoots it) second. Never a rounded or truncated middle
+       *  value. */
+      options: [PlanTermOption, PlanTermOption];
+    };
 
 function toCents(amount: number): number {
   return Math.round(amount * 100);
@@ -68,16 +92,16 @@ function toIsoDate(date: Date): string {
  *  plan's first payment day is startDate itself, not startDate + 1.
  *
  *  Stage G2 Part 2 - this runs in the browser on every keystroke of the
- *  create-plan form, where no DTO validates activeWeekdays before it gets
- *  here, so both failure modes below are guarded inside the function rather
- *  than assumed away by a caller precondition:
+ *  create-plan form, where no DTO validates activeWeekdays first - not
+ *  because either input can occur server-side. Guarded inside the function
+ *  rather than assumed away by a caller precondition:
  *
  *  - an empty activeWeekdays would otherwise loop forever (unchecking every
  *    weekday mid-edit is ordinary user behaviour, not a validation gap the
  *    form is expected to prevent before this runs);
- *  - a day-by-day walk is O(n) in the payment day count - a dailyAmount of 1
- *    against a six-figure total is >1,000,000 synchronous iterations, easily
- *    landing between two keystrokes.
+ *  - a day-by-day walk is O(n) in the day count - a dailyAmount of 1 against
+ *    a six-figure total is >1,000,000 synchronous iterations, easily landing
+ *    between two keystrokes.
  *
  *  Every block of 7 consecutive calendar days contains each weekday exactly
  *  once, so activeWeekdays.length active days fall in every such block
@@ -105,22 +129,48 @@ function nthActiveWeekdayFrom(start: Date, n: number, activeWeekdays: number[]):
   }
 }
 
-export function estimatePlanTerm(input: EstimatePlanTermInput): PlanTermEstimate {
-  const startDate = dateOnlyUTC(new Date(input.startDate));
+function optionFor(
+  startDate: Date,
+  days: number,
+  activeWeekdays: number[],
+  dailyAmountCents: number,
+): PlanTermOption {
+  return {
+    days,
+    total: (dailyAmountCents * days) / 100,
+    calendarEndDate: toIsoDate(nthActiveWeekdayFrom(startDate, days, activeWeekdays)),
+  };
+}
 
-  const totalOwedCents = toCents(input.totalPrice) - toCents(input.downPayment);
-  if (totalOwedCents <= 0) {
-    return { paymentDayCount: 0, calendarEndDate: toIsoDate(startDate), finalInstalment: 0 };
+export function estimatePlanTerm(input: EstimatePlanTermInput): EstimatePlanTermResult {
+  const startDate = dateOnlyUTC(new Date(input.startDate));
+  const dailyAmountCents = toCents(input.dailyAmount);
+
+  if ('days' in input) {
+    const days = Math.max(0, input.days);
+    return { exact: true, ...optionFor(startDate, days, input.activeWeekdays, dailyAmountCents) };
   }
 
-  const dailyAmountCents = toCents(input.dailyAmount);
-  const fullDays = Math.floor(totalOwedCents / dailyAmountCents);
-  const remainderCents = totalOwedCents - fullDays * dailyAmountCents;
+  const totalCents = toCents(input.total);
+  if (totalCents <= 0) {
+    return { exact: true, ...optionFor(startDate, 0, input.activeWeekdays, dailyAmountCents) };
+  }
 
-  const paymentDayCount = remainderCents > 0 ? fullDays + 1 : fullDays;
-  const finalInstalment = remainderCents / 100;
+  const lowerDays = Math.floor(totalCents / dailyAmountCents);
+  const remainderCents = totalCents - lowerDays * dailyAmountCents;
 
-  const calendarEndDate = nthActiveWeekdayFrom(startDate, paymentDayCount, input.activeWeekdays);
+  if (remainderCents === 0) {
+    return {
+      exact: true,
+      ...optionFor(startDate, lowerDays, input.activeWeekdays, dailyAmountCents),
+    };
+  }
 
-  return { paymentDayCount, calendarEndDate: toIsoDate(calendarEndDate), finalInstalment };
+  return {
+    exact: false,
+    options: [
+      optionFor(startDate, lowerDays, input.activeWeekdays, dailyAmountCents),
+      optionFor(startDate, lowerDays + 1, input.activeWeekdays, dailyAmountCents),
+    ],
+  };
 }

@@ -85,6 +85,7 @@ describe('OwnershipPlanService', () => {
     driverId: 'driver-1',
     motorcycleId: 'veh-1',
     dailyAmount: 12000,
+    instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
     totalPrice: 1_800_000,
     startDate: '2026-03-03',
   };
@@ -185,11 +186,12 @@ describe('OwnershipPlanService', () => {
       await expect(service.create(dto, owner)).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('throws BadRequest when totalPrice does not exceed downPayment', async () => {
-      await expect(
-        service.create({ ...dto, totalPrice: 100_000, downPayment: 100_000 }, owner),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
+    // Stage G7: totalPrice/downPayment no longer feed totalOwed - the old
+    // "totalPrice must exceed downPayment" cross-field check existed only to
+    // keep that arithmetic sane, and has been removed along with it.
+    // totalPrice/downPayment are now printed-only figures, independent of
+    // instalmentCount/dailyAmount, and may legitimately relate to each other
+    // however the owner declares.
 
     it('throws BadRequest when activeWeekdays has duplicates', async () => {
       await expect(
@@ -267,6 +269,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-1',
           motorcycleId: 'veh-1',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -278,6 +281,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-2',
           motorcycleId: 'veh-2',
           dailyAmount: new Prisma.Decimal(15000),
+          instalmentCount: 134, // totalOwed = 15,000 x 134 = 2,010,000
           totalPrice: new Prisma.Decimal(2_000_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -321,6 +325,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'd1',
           motorcycleId: 'v1',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 42, // totalOwed = 12,000 x 42 = 504,000
           totalPrice: new Prisma.Decimal(500000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -332,6 +337,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'd2',
           motorcycleId: 'v2',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 42, // totalOwed = 12,000 x 42 = 504,000
           totalPrice: new Prisma.Decimal(500000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -377,6 +383,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-1',
           motorcycleId: 'veh-1',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -388,6 +395,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-2',
           motorcycleId: 'veh-2',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -445,6 +453,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-1',
           motorcycleId: 'veh-1',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -509,6 +518,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-1',
           motorcycleId: 'veh-1',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -520,6 +530,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-2',
           motorcycleId: 'veh-2',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -531,6 +542,7 @@ describe('OwnershipPlanService', () => {
           driverId: 'driver-3',
           motorcycleId: 'veh-3',
           dailyAmount: new Prisma.Decimal(12000),
+          instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
           totalPrice: new Prisma.Decimal(1_800_000),
           downPayment: new Prisma.Decimal(0),
           contractEndDate: null,
@@ -575,6 +587,7 @@ describe('OwnershipPlanService', () => {
       driverId: 'driver-1',
       motorcycleId: 'veh-1',
       dailyAmount: new Prisma.Decimal(12000),
+      instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(0),
       contractEndDate: new Date('2027-02-12T00:00:00.000Z'),
@@ -847,12 +860,6 @@ describe('OwnershipPlanService', () => {
 
       await expect(
         service.update('plan-1', { status: OwnershipPlanStatus.ACTIVE }, owner),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it('rejects totalPrice not exceeding downPayment', async () => {
-      await expect(
-        service.update('plan-1', { downPayment: 1_800_000 }, owner),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 

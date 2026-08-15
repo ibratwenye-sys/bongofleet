@@ -36,6 +36,15 @@ export class CreateOwnershipPlanDto {
   @IsPositive()
   dailyAmount: number;
 
+  // Stage G7 - the agreed number of payment days. totalOwed = dailyAmount *
+  // instalmentCount, exactly - see ownership-plan.derivation.ts. Negotiated
+  // directly between owner and driver, independent of totalPrice/downPayment.
+  @IsInt()
+  @IsPositive()
+  instalmentCount: number;
+
+  // Declared value of the vehicle and the deposit taken - printed on the
+  // contract only (Stage G7); no longer used to derive totalOwed.
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   totalPrice: number;

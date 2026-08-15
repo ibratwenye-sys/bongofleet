@@ -6,7 +6,7 @@
 import PDFDocument = require('pdfkit');
 import { Prisma, PaymentAccountKind } from '@prisma/client';
 import { formatShillings } from '@bongofleet/shared-lib';
-import { numberWithWords, toSwahiliWords } from './swahili-numbers';
+import { toSwahiliWords } from './swahili-numbers';
 
 const NOT_ON_FILE = 'Haijajazwa / Not on file';
 
@@ -68,9 +68,16 @@ export interface ContractContext {
     /** OwnershipPlan.createdAt - the date the agreement was actually made,
      *  fixed at creation and never affected by a later reprint. */
     agreementDate: Date;
+    /** Declared value of the vehicle and the deposit taken (Stage G7) -
+     *  printed in the recital below only; never used to derive totalOwed or
+     *  anything else arithmetic. May legitimately differ from
+     *  dailyAmount * instalmentCount. */
     totalPrice: Prisma.Decimal;
     downPayment: Prisma.Decimal;
     dailyAmount: Prisma.Decimal;
+    /** The agreed number of payment days - totalOwed = dailyAmount *
+     *  instalmentCount, exactly, always. See ownership-plan.derivation.ts. */
+    instalmentCount: number;
     startDate: Date;
     contractEndDate: Date | null;
     lateFeeAmount: Prisma.Decimal | null;
@@ -270,15 +277,14 @@ function group(items: ContractItem[]): ContractItem {
  * written.
  */
 export function buildContractContent(ctx: ContractContext): ContractItem[] {
-  const totalOwed = ctx.plan.totalPrice.minus(ctx.plan.downPayment);
-  // fullDays/remainder (Stage F3c Part 1), not days x dailyAmount: the driver
-  // only pays a full dailyAmount on fullDays of the term - the Stage E daily-
-  // charge generator caps the final charge at whatever balance is left, so a
-  // totalOwed that isn't an exact multiple of dailyAmount always closes with
-  // one smaller final charge. Printing days x dailyAmount as "the total"
-  // overstates by exactly that shortfall on a document the driver signs.
-  const fullDays = totalOwed.dividedBy(ctx.plan.dailyAmount).floor().toNumber();
-  const hasValidInstalments = Number.isFinite(fullDays) && totalOwed.greaterThan(0);
+  // Stage G7 - totalOwed is dailyAmount * instalmentCount, exactly, always:
+  // the driver pays a full dailyAmount on every one of instalmentCount days,
+  // full stop. There is no remainder to explain, no smaller final charge, and
+  // nothing to reconcile against what the Stage E daily-charge generator
+  // actually bills - see ownership-plan.derivation.ts and
+  // ownership-plan-generator.service.ts.
+  const totalOwed = ctx.plan.dailyAmount.times(ctx.plan.instalmentCount);
+  const hasValidInstalments = ctx.plan.instalmentCount > 0;
   const destination = paymentDestinationPhrase(ctx.paymentAccounts);
 
   const items: ContractItem[] = [];
@@ -348,34 +354,25 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   items.push(text('heading', 'MASHARTI YA MKATABA', 'TERMS OF THE AGREEMENT'));
   items.push(space());
 
-  // 1. The daily obligation, the payment destination, and (Stage F3 Part 4,
-  // corrected Stage F3c Part 1) the total the driver will actually pay - the
-  // total is always totalOwed, never days x dailyAmount, and never typed or
-  // read from another field, so an owner sees their own term's arithmetic
-  // before anyone signs. The declared value in the recital above is a
-  // SEPARATE figure and is never reconciled against this one. The obligation
-  // sentence's day count is fullDays (not a rounded-up instalment count), so
-  // it never asserts dailyAmount on the final day when a smaller remainder
-  // is actually charged that day - the remainder is stated once, below, in
-  // the total sentence only.
+  // 1. The daily obligation, the payment destination, and (Stage G7) the
+  // total the driver will actually pay - the total is always
+  // dailyAmount * instalmentCount, never typed or read from another field,
+  // so an owner sees their own term's arithmetic before anyone signs. The
+  // declared value in the recital above is a SEPARATE figure and is never
+  // reconciled against this one. A final partial day can no longer exist -
+  // there is nothing left to explain, round, or reconcile, so the total
+  // sentence states the figure alone.
   {
-    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${withoutShillingSuffix(moneyWithWords(ctx.plan.dailyAmount))} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${numberWithWords(fullDays)} mfululizo.`;
-    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${withoutShillingSuffix(money(ctx.plan.dailyAmount))} TZS every day after the date of this agreement, for ${fullDays} consecutive days.`;
+    const obligationSw = `Makabidhiano ya mkataba huu ni kwamba dereva atalazimika kuwasilisha kwa mmiliki mapato ya kiasi cha shilingi ${withoutShillingSuffix(moneyWithWords(ctx.plan.dailyAmount))} TZS kila siku baada ya tarehe ya mkataba huu kwa siku ${ctx.plan.instalmentCount} mfululizo.`;
+    const obligationEn = `The obligation under this agreement is that the Driver must remit to the Owner proceeds of shillings ${withoutShillingSuffix(money(ctx.plan.dailyAmount))} TZS every day after the date of this agreement, for ${ctx.plan.instalmentCount} consecutive days.`;
     const paymentSw = `Malipo yote yatafanyika ${destination.sw}`;
     const paymentEn = `All payments shall be made ${destination.en}`;
 
-    const remainder = totalOwed.minus(ctx.plan.dailyAmount.times(fullDays));
-    const hasRemainder = hasValidInstalments && remainder.greaterThan(0);
-
     const totalSw = hasValidInstalments
-      ? `Jumla ya marejesho yote ni shilingi za kitanzania ${moneyWithWords(totalOwed)}, yaani siku ${numberWithWords(fullDays)} kwa shilingi ${moneyWithWords(ctx.plan.dailyAmount)} kila siku${
-          hasRemainder ? ` na siku ya mwisho shilingi ${moneyWithWords(remainder)}` : ''
-        }.`
+      ? `Jumla ya marejesho yote ni shilingi za kitanzania ${moneyWithWords(totalOwed)}.`
       : null;
     const totalEn = hasValidInstalments
-      ? `The total of all remittances is Tanzanian shillings ${money(totalOwed)}, being ${fullDays} days at ${money(ctx.plan.dailyAmount)} each day${
-          hasRemainder ? ` and a final day of ${money(remainder)}` : ''
-        }.`
+      ? `The total of all remittances is Tanzanian shillings ${money(totalOwed)}.`
       : null;
 
     items.push(
@@ -392,23 +389,28 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
   }
   items.push(space());
 
-  // 2. The fine and the breach threshold.
+  // 2. The fine and the breach threshold - rewritten in Ibrahim's own words
+  // (Stage G7 Part 3c). The fine sentence drops entirely when lateFeeAmount
+  // is null, same as before; the breach sentence always prints. Day counts
+  // are plain digits throughout, matching Clause 1 (Stage G7 Part 3b).
   {
-    const fineSw =
-      ctx.plan.lateFeeAmount !== null
-        ? ` basi atalazimika kulipa faini ya Tsh ${moneyWithWords(ctx.plan.lateFeeAmount)} ili kuendelea na mkataba,`
-        : '';
-    const fineEn =
-      ctx.plan.lateFeeAmount !== null
-        ? ` then he/she must pay a fine of Tsh ${money(ctx.plan.lateFeeAmount)} to continue the agreement,`
-        : '';
-    items.push(
-      text(
-        'body',
-        `2. Marejesho ya kila siku ni LAZIMA kinyume na hapo dereva kama hajatoa taarifa juu ya sababu ya kutofanya hivo kwa msimamizi wake,${fineSw} lakini pia, kutofanya malipo kwa siku ${numberWithWords(ctx.plan.breachAfterConsecutiveMissedDays)} mfululizo dereva atakuwa amevunja mkataba wetu na chombo kitachukuliwa na mmiliki.`,
-        `2. The daily remittance is MANDATORY; if the Driver has not given their supervisor the reason for failing to do so,${fineEn} but also, failing to pay for ${ctx.plan.breachAfterConsecutiveMissedDays} consecutive days shall mean the Driver has breached our agreement and the vehicle will be taken by the Owner.`,
-      ),
+    const sentencesSw = ['2. Marejesho ya kila siku ni LAZIMA.'];
+    const sentencesEn = ['2. The daily remittance is MANDATORY.'];
+    if (ctx.plan.lateFeeAmount !== null) {
+      sentencesSw.push(
+        `Dereva atalazimika kulipa faini ya shilingi ${moneyWithWords(ctx.plan.lateFeeAmount)} endapo atakosa kulipa hela siku moja bila taarifa.`,
+      );
+      sentencesEn.push(
+        `The Driver shall be liable to pay a fine of shillings ${money(ctx.plan.lateFeeAmount)} if they fail to pay the money for one day without notice.`,
+      );
+    }
+    sentencesSw.push(
+      `Na kama atashindwa kulipa hela ndani ya siku ${ctx.plan.breachAfterConsecutiveMissedDays} mfululizo, basi atakuwa amevunja mkataba na chombo kitachukuliwa na mmiliki.`,
     );
+    sentencesEn.push(
+      `And if they fail to pay the money within ${ctx.plan.breachAfterConsecutiveMissedDays} consecutive days, they shall have breached the agreement and the vehicle will be taken by the Owner.`,
+    );
+    items.push(text('body', sentencesSw.join(' '), sentencesEn.join(' ')));
   }
   items.push(space());
 

@@ -40,8 +40,7 @@ interface FakePlan {
   driverId: string;
   motorcycleId: string;
   dailyAmount: Prisma.Decimal;
-  totalPrice: Prisma.Decimal;
-  downPayment: Prisma.Decimal;
+  instalmentCount: number;
   startDate: Date;
   activeWeekdays: number[];
   status: OwnershipPlanStatus;
@@ -178,7 +177,7 @@ async function billToCompletion(
   state: { assignments: FakeAssignment[] },
 ): Promise<void> {
   let cursor = plan.startDate;
-  const hardStop = addDays(plan.startDate, 400); // safety net against an infinite loop on a real bug
+  const hardStop = addDays(plan.startDate, 500); // safety net against an infinite loop on a real bug; must exceed the largest instalmentCount tested (430)
   for (
     let quietDays = 0;
     quietDays < 2 && cursor.getTime() < hardStop.getTime();
@@ -235,36 +234,20 @@ const BASE_CONTEXT: Omit<ContractContext, 'plan'> = {
   ],
 };
 
-describe('Contract total repayment sentence agrees with the Stage E daily-charge generator (Stage F3c Part 3)', () => {
-  it.each<[string, number, number, number]>([
-    // [label, totalPrice, downPayment, dailyAmount]
-    [
-      'exact multiple (SPARSE-style: totalOwed 1,800,000 / 12,000 = 150 exactly)',
-      1_800_000,
-      0,
-      12_000,
-    ],
-    [
-      'non-multiple (FULL-style: totalOwed 1,600,000 / 12,000 = 133.33)',
-      1_800_000,
-      200_000,
-      12_000,
-    ],
-    [
-      'non-multiple (REMAINDER sample: totalOwed 1,608,500 / 12,000 = 134.04)',
-      1_800_000,
-      191_500,
-      12_000,
-    ],
-  ])('%s', async (_label, totalPrice, downPayment, dailyAmount) => {
+describe('Contract total repayment sentence agrees with the Stage E daily-charge generator (Stage G7)', () => {
+  it.each<[string, number, number]>([
+    // [label, instalmentCount, dailyAmount]
+    ['short term (SPARSE-style: 150 x 12,000 = 1,800,000)', 150, 12_000],
+    ['mid term (FULL-style: 100 x 12,000 = 1,200,000)', 100, 12_000],
+    ["Ibrahim's own worked example (LARGE-style: 430 x 12,000 = 5,160,000)", 430, 12_000],
+  ])('%s', async (_label, instalmentCount, dailyAmount) => {
     const plan: FakePlan = {
       id: 'plan-1',
       tenantId: 'tenant-1',
       driverId: 'driver-1',
       motorcycleId: 'veh-1',
       dailyAmount: new Prisma.Decimal(dailyAmount),
-      totalPrice: new Prisma.Decimal(totalPrice),
-      downPayment: new Prisma.Decimal(downPayment),
+      instalmentCount,
       startDate: utc(2026, 8, 3),
       activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
       status: OwnershipPlanStatus.ACTIVE,
@@ -284,9 +267,13 @@ describe('Contract total repayment sentence agrees with the Stage E daily-charge
       ...BASE_CONTEXT,
       plan: {
         agreementDate: new Date('2026-03-01T00:00:00.000Z'),
-        totalPrice: new Prisma.Decimal(totalPrice),
-        downPayment: new Prisma.Decimal(downPayment),
+        // Declared value/deposit are decorative now (Stage G7) - deliberately
+        // unrelated to instalmentCount x dailyAmount, to prove the total
+        // sentence never reads them.
+        totalPrice: new Prisma.Decimal(999_999),
+        downPayment: new Prisma.Decimal(1_234),
         dailyAmount: new Prisma.Decimal(dailyAmount),
+        instalmentCount,
         startDate: utc(2026, 8, 3),
         contractEndDate: null,
         lateFeeAmount: null,
