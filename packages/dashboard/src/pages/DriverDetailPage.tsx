@@ -11,6 +11,7 @@ import type {
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DocumentSlot } from '../components/DocumentSlot';
+import { PasswordRecoveryNote } from '../components/PasswordRecovery';
 
 function GuarantorFormModal({
   driverId,
@@ -290,6 +291,15 @@ export function DriverDetailPage() {
           {successMessage}
         </p>
       )}
+
+      {/* Stage H0f Part 2 - above Documents on purpose. This is the thing an owner
+          needs to have already read before a rider calls him locked out, not
+          something to go hunting for once he has. */}
+      <section className="mb-8">
+        <h2 className="mb-3 text-lg font-medium text-gray-900">Password recovery</h2>
+        <p className="mb-3 text-sm text-gray-600">{driver.user.email}</p>
+        <PasswordRecoveryNote emailProvenAt={driver.user.emailProvenAt} />
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium text-gray-900">Documents</h2>

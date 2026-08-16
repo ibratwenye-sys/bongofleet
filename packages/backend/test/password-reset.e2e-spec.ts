@@ -179,6 +179,12 @@ describe('Password reset (e2e)', () => {
         expect(audits[0].channel).toBeNull();
         expect(audits[0].actorUserId).not.toBeNull();
         expect(audits[0].sessionsRevoked).toBe(2);
+
+        // Stage H0f Part 2 - an owner setting a password proves nothing about the
+        // rider's email address, so it must NOT count as evidence that he
+        // can recover on his own. This is the assertion that keeps the
+        // dashboard from telling an owner a comfortable lie.
+        expect(user.emailProvenAt).toBeNull();
       },
       BCRYPT_HEAVY_TIMEOUT_MS,
     );
@@ -314,6 +320,15 @@ describe('Password reset (e2e)', () => {
         expect(audits[0].channel).toBe(PasswordResetChannel.EMAIL);
         // Nobody approved this but the rider himself.
         expect(audits[0].actorUserId).toBeNull();
+
+        // Stage H0f Part 2 - he received a code at this address and used it, which
+        // is the one thing in the system that proves the address reaches
+        // him. The Drivers list reads this to tell his owner whether he can
+        // recover without help.
+        const after = await requestContext.runUnscoped(() =>
+          prisma.client.user.findFirstOrThrow({ where: { email: 'rider-c@test.local' } }),
+        );
+        expect(after.emailProvenAt).not.toBeNull();
       },
       BCRYPT_HEAVY_TIMEOUT_MS,
     );

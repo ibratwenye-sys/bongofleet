@@ -63,6 +63,12 @@ export class PasswordResetService {
     route: PasswordResetRoute;
     channel: PasswordResetChannel | null;
     actorUserId: string | null;
+    /** Stage H0f Part 2 - stamps User.emailProvenAt. True only when the reset was
+     *  completed with a code sent to that address: the rider read it and
+     *  used it, which proves the address reaches him and that he holds it.
+     *  An owner-set password proves nothing about the address, so that route
+     *  passes false and the field stays as it was. */
+    provesEmail?: boolean;
   }): Promise<{ sessionsRevoked: number }> {
     const passwordHash = await hashPassword(params.newPassword);
 
@@ -79,7 +85,12 @@ export class PasswordResetService {
       this.prisma.client.$transaction(async (tx) => {
         await tx.user.update({
           where: { id: params.userId },
-          data: { passwordHash },
+          data: {
+            passwordHash,
+            // Only ever set forward, never cleared: it records that the
+            // address reached him once, at a moment that actually happened.
+            ...(params.provesEmail ? { emailProvenAt: new Date() } : {}),
+          },
         });
         await tx.passwordResetAudit.create({
           data: {
@@ -249,6 +260,10 @@ export class PasswordResetService {
         // No actor: the user is the actor, and naming them here would imply
         // an approval by someone else that never happened.
         actorUserId: null,
+        // He read a code that was emailed to this address and used it before
+        // it expired. That is the only evidence in the system that the
+        // address is really his.
+        provesEmail: true,
       });
       return;
     }

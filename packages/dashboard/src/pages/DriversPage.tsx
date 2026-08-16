@@ -6,6 +6,7 @@ import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../lib/auth-context';
+import { PasswordRecoveryLabel } from '../components/PasswordRecovery';
 
 const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
 const CATEGORY_LABELS: Record<DriverType, string> = {
@@ -149,18 +150,35 @@ function DriverFormModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+          {/* Stage H0f Part 2 - this field used to be labelled "Email" and nothing
+              more, which invited an owner to type anything that would satisfy
+              a required box. It cannot be made optional: the rider signs in
+              with it, so an account without one cannot log in at all. Since
+              it must be collected, say what it is FOR, so the person filling
+              it in knows that inventing a value costs the rider his only way
+              back into the app. */}
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Email{' '}
+            {!isEdit && <span className="font-normal text-gray-500">(the driver&apos;s own)</span>}
+          </label>
           {isEdit ? (
             <p className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
               {form.email} <span className="text-xs">(cannot be changed here)</span>
             </p>
           ) : (
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            />
+            <>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                He signs in with this address, and it is where his password reset code is sent. Use
+                an address he can actually open - if you invent one, you will be the only person who
+                can ever reset his password.
+              </p>
+            </>
           )}
         </div>
 
@@ -531,6 +549,11 @@ export function DriversPage() {
               >
                 {d.user.phone}
               </a>
+              {/* Stage H0f Part 2 - one line, because knowing you are his only way
+                  back in is worth more than the space it costs. */}
+              <p className="mt-1 text-sm">
+                <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
+              </p>
             </li>
           ))
         )}
@@ -546,19 +569,22 @@ export function DriversPage() {
               <th className="px-4 py-2 text-left font-medium text-gray-500">Email</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">License</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">National ID</th>
+              {/* Stage H0f Part 2 - so an owner can see, before he needs it, which
+                  riders can get back in on their own. */}
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Password recovery</th>
               <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {drivers === null ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                   No drivers found.
                 </td>
               </tr>
@@ -583,6 +609,9 @@ export function DriversPage() {
                   <td className="px-4 py-2 text-gray-600">{d.user.email}</td>
                   <td className="px-4 py-2 text-gray-600">{d.licenseNumber}</td>
                   <td className="px-4 py-2 text-gray-600">{d.nationalId ?? '—'}</td>
+                  <td className="px-4 py-2">
+                    <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
+                  </td>
                   <td className="px-4 py-2 text-right">
                     {d.isActive ? (
                       <>

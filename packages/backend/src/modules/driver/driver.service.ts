@@ -40,6 +40,9 @@ const SAFE_USER_SELECT = {
   lastName: true,
   phone: true,
   isActive: true,
+  // Stage H0f Part 2 - so the dashboard can tell an owner whether this rider can
+  // get back in on his own, or whether the owner is his only route.
+  emailProvenAt: true,
 } satisfies Prisma.UserSelect;
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {

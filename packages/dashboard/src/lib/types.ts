@@ -110,6 +110,11 @@ export interface DriverUser {
   lastName: string;
   phone: string;
   isActive: boolean;
+  /** Stage H0f Part 2 - when this address was last proven to reach him, by his
+   *  completing a password reset with a code sent to it. Null means it never
+   *  has been, which is the normal state for a rider whose address was typed
+   *  by his owner to get past a required field. */
+  emailProvenAt: string | null;
 }
 
 export type DriverType = 'RIDER' | 'CAR_DRIVER' | 'TRUCK_DRIVER';
