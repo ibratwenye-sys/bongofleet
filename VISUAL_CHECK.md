@@ -126,3 +126,13 @@ shadow them.
 
 If it fails, `packages/dashboard/test-results/<test-name>/trace.zip` has a
 full trace - `pnpm exec playwright show-trace <path>` opens it.
+
+**Adding a test - read this first.** The suite signs in exactly once per run
+(`e2e/auth.setup.ts`) and every test starts from that saved session. That is
+not a speed optimisation: the backend allows five login attempts per email
+per minute, so back when each test logged in for itself, adding the sixth
+test made the sixth and seventh fail with a generic "Something went wrong"
+that looks nothing like a rate limit. Refresh tokens are also single-use and
+rotate, so each test hands the freshly-issued one to the next via an
+`afterEach` (see the comment there). Write new tests to start already signed
+in; do not add a login step, and do not raise the rate limit to make room.

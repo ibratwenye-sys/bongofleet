@@ -365,7 +365,12 @@ function CreatePlanFormModal({
   return (
     <>
       <Modal title="Create ownership plan" onClose={onClose}>
-        <form onSubmit={handleSubmit} className="max-h-[75vh] space-y-3 overflow-y-auto pr-1">
+        {/* Stage H0d - this form used to carry its own
+            `max-h-[75vh] overflow-y-auto pr-1`, a local workaround for the
+            shared Modal having no scrolling of its own. Modal now bounds and
+            scrolls its body for every caller, so keeping this would nest a
+            second scroll region inside the first. */}
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
             <select

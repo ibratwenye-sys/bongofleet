@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { AUTH_STATE_FILE } from './e2e/auth-state';
 
 // Stage H2 - these are smoke tests, not a full suite: they exist to catch
 // the specific class of bug that has already shipped twice on a green
@@ -18,10 +19,10 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   expect: { timeout: 10_000 },
-  // Five tests, all sharing one seeded backend and each doing its own UI
-  // login - not worth the complexity of parallel workers or a shared
-  // storageState fixture at this size. Serial also means a failure's
-  // console output isn't interleaved with four others.
+  // All tests share one seeded backend, so they run serially - a failure's
+  // console output isn't interleaved with the others, and nothing races on
+  // shared data. (They no longer each sign in: see the `setup` project
+  // below for why that had to stop.)
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
@@ -36,5 +37,16 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    // Stage H0d - signs in once and saves the session. Each test then starts
+    // already authenticated instead of logging in itself, which the backend's
+    // five-logins-per-email-per-minute limit had begun rejecting outright once
+    // the suite passed five tests. See e2e/auth.setup.ts.
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE_FILE },
+      dependencies: ['setup'],
+    },
+  ],
 });

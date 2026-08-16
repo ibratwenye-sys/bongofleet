@@ -30,6 +30,12 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+# Saved Playwright sign-in state - contains a real, working refresh token.
+# Regenerated on every run by e2e/auth.setup.ts; never commit it.
+# Leading **/ is required: a pattern containing a slash is anchored to this
+# file's directory, so a bare "playwright/.auth/" would only match one at the
+# repo root and would silently miss the real one under packages/dashboard.
+**/playwright/.auth/
 
 # React Native / Expo
 .expo/

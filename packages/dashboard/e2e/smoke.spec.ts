@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { AUTH_STATE_FILE } from './auth-state';
 
 /**
  * Stage H2 - the smallest set of tests that would have caught Stage G8's
@@ -8,23 +9,25 @@ import { test, expect, type Page } from '@playwright/test';
  * real browser. These run against `vite build` + `vite preview` (see
  * playwright.config.ts), never the dev server.
  *
- * Credentials are the seed script's own demo owner account
- * (packages/backend/prisma/seed.ts) - already printed in plain text in
- * VISUAL_CHECK.md, not a secret.
+ * Stage H0d - every test here starts already signed in, from the session
+ * saved by e2e/auth.setup.ts. They used to log in individually, which the
+ * backend's five-logins-per-email-per-minute limit started rejecting once
+ * the suite grew past five tests; see that file for the full reasoning.
  */
-const OWNER_EMAIL = 'owner@bongofleet.com';
-const OWNER_PASSWORD = 'Test1234!';
 
-async function login(page: Page): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(OWNER_EMAIL);
-  await page.getByLabel('Password').fill(OWNER_PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL('/');
-}
-
-test.beforeEach(async ({ page }) => {
-  await login(page);
+// Refresh tokens are single-use and rotate: /auth/refresh deletes the stored
+// hash and issues a new pair, so a replayed one is rejected outright ("invalid
+// or already used" - auth.service.ts). Each test therefore *consumes* the
+// saved token when the dashboard boots and is handed a fresh one, which lives
+// only in that test's own context. Writing the rotated state back here passes
+// it along to the next test; without this, every test after the first
+// presents a spent token and lands back on the login page.
+//
+// This is a deliberate security property, not an obstacle to route around -
+// rotation is what makes a stolen refresh token detectable - so the suite
+// chains rather than the limit being loosened.
+test.afterEach(async ({ page }) => {
+  await page.context().storageState({ path: AUTH_STATE_FILE });
 });
 
 test('Ownership page loads and lists plans', async ({ page }) => {
@@ -133,4 +136,72 @@ test('the excuse-a-day control is reachable and opens', async ({ page }) => {
   await page.getByRole('button', { name: 'Excuse a day' }).click();
   await expect(page.getByRole('heading', { name: 'Excuse a day' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Excuse day' })).toBeVisible();
+});
+
+/**
+ * Stage H0d - the create-driver form (the tallest in the app) could not be
+ * escaped on a laptop: its buttons fell below the fold, the header's ✕ was
+ * pushed above the top, and nothing scrolled it back - the modal sits in a
+ * `position: fixed` overlay, so a scroll gesture moved the page behind while
+ * the modal stayed put. Reloading was the only way out, discarding whatever
+ * had been typed.
+ *
+ * The viewport height below is the whole point of this block, so do not
+ * "tidy" it to a round 1280x720. A 1280x720 laptop *screen* gives a ~551px
+ * viewport once Chrome's own toolbars are subtracted; a literal 720px
+ * viewport is a window nobody on that laptop has. The unfixed form needed
+ * 715px, so at 720 it fit with five pixels to spare and this test would have
+ * passed while the bug shipped - measured, not assumed. 600px keeps a
+ * margin over the real ~551 while still being a height the trap reproduces
+ * at.
+ */
+test.describe('modals stay escapable at laptop height', () => {
+  test.use({ viewport: { width: 1280, height: 600 } });
+
+  test('the create-driver form can be cancelled without scrolling the page', async ({ page }) => {
+    await page.goto('/drivers');
+    await page.getByRole('button', { name: 'Add driver' }).click();
+
+    const heading = page.getByRole('heading', { name: 'Add driver' });
+    await expect(heading).toBeVisible();
+    // The ✕ is pinned in a non-scrolling header, so it is the one way out
+    // guaranteed at any content height - it used to be off the top edge.
+    // ratio: 1 (fully inside), not the default - the default passes on a
+    // single visible pixel, and the unfixed header was clipped rather than
+    // fully absent, so it slipped through without this.
+    await expect(page.getByRole('button', { name: 'Close' })).toBeInViewport({ ratio: 1 });
+
+    const pageScrollBefore = await page.evaluate(() => window.scrollY);
+
+    // Brings Cancel into view by scrolling the modal's own body. On the
+    // unfixed component this could not succeed: the panel overflows a fixed
+    // overlay, so no ancestor scroll moves it, and the click below then
+    // fails its actionability check instead of passing silently.
+    const cancel = page.getByRole('button', { name: 'Cancel' });
+    await cancel.scrollIntoViewIfNeeded();
+    await expect(cancel).toBeInViewport({ ratio: 1 });
+
+    // Reaching Cancel must not have moved the page underneath.
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBefore);
+
+    // click() enforces visible + stable + receives-events, so this is the
+    // "and clickable" half of the assertion, not just "is on screen".
+    await cancel.click();
+    await expect(heading).not.toBeVisible();
+  });
+
+  test('Escape closes the create-driver form as a second way out', async ({ page }) => {
+    await page.goto('/drivers');
+    await page.getByRole('button', { name: 'Add driver' }).click();
+
+    const heading = page.getByRole('heading', { name: 'Add driver' });
+    await expect(heading).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(heading).not.toBeVisible();
+
+    // The scroll lock must be released on the way out, or every page behind
+    // stays frozen for the rest of the session.
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  });
 });
