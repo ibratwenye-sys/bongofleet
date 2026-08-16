@@ -124,7 +124,60 @@ export function PaymentsPage() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      {/* Stage H0e - "who paid today" is one of the two things actually
+          checked away from a desk, so it gets a phone view: who, how much,
+          and whether it cleared. Date is dropped from the card because this
+          list is already date-filtered above; method is dropped as the
+          detail it is. The Reconcile / Mark failed actions are kept - they
+          are the whole point of a PENDING row - at a 44px tap height. */}
+      <ul className="space-y-3 md:hidden">
+        {payments === null ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            Loading…
+          </li>
+        ) : filtered.length === 0 ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            No payments to show.
+          </li>
+        ) : (
+          filtered.map((p) => {
+            const driver = driverById.get(p.driverId);
+            return (
+              <li key={p.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-medium text-gray-900">
+                    {driver ? `${driver.user.firstName} ${driver.user.lastName}` : 'Unknown driver'}
+                  </span>
+                  <StatusBadge status={p.status} styles={PAYMENT_STATUS_STYLES} />
+                </div>
+                <p className="mt-1 text-sm text-gray-600">
+                  {formatTZS(parseFloat(p.amount))} · {p.createdAt.slice(0, 10)}
+                </p>
+                {p.status === 'PENDING' && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      disabled={updatingId === p.id}
+                      onClick={() => void handleUpdateStatus(p, 'COMPLETED')}
+                      className="min-h-11 flex-1 rounded border border-gray-300 px-3 text-sm font-medium text-gray-700 disabled:opacity-50"
+                    >
+                      Reconcile
+                    </button>
+                    <button
+                      disabled={updatingId === p.id}
+                      onClick={() => void handleUpdateStatus(p, 'FAILED')}
+                      className="min-h-11 flex-1 rounded border border-red-300 px-3 text-sm font-medium text-red-600 disabled:opacity-50"
+                    >
+                      Mark failed
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>

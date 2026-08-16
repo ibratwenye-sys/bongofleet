@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { apiFetch } from './api';
+import { apiFetch, refreshTokens } from './api';
 import { tokenStore } from './token-store';
 import type { CurrentUser, TokenResponse } from './types';
 
@@ -26,11 +26,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const tokens = await apiFetch<TokenResponse>('/auth/refresh', {
-          method: 'POST',
-          body: JSON.stringify({ refreshToken: tokenStore.getRefreshToken() }),
-        });
-        tokenStore.setTokens(tokens);
+        // Stage H0e - goes through api.ts's single-flight refresh rather
+        // than posting /auth/refresh itself. This call races the first
+        // page's own data fetches, which start with no access token (it is
+        // memory-only) and refresh on their 401s; when this was a separate
+        // request, they spent the same single-use token twice and whichever
+        // lost cleared the session and bounced the user to /login.
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          tokenStore.clear();
+          setStatus('unauthenticated');
+          return;
+        }
         const me = await apiFetch<CurrentUser>('/auth/me');
         setUser(me);
         setStatus('authenticated');

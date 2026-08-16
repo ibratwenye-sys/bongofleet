@@ -345,12 +345,15 @@ export function DriversPage() {
       )}
       {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4 flex items-center gap-4">
+      {/* flex-wrap + a full-width-then-fixed search box: at 390px a 256px
+          input beside a select and a checkbox pushed the row past the
+          viewport. */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           placeholder="Search name or license number…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-64 rounded border border-gray-300 px-3 py-1.5 text-sm"
+          className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm sm:w-64"
         />
         <select
           value={categoryFilter}
@@ -374,7 +377,53 @@ export function DriversPage() {
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      {/* Stage H0e - looking a driver up is a reading task, so the phone
+          gets the identifying fields (name, category, whether they are still
+          active) plus the phone number, which is the one thing you are
+          usually reaching for it to find - and it is tappable here, which it
+          never was in the table. Email, licence and national ID stay on the
+          driver's own page. Editing and deactivating are deliberately absent
+          below md: they are management actions, not reading, and the forms
+          behind them are still desktop-first. */}
+      <ul className="space-y-3 md:hidden">
+        {drivers === null ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            Loading…
+          </li>
+        ) : filtered.length === 0 ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            No drivers found.
+          </li>
+        ) : (
+          filtered.map((d) => (
+            <li
+              key={d.id}
+              className={`rounded-lg border border-gray-200 p-4 ${
+                d.isActive ? 'bg-white' : 'bg-gray-50'
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <Link
+                  to={`/drivers/${d.id}`}
+                  className={`font-medium ${d.isActive ? 'text-gray-900' : 'text-gray-400'}`}
+                >
+                  {d.user.firstName} {d.user.lastName}
+                </Link>
+                {!d.isActive && <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />}
+              </div>
+              <p className="mt-1 text-sm text-gray-600">{CATEGORY_LABELS[d.driverType]}</p>
+              <a
+                href={`tel:${d.user.phone}`}
+                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-gray-700 underline"
+              >
+                {d.user.phone}
+              </a>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>

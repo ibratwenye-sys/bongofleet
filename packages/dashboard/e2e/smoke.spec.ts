@@ -33,7 +33,11 @@ test.afterEach(async ({ page }) => {
 test('Ownership page loads and lists plans', async ({ page }) => {
   await page.goto('/ownership');
   await expect(page.getByRole('heading', { name: 'Ownership plans' })).toBeVisible();
-  await expect(page.getByText('Loading…')).not.toBeVisible({ timeout: 15_000 });
+  // Scoped to the table's own loading cell. Stage H0e added a card list for
+  // narrow screens which carries its own "Loading…", and both presentations
+  // stay in the DOM at every width (one is merely CSS-hidden), so a bare
+  // getByText matches two elements under strict mode.
+  await expect(page.getByRole('cell', { name: 'Loading…' })).not.toBeVisible({ timeout: 15_000 });
 
   const firstRow = page.locator('table tbody tr').first();
   await expect(firstRow).toBeVisible();
@@ -205,3 +209,125 @@ test.describe('modals stay escapable at laptop height', () => {
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
   });
 });
+
+/**
+ * Stage H0e - the reading screens on a handset. Scope is deliberately narrow:
+ * these cover what actually gets checked away from a desk (who is behind, who
+ * paid, a driver's ledger), not the long forms, which stay desktop-first.
+ *
+ * Both viewports are below the xl breakpoint where the nav row fits, so both
+ * get the drawer; 390 additionally gets the card lists in place of the wide
+ * tables, and 820 keeps the tables. That difference is the point of running
+ * the same assertions at two sizes rather than one.
+ */
+const READING_VIEWPORTS = [
+  { label: 'phone', width: 390, height: 844 },
+  { label: 'tablet', width: 820, height: 1180 },
+];
+
+// The whole complaint in one assertion. Every page measured 1272px wide
+// against a 390px viewport before this stage, so the document - not merely a
+// table inside it - scrolled sideways. A tolerance of 1px absorbs subpixel
+// rounding without letting a real overflow through.
+async function expectNoSidewaysScroll(page: import('@playwright/test').Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow, 'document should not scroll sideways').toBeLessThanOrEqual(1);
+}
+
+for (const vp of READING_VIEWPORTS) {
+  test.describe(`reading screens at ${vp.label} (${vp.width}x${vp.height})`, () => {
+    test.use({ viewport: { width: vp.width, height: vp.height } });
+
+    test('the dashboard shows its key figures without scrolling sideways', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByText("Today's revenue")).toBeVisible();
+      await expect(page.getByText('Fleet size')).toBeVisible();
+      await expectNoSidewaysScroll(page);
+    });
+
+    test('the Ownership list is readable without scrolling sideways', async ({ page }) => {
+      await page.goto('/ownership');
+      await expect(page.getByRole('heading', { name: 'Ownership plans' })).toBeVisible();
+
+      // Both presentations (cards below md, table at and above it) are always
+      // in the DOM, so everything here filters to the visible one rather than
+      // taking .first() - at 820 the cards come first in document order and
+      // are the hidden ones.
+      await expect(page.getByText('Amina Hassan').filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await expectNoSidewaysScroll(page);
+    });
+
+    test('the nav collapses, opens, and reaches another page', async ({ page }) => {
+      await page.goto('/');
+
+      // The row is hidden below xl, so the links must not be reachable until
+      // the menu is opened - otherwise "collapsed" is only a visual claim.
+      await expect(page.getByRole('link', { name: 'Payments' })).toBeHidden();
+
+      const menu = page.getByRole('button', { name: 'Open menu' });
+      await expect(menu).toBeVisible();
+
+      // Thumb-sized, not cursor-sized.
+      const box = await menu.boundingBox();
+      expect(box, 'menu button should be laid out').not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+
+      await menu.click();
+      const paymentsLink = page.getByRole('link', { name: 'Payments' });
+      await expect(paymentsLink).toBeVisible();
+
+      const linkBox = await paymentsLink.boundingBox();
+      expect(linkBox!.height).toBeGreaterThanOrEqual(44);
+
+      await paymentsLink.click();
+      await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+      // Navigating must close the drawer, or the destination renders beneath it.
+      await expect(paymentsLink).toBeHidden();
+      await expectNoSidewaysScroll(page);
+    });
+
+    test('a plan detail and its ledger open', async ({ page }) => {
+      await page.goto('/ownership');
+
+      await page
+        .getByRole('link', { name: /Amina Hassan/ })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await expect(page.getByRole('heading', { name: 'Instalment ledger' })).toBeVisible();
+      await expect(page.getByRole('cell', { name: 'Loading…' })).not.toBeVisible({
+        timeout: 15_000,
+      });
+      await expectNoSidewaysScroll(page);
+    });
+
+    test('the create-driver form is still escapable at this width', async ({ page }) => {
+      // Stage H0d fixed the modal trap at laptop height; Part 3 of this stage
+      // is only to confirm it still holds on a phone, where the form is
+      // taller relative to the window than anywhere it was tested before.
+      await page.goto('/drivers');
+      const openMenu = page.getByRole('button', { name: 'Open menu' });
+      if (await openMenu.isVisible()) {
+        // 'Add driver' is a page action, not a nav item - no menu needed, but
+        // make sure an open drawer is not covering it.
+        await expect(openMenu).toBeVisible();
+      }
+      await page.getByRole('button', { name: 'Add driver' }).click();
+
+      const heading = page.getByRole('heading', { name: 'Add driver' });
+      await expect(heading).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Close' })).toBeInViewport({ ratio: 1 });
+
+      const cancel = page.getByRole('button', { name: 'Cancel' });
+      await cancel.scrollIntoViewIfNeeded();
+      await expect(cancel).toBeInViewport({ ratio: 1 });
+      await cancel.click();
+      await expect(heading).not.toBeVisible();
+    });
+  });
+}

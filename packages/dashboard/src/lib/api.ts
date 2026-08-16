@@ -28,7 +28,31 @@ async function rawFetch(path: string, options: RequestInit = {}): Promise<Respon
   return fetch(`${BASE_URL}${path}`, { ...options, headers });
 }
 
-async function refreshTokens(): Promise<boolean> {
+/**
+ * Stage H0e - refresh is single-flight. Refresh tokens are single-use and
+ * rotate server-side (auth.service.ts deletes the stored hash and issues a
+ * new pair), so two concurrent refreshes with the same token are not merely
+ * wasteful: the first rotates it and every other one is rejected as "already
+ * used", takes the !res.ok path below, and drags the caller into
+ * tokenStore.clear() + a redirect to /login.
+ *
+ * That is easy to hit and has nothing to do with the token being expired.
+ * The access token is memory-only, so on any fresh page load it starts
+ * empty; a page that fetches several resources at once (Ownership asks for
+ * plans, drivers and motorcycles in one Promise.all) fires them all with no
+ * Authorization header, gets three 401s, and calls this three times over.
+ * Whether that beat the bootstrap refresh in auth-context was pure timing -
+ * on localhost it usually lost, which is why this only ever surfaced on the
+ * slower CI runner. On a phone on mobile data it would surface as being
+ * thrown back to the login screen at random while the dashboard loads.
+ *
+ * Sharing one in-flight promise means concurrent callers all wait on the
+ * same request and then retry with the token it produced. The rotation and
+ * the rate limit both stay exactly as they are; this stops abusing them.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function performRefresh(): Promise<boolean> {
   const refreshToken = tokenStore.getRefreshToken();
   if (!refreshToken) {
     return false;
@@ -45,6 +69,15 @@ async function refreshTokens(): Promise<boolean> {
   const tokens = (await res.json()) as TokenResponse;
   tokenStore.setTokens(tokens);
   return true;
+}
+
+export function refreshTokens(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export async function apiFetch<T>(

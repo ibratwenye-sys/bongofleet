@@ -739,7 +739,66 @@ export function OwnershipPage() {
       )}
       {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      {/* Stage H0e - the phone view of this page. Thirteen columns is the
+          right answer at a desk and a useless one on a handset: finding
+          "days behind" meant scrolling sideways past eight other columns.
+          These cards are not the table shrunk - they carry the four things
+          that answer the question this page exists to answer ("who do I
+          need to worry about today"): who, how far behind or ahead, the
+          missed streak, and what is still owed. Everything else stays one
+          tap away on the plan itself. The table below is untouched and
+          simply takes over at md. */}
+      <ul className="space-y-3 md:hidden">
+        {plans === null ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            Loading…
+          </li>
+        ) : plans.length === 0 ? (
+          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+            No ownership plans yet.
+          </li>
+        ) : (
+          plans.map((plan) => {
+            const severity = positionSeverity(
+              plan.daysBehind,
+              plan.consecutiveMissedDays,
+              plan.graceDays,
+              plan.breachAfterConsecutiveMissedDays,
+            );
+            return (
+              <li key={plan.id}>
+                {/* The whole card is the tap target, not just the name - a
+                    44px-tall link inside a card is a smaller thing to hit
+                    than the card itself. */}
+                <Link
+                  to={`/ownership/${plan.id}`}
+                  className={`block rounded-lg border border-gray-200 p-4 ${SEVERITY_ROW_STYLES[severity]}`}
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="font-medium text-gray-900">
+                      {plan.driver
+                        ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}`
+                        : '—'}
+                    </span>
+                    <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
+                  </div>
+                  <p className={`mt-1 text-sm ${SEVERITY_TEXT_STYLES[severity]}`}>
+                    {positionLabel(plan.daysBehind, plan.daysAhead)}
+                    {plan.consecutiveMissedDays > 0 && (
+                      <> · {missedStreakLabel(plan.consecutiveMissedDays)}</>
+                    )}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600">
+                    {formatTZS(plan.remainingToOwn)} remaining
+                  </p>
+                </Link>
+              </li>
+            );
+          })
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
