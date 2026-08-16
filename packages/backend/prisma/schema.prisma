@@ -710,3 +710,59 @@ model PaymentAccount {
   @@index([tenantId, isActive, sortOrder])
   @@map("payment_accounts")
 }
+
+/// How a password reset was initiated. One reset service serves all of these;
+/// this records which door it came through.
+enum PasswordResetRoute {
+  /// An owner set it from the dashboard, on the rider's behalf.
+  OWNER_DASHBOARD
+  /// The user proved control of a contact channel with a one-time code.
+  SELF_SERVICE_CODE
+
+  @@map("password_reset_route")
+}
+
+/// Where a self-service code was delivered. Null for OWNER_DASHBOARD, which
+/// delivers nothing. SMS exists here before it is implemented on purpose:
+/// adding it is a second sender for the same flow, not a second flow, and
+/// having the value present keeps that visible.
+enum PasswordResetChannel {
+  EMAIL
+  SMS
+
+  @@map("password_reset_channel")
+}
+
+/// One row per completed password reset - who was reset, who did it, and by
+/// which route. Written inside the same transaction as the password change,
+/// so a reset can never happen without a record of it.
+///
+/// Deliberately holds plain ids rather than relations: an audit row has to
+/// outlive the user it describes, and a foreign key with a cascade would
+/// delete exactly the evidence you would want after an account is removed.
+model PasswordResetAudit {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+
+  /// The account whose password changed.
+  userId String @map("user_id")
+
+  /// Who performed it. Null for SELF_SERVICE_CODE - the user is the actor,
+  /// and recording them twice would imply an approval that never happened.
+  actorUserId String? @map("actor_user_id")
+
+  route   PasswordResetRoute
+  channel PasswordResetChannel?
+
+  /// How many refresh tokens were destroyed. A reset that revokes nothing
+  /// means the account had no live session; a reset that revokes several
+  /// means the rider was signed in somewhere, which is what you want to see
+  /// when a device is reported lost.
+  sessionsRevoked Int @default(0) @map("sessions_revoked")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@map("password_reset_audits")
+}

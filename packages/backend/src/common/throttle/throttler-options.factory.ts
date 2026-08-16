@@ -10,12 +10,16 @@ import {
   REFRESH_THROTTLE,
   SIGNUP_IDENTIFIER_THROTTLE,
   SIGNUP_IP_THROTTLE,
+  PASSWORD_RESET_IDENTIFIER_THROTTLE,
+  PASSWORD_RESET_IP_THROTTLE,
+  PASSWORD_RESET_CONFIRM_IP_THROTTLE,
 } from './throttle.constants';
 import {
   trackByIp,
   trackByIpAndIdentifier,
   trackByUserOrIp,
   trackRefreshByUser,
+  trackByIdentifier,
 } from './throttle-tracker.util';
 
 /**
@@ -50,6 +54,8 @@ export function buildThrottlerOptions(
   const isLogin = isHandler(AuthController.prototype.login);
   const isSignup = isHandler(AuthController.prototype.signup);
   const isRefresh = isHandler(AuthController.prototype.refresh);
+  const isResetRequest = isHandler(AuthController.prototype.requestPasswordReset);
+  const isResetConfirm = isHandler(AuthController.prototype.confirmPasswordReset);
 
   return {
     storage,
@@ -82,6 +88,28 @@ export function buildThrottlerOptions(
         ...SIGNUP_IP_THROTTLE,
         getTracker: (req) => trackByIp(req),
         skipIf: (context) => !isSignup(context),
+      },
+      // Stage H0f - password reset. The identifier throttler is IP-blind
+      // on purpose (see PASSWORD_RESET_IDENTIFIER_THROTTLE): what it stops is
+      // one rider being mailed over and over, which spreading across hosts
+      // would otherwise defeat.
+      {
+        name: 'password-reset-identifier',
+        ...PASSWORD_RESET_IDENTIFIER_THROTTLE,
+        getTracker: (req) => trackByIdentifier(req),
+        skipIf: (context) => !isResetRequest(context),
+      },
+      {
+        name: 'password-reset-ip',
+        ...PASSWORD_RESET_IP_THROTTLE,
+        getTracker: (req) => trackByIp(req),
+        skipIf: (context) => !isResetRequest(context),
+      },
+      {
+        name: 'password-reset-confirm-ip',
+        ...PASSWORD_RESET_CONFIRM_IP_THROTTLE,
+        getTracker: (req) => trackByIp(req),
+        skipIf: (context) => !isResetConfirm(context),
       },
       {
         name: 'refresh',

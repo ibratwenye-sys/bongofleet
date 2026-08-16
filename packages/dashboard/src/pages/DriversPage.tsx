@@ -5,6 +5,7 @@ import type { CreateDriverPayload, Driver, DriverType, UpdateDriverPayload } fro
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
+import { useAuth } from '../lib/auth-context';
 
 const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
 const CATEGORY_LABELS: Record<DriverType, string> = {
@@ -249,6 +250,116 @@ function DriverFormModal({
   );
 }
 
+/**
+ * Stage H0f - the owner's half of the reset story. Until this stage there was
+ * no way to change a rider's password after creation at all, so a rider who
+ * forgot the one his owner typed for him needed database access to get back
+ * in. With refresh tokens lasting seven days, that was every rider who spent
+ * a week off the app.
+ *
+ * Deliberately blunt: the owner types a new password and tells the rider what
+ * it is. No temporary-password ceremony, no forced change on next login -
+ * those are worth building only once it is clear this is used enough to need
+ * them.
+ */
+function ResetPasswordModal({
+  driver,
+  onClose,
+  onSaved,
+}: {
+  driver: Driver;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [newPassword, setNewPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const name = `${driver.user.firstName} ${driver.user.lastName}`;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // Matched to the backend's own floor (ResetDriverPasswordDto) so the
+    // error arrives before the round trip rather than after it.
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await apiFetch<{ sessionsRevoked: number }>(`/drivers/${driver.id}/password`, {
+        method: 'PATCH',
+        body: JSON.stringify({ newPassword }),
+      });
+      // Say plainly that he has been signed out everywhere. An owner doing
+      // this because a phone was lost wants to know it worked; one doing it
+      // because the rider forgot his password needs to know the rider must
+      // log in again on his own handset too.
+      const revoked =
+        result.sessionsRevoked > 0
+          ? ` ${name} has been signed out on ${result.sessionsRevoked} device${
+              result.sessionsRevoked === 1 ? '' : 's'
+            }.`
+          : '';
+      onSaved(`Password updated - tell ${name} his new password.${revoked}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reset the password.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title={`Reset password - ${name}`} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <p className="text-sm text-gray-600">
+          Setting a new password signs {name} out everywhere. Share the new password with him
+          directly - he will need it to log in again.
+        </p>
+        <div>
+          {/* htmlFor/id, unlike the other forms on this page: it costs two
+              attributes, makes the label click into the field, and is what
+              lets a screen reader (or a test) name this input at all. */}
+          <label
+            htmlFor="reset-new-password"
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
+            New password
+          </label>
+          <input
+            id="reset-new-password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">At least 8 characters.</p>
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {submitting ? 'Saving…' : 'Set password'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -257,8 +368,10 @@ export function DriversPage() {
   const [formTarget, setFormTarget] = useState<'new' | Driver | null>(null);
   const [deactivating, setDeactivating] = useState<Driver | null>(null);
   const [reactivating, setReactivating] = useState<Driver | null>(null);
+  const [resettingPassword, setResettingPassword] = useState<Driver | null>(null);
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { user } = useAuth();
 
   async function load() {
     try {
@@ -479,6 +592,18 @@ export function DriversPage() {
                         >
                           Edit
                         </button>
+                        {/* Stage H0f - OWNER only, matching the endpoint. A
+                            MANAGER would get a 403, so showing them a button
+                            would only be a lie. Hiding it is presentation;
+                            the guard on PATCH :id/password is the control. */}
+                        {user?.role === 'OWNER' && (
+                          <button
+                            onClick={() => setResettingPassword(d)}
+                            className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                          >
+                            Reset password
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeactivating(d)}
                           className="text-sm font-medium text-red-600 hover:underline"
@@ -501,6 +626,17 @@ export function DriversPage() {
           </tbody>
         </table>
       </div>
+
+      {resettingPassword && (
+        <ResetPasswordModal
+          driver={resettingPassword}
+          onClose={() => setResettingPassword(null)}
+          onSaved={(m) => {
+            setResettingPassword(null);
+            handleSaved(m);
+          }}
+        />
+      )}
 
       {formTarget && (
         <DriverFormModal

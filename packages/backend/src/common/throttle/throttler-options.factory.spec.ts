@@ -11,6 +11,9 @@ import {
   REFRESH_THROTTLE,
   SIGNUP_IDENTIFIER_THROTTLE,
   SIGNUP_IP_THROTTLE,
+  PASSWORD_RESET_IDENTIFIER_THROTTLE,
+  PASSWORD_RESET_IP_THROTTLE,
+  PASSWORD_RESET_CONFIRM_IP_THROTTLE,
 } from './throttle.constants';
 
 function fakeConfig(values: Record<string, string>): ConfigService {
@@ -38,7 +41,7 @@ describe('buildThrottlerOptions (Stage H0)', () => {
   const options = buildThrottlerOptions(storage, config, jwt) as { throttlers: ThrottlerOptions[] };
   const throttlers = options.throttlers;
 
-  it("produces exactly the six named throttlers, with the constants' own limits/ttls", () => {
+  it("produces exactly the nine named throttlers, with the constants' own limits/ttls", () => {
     expect(throttlers.map((t) => t.name).sort()).toEqual(
       [
         'default',
@@ -47,6 +50,9 @@ describe('buildThrottlerOptions (Stage H0)', () => {
         'refresh',
         'signup-identifier',
         'signup-ip',
+        'password-reset-identifier',
+        'password-reset-ip',
+        'password-reset-confirm-ip',
       ].sort(),
     );
     expect(throttlerNamed(throttlers, 'default')).toMatchObject(GLOBAL_THROTTLE);
@@ -57,6 +63,15 @@ describe('buildThrottlerOptions (Stage H0)', () => {
       SIGNUP_IDENTIFIER_THROTTLE,
     );
     expect(throttlerNamed(throttlers, 'signup-ip')).toMatchObject(SIGNUP_IP_THROTTLE);
+    expect(throttlerNamed(throttlers, 'password-reset-identifier')).toMatchObject(
+      PASSWORD_RESET_IDENTIFIER_THROTTLE,
+    );
+    expect(throttlerNamed(throttlers, 'password-reset-ip')).toMatchObject(
+      PASSWORD_RESET_IP_THROTTLE,
+    );
+    expect(throttlerNamed(throttlers, 'password-reset-confirm-ip')).toMatchObject(
+      PASSWORD_RESET_CONFIRM_IP_THROTTLE,
+    );
   });
 
   it('signup-ip is at least as strict as login-ip (Stage H0b Part 2)', () => {

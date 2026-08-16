@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { UserRole } from '@prisma/client';
 import { AuthController } from './auth.controller';
+import { PasswordResetService } from './password-reset.service';
 import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
@@ -19,7 +20,18 @@ describe('AuthController', () => {
 
     const moduleRef = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: service }],
+      providers: [
+        { provide: AuthService, useValue: service },
+        // Stage H0f - the controller now also fronts the password-reset
+        // flow; this spec covers the delegation of the original routes, so
+        // a stub is enough here. The reset routes are covered end to end in
+        // test/password-reset.e2e-spec.ts, where the Redis and mail
+        // behaviour they depend on is real.
+        {
+          provide: PasswordResetService,
+          useValue: { requestReset: jest.fn(), confirmReset: jest.fn() },
+        },
+      ],
     }).compile();
 
     controller = moduleRef.get(AuthController);

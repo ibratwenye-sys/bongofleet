@@ -101,3 +101,12 @@ export function trackRefreshByUser(
   const payload = verifyJwtPayload(jwt, token, refreshSecret);
   return payload ? `user:${payload.sub}` : `ip:${req.ip}`;
 }
+
+/** Stage H0f - identifier only, deliberately blind to IP. Login's trackers
+ *  pair the identifier WITH the IP so colleagues behind one office
+ *  connection don't share a budget; password reset needs the opposite,
+ *  because the abuse it guards against (mailing one rider over and over) is
+ *  just as effective from a thousand hosts as from one. */
+export function trackByIdentifier(req: ThrottleRequest): string {
+  return `id:${normalizeIdentifier(req.body?.email)}`;
+}

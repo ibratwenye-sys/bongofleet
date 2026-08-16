@@ -45,3 +45,29 @@ export const SIGNUP_IDENTIFIER_THROTTLE = { limit: 3, ttl: 60_000 };
  *  strict, and proportionally tighter is consistent with that same
  *  reasoning rather than just matching login's number by coincidence. */
 export const SIGNUP_IP_THROTTLE = { limit: 15, ttl: 60_000 };
+
+/** Password-reset requests for ONE identifier, from ANY IP. Deliberately
+ *  IP-blind, unlike login's identifier tracker: the thing being prevented is
+ *  mail-bombing one rider, and an attacker spreading that across hosts would
+ *  walk straight through an IP-scoped budget. Three an hour is well clear of
+ *  a rider retrying because the first code went to a stale address, and far
+ *  below "his inbox is unusable".
+ *
+ *  The trade this accepts: someone who knows a rider's address can burn that
+ *  rider's reset budget for the hour. That is a nuisance and recoverable -
+ *  the owner can still reset him from the dashboard - whereas the mail-bomb
+ *  it prevents is not. */
+export const PASSWORD_RESET_IDENTIFIER_THROTTLE = { limit: 3, ttl: 60 * 60_000 };
+
+/** Password-reset requests from ONE IP, across ANY identifiers - the
+ *  enumeration backstop. The request endpoint answers identically whether or
+ *  not an account exists, so a sweep learns nothing from any single reply;
+ *  this caps how fast one host can try to learn something from timing or
+ *  volume across many. */
+export const PASSWORD_RESET_IP_THROTTLE = { limit: 15, ttl: 60 * 60_000 };
+
+/** Code submissions from ONE IP. The per-code attempt counter in Redis is
+ *  the real guard (a code dies after a few wrong tries); this only stops one
+ *  host from grinding attempts against many different accounts' codes at
+ *  once. */
+export const PASSWORD_RESET_CONFIRM_IP_THROTTLE = { limit: 30, ttl: 60 * 60_000 };
