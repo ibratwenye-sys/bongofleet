@@ -14,6 +14,7 @@ import { hashPassword, comparePassword } from './utils/password.util';
 import { hashRefreshToken } from './utils/refresh-token.util';
 import {
   ACCESS_TOKEN_EXPIRES_IN,
+  LOGIN_EMAIL_CANDIDATE_LIMIT,
   REFRESH_TOKEN_EXPIRES_IN,
   REFRESH_TOKEN_TTL_SECONDS,
   refreshKey,
@@ -68,26 +69,60 @@ export class AuthService {
     });
   }
 
+  /**
+   * Stage H0g. email is unique per tenant, not globally, so this can no
+   * longer resolve "the account" from the address alone - it resolves the
+   * account the SUPPLIED PASSWORD belongs to, among every user with that
+   * address. No tenant selector, no extra field: a rider at a junction is
+   * not going to type a fleet code, so the password is the only thing that
+   * can disambiguate without asking him something new.
+   *
+   * isActive is filtered in the query, not checked after: a deactivated
+   * account is simply never a candidate, so a login attempt against one
+   * fails exactly like an unknown address - matches.length === 0, same
+   * UnauthorizedException, same message. That is what "skipped in a way
+   * that does not let someone infer the account exists" means in practice;
+   * there is no separate deactivated-branch to accidentally answer
+   * differently.
+   *
+   * Bcrypt runs against candidates one at a time and stops as soon as a
+   * second match is confirmed - once the answer is "ambiguous", checking a
+   * third or fourth candidate cannot change that, and every match beyond
+   * the second exists purely to prove the wording, not to change it, so
+   * there is nothing to check for. It cannot stop after the FIRST match,
+   * though: a single match is only safe to sign into once every other
+   * candidate has been ruled out.
+   */
   async login(dto: LoginDto): Promise<TokenResponseDto> {
-    const matches = await requestContext.runUnscoped(() =>
-      this.prisma.client.user.findMany({ where: { email: dto.email } }),
+    const candidates = await requestContext.runUnscoped(() =>
+      this.prisma.client.user.findMany({
+        where: { email: dto.email, isActive: true },
+        orderBy: { createdAt: 'asc' },
+        take: LOGIN_EMAIL_CANDIDATE_LIMIT,
+      }),
     );
+
+    const matches: typeof candidates = [];
+    for (const candidate of candidates) {
+      if (await comparePassword(dto.password, candidate.passwordHash)) {
+        matches.push(candidate);
+        if (matches.length > 1) break;
+      }
+    }
 
     if (matches.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
     if (matches.length > 1) {
-      throw new ConflictException('Multiple accounts found for this email - contact support');
+      // Deliberately not "contact support" (the pre-Stage-H0g wording): the
+      // rider's owner is who can actually resolve this - by resetting one of
+      // the colliding passwords - and is who Stage H0f gave a reset path to.
+      throw new ConflictException(
+        'This email and password match more than one account. Contact your fleet owner to sign in.',
+      );
     }
 
     const user = matches[0];
-    const valid = await comparePassword(dto.password, user.passwordHash);
-    if (!valid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    if (!user.isActive) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
 
     return this.issueTokenPair({
       userId: user.id,

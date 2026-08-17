@@ -131,7 +131,15 @@ describe('AuthService', () => {
     });
 
     it('rejects an ambiguous cross-tenant email match instead of guessing', async () => {
+      // Stage H0g - this pre-dates the password-resolution login: it used to
+      // pass because the old implementation counted matches straight off
+      // findMany's length, never comparing a password at all. Now that
+      // ambiguity means "the SAME password verifies against two accounts",
+      // the precondition has to be true, or both candidates fail
+      // comparePassword against the fake 'hashed' value and this collapses
+      // to the unknown-email case (0 matches) instead of the one under test.
       prisma.client.user.findMany.mockResolvedValue([baseUser, { ...baseUser, id: 'user-2' }]);
+      jest.spyOn(passwordUtil, 'comparePassword').mockResolvedValue(true);
 
       await expect(
         service.login({ email: baseUser.email, password: 'password123' }),
