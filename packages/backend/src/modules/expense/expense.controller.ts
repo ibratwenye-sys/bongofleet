@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,8 @@ import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ListExpensesQueryDto } from './dto/list-expenses-query.dto';
 
+@ApiTags('expense')
+@ApiBearerAuth()
 @Controller('expenses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

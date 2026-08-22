@@ -16,6 +16,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
@@ -29,6 +30,8 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { ListExpiringDocumentsQueryDto } from './dto/list-expiring-documents-query.dto';
 
+@ApiTags('document')
+@ApiBearerAuth()
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

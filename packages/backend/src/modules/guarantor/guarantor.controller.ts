@@ -10,6 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -20,6 +21,8 @@ import { GuarantorService } from './guarantor.service';
 import { CreateGuarantorDto } from './dto/create-guarantor.dto';
 import { UpdateGuarantorDto } from './dto/update-guarantor.dto';
 
+@ApiTags('guarantor')
+@ApiBearerAuth()
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

@@ -121,8 +121,6 @@ describe('Maintenance & reminders (e2e)', () => {
   });
 
   it('reminds owners about overdue (date) and due-soon (mileage) bikes, once each, tenant-isolated', async () => {
-    const sendSpy = jest.spyOn(mailer, 'send');
-
     const token = await signupOwner(app, 'owner-a@fleet-a.test', 'Fleet A');
     const overdueBike = await createMotorcycle(app, token, 'KDA-OVER');
     const soonBike = await createMotorcycle(app, token, 'KDA-SOON');
@@ -182,6 +180,12 @@ describe('Maintenance & reminders (e2e)', () => {
         nextServiceDate: isoDaysFromNow(-1),
       })
       .expect(201);
+
+    // Spied here, not at the top of the test: signup itself sends a
+    // verification-code email through this same mailer.send (Stage S1) - a
+    // spy created before signupOwner() would count that stray send too and
+    // corrupt the exact-call-count assertions below.
+    const sendSpy = jest.spyOn(mailer, 'send');
 
     const first = await scanner.scanAndNotify();
     expect(first.tenantsScanned).toBe(2);

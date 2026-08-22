@@ -14,6 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
@@ -27,6 +28,8 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 
+@ApiTags('payment')
+@ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentController {

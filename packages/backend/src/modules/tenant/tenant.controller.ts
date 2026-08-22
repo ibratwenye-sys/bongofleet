@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -8,6 +9,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { TenantService } from './tenant.service';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 
+@ApiTags('tenant')
+@ApiBearerAuth()
 @Controller('tenant/settings')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER)

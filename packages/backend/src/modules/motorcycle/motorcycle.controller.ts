@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,8 @@ import { CreateMotorcycleDto } from './dto/create-motorcycle.dto';
 import { UpdateMotorcycleDto } from './dto/update-motorcycle.dto';
 import { ListMotorcyclesQueryDto } from './dto/list-motorcycles-query.dto';
 
+@ApiTags('motorcycle')
+@ApiBearerAuth()
 @Controller('motorcycles')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,8 @@ import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
 
+@ApiTags('transport')
+@ApiBearerAuth()
 @Controller('transport-jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

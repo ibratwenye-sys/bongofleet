@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PasswordResetChannel } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
@@ -16,6 +17,7 @@ import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { ConfirmSignupVerificationDto } from './dto/confirm-signup-verification.dto';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -49,6 +51,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
+  @ApiBearerAuth()
   async verifySignup(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: ConfirmSignupVerificationDto,
@@ -63,6 +66,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
+  @ApiBearerAuth()
   async resendSignupCode(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.signupVerificationService.resendCode(user.tenantId);
   }
@@ -90,6 +94,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
+  @ApiBearerAuth()
   me(@CurrentUser() user: AuthenticatedUserWithTenantLock): UserResponseDto {
     return UserResponseDto.fromProfile(user);
   }
@@ -99,6 +104,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
+  @ApiBearerAuth()
   async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.authService.logout(user.userId, user.jti);
   }

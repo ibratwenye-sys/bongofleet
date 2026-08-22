@@ -89,8 +89,6 @@ describe('Document expiry notifications (e2e)', () => {
   }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('emails each tenant only its own expiring documents, records alerts, and never repeats them', async () => {
-    const sendSpy = jest.spyOn(mailer, 'send');
-
     // Tenant A: one expired + one expiring-soon + one far-future document.
     const a = await signupOwner(app, 'owner-a@fleet-a.test', 'Fleet A');
     const motoA = await createMotorcycle(app, a.accessToken, 'KDA-100A');
@@ -102,6 +100,12 @@ describe('Document expiry notifications (e2e)', () => {
     const b = await signupOwner(app, 'owner-b@fleet-b.test', 'Fleet B');
     const motoB = await createMotorcycle(app, b.accessToken, 'KDB-200B');
     await uploadDocument(app, b.accessToken, motoB, 'INSURANCE', isoDaysFromNow(300));
+
+    // Spied here, not at the top of the test: signup itself sends a
+    // verification-code email through this same mailer.send (Stage S1) - a
+    // spy created before signupOwner() would count that stray send too and
+    // corrupt the exact-call-count assertions below.
+    const sendSpy = jest.spyOn(mailer, 'send');
 
     // First scan: tenant A gets one digest with exactly its two urgent documents.
     const first = await scanner.scanAndNotify();
@@ -135,8 +139,6 @@ describe('Document expiry notifications (e2e)', () => {
   });
 
   it('re-alerts a renewed (re-uploaded) document because it is a new document row', async () => {
-    const sendSpy = jest.spyOn(mailer, 'send');
-
     const a = await signupOwner(app, 'owner-c@fleet-c.test', 'Fleet C');
     const moto = await createMotorcycle(app, a.accessToken, 'KDC-300C');
     const expiredDocId = await uploadDocument(
@@ -146,6 +148,10 @@ describe('Document expiry notifications (e2e)', () => {
       'INSURANCE',
       isoDaysFromNow(-1),
     );
+
+    // Spied here, not at the top of the test - see the identical comment in
+    // the test above for why.
+    const sendSpy = jest.spyOn(mailer, 'send');
 
     await scanner.scanAndNotify();
     expect(sendSpy).toHaveBeenCalledTimes(1);

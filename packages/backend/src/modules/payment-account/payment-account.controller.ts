@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,8 @@ import { CreatePaymentAccountDto } from './dto/create-payment-account.dto';
 import { UpdatePaymentAccountDto } from './dto/update-payment-account.dto';
 import { ListPaymentAccountsQueryDto } from './dto/list-payment-accounts-query.dto';
 
+@ApiTags('payment-account')
+@ApiBearerAuth()
 @Controller('payment-accounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

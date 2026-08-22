@@ -3,6 +3,7 @@ packages:
 allowBuilds:
   '@nestjs/core': true
   '@prisma/engines': true
+  '@scarf/scarf': true
   bcrypt: true
   esbuild: true
   prisma: true

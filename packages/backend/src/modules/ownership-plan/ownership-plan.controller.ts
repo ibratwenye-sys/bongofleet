@@ -10,6 +10,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -27,6 +28,8 @@ import { CreateDayExcusalDto } from './dto/create-day-excusal.dto';
 
 // No DELETE - cancelling is status = CANCELLED. A plan with payments against
 // it must never vanish.
+@ApiTags('ownership-plan')
+@ApiBearerAuth()
 @Controller('ownership-plans')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OwnershipPlanController {

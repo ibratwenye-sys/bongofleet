@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -28,6 +29,8 @@ import { PasswordResetService } from '../auth/password-reset.service';
 // 'riders' kept as an alias for one release so an un-updated dashboard or
 // phone build still calling the old path does not break. Drop once nothing
 // still calls /riders.
+@ApiTags('driver')
+@ApiBearerAuth()
 @Controller(['drivers', 'riders'])
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

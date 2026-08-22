@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -20,6 +21,8 @@ import { AssignmentService } from './assignment.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
+@ApiTags('assignment')
+@ApiBearerAuth()
 @Controller('assignments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AssignmentController {

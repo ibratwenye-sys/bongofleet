@@ -110,8 +110,6 @@ describe('Missed-payment notifications (e2e)', () => {
   }, CLEAN_DATABASE_HOOK_TIMEOUT_MS);
 
   it('alerts unpaid and underpaid past days once, ignores paid days, today, and other tenants', async () => {
-    const sendSpy = jest.spyOn(mailer, 'send');
-
     // Tenant A: three past assignments (unpaid / underpaid / fully paid) + one today.
     const a = await signupOwner(app, 'owner-a@fleet-a.test', 'Fleet A');
     const fleetA = await setupFleet(app, a.accessToken, 'A1');
@@ -166,6 +164,12 @@ describe('Missed-payment notifications (e2e)', () => {
       5000,
     );
 
+    // Spied here, not at the top of the test: signup itself sends a
+    // verification-code email through this same mailer.send (Stage S1) - a
+    // spy created before signupOwner() would count that stray send too and
+    // corrupt the exact-call-count assertions below.
+    const sendSpy = jest.spyOn(mailer, 'send');
+
     const first = await scanner.scanAndNotify();
     expect(first.tenantsScanned).toBe(2);
     expect(first.tenantsNotified).toBe(2);
@@ -205,8 +209,6 @@ describe('Missed-payment notifications (e2e)', () => {
   });
 
   it('counts pending payments toward the target and mentions them in the digest', async () => {
-    const sendSpy = jest.spyOn(mailer, 'send');
-
     const c = await signupOwner(app, 'owner-c@fleet-c.test', 'Fleet C');
     const fleet = await setupFleet(app, c.accessToken, 'C1');
     const assignmentId = await createAssignment(
@@ -219,6 +221,10 @@ describe('Missed-payment notifications (e2e)', () => {
     );
     // Driver recorded 7000 but it is still PENDING reconciliation.
     await recordPayment(app, c.accessToken, assignmentId, fleet.driverId, 7000);
+
+    // Spied here, not at the top of the test - see the identical comment in
+    // the test above for why.
+    const sendSpy = jest.spyOn(mailer, 'send');
 
     const result = await scanner.scanAndNotify();
     expect(result.alertsSent).toBe(1);

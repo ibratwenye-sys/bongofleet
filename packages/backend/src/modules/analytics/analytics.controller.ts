@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -8,6 +9,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AnalyticsService } from './analytics.service';
 import { ReportRangeQueryDto } from './dto/report-range-query.dto';
 
+@ApiTags('analytics')
+@ApiBearerAuth()
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

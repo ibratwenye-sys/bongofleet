@@ -64,4 +64,11 @@ export const envValidationSchema = Joi.object({
   TENANT_TRIAL_DAYS: Joi.number().integer().min(1).max(90).default(7),
   ABANDONED_SIGNUP_RETENTION_DAYS: Joi.number().integer().min(1).max(90).default(7),
   ABANDONED_SIGNUP_CLEANUP_CRON: Joi.string().default('30 3 * * *'),
+
+  // --- API docs (Swagger/OpenAPI) ---
+  // Same fail-safe-by-default pattern as CORS_ORIGINS: off unless explicitly
+  // turned on. main.ts only mounts /api/docs when NODE_ENV !== 'production'
+  // OR this is true - a production deploy never gets a public schema/docs
+  // endpoint by accident, only by someone deliberately setting this.
+  SWAGGER_ENABLED: Joi.boolean().default(false),
 });

@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,8 @@ import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { ListMaintenanceQueryDto } from './dto/list-maintenance-query.dto';
 
+@ApiTags('maintenance')
+@ApiBearerAuth()
 @Controller('maintenance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { parseTrustProxy } from './common/trust-proxy.util';
@@ -37,6 +38,30 @@ function resolveCorsOrigins(config: ConfigService): string[] {
   return DEV_DEFAULT_CORS_ORIGINS;
 }
 
+// Fail-safe-by-default, same shape as resolveCorsOrigins above: a
+// production deploy only gets /api/docs if someone explicitly opts in via
+// SWAGGER_ENABLED. Development gets it for free since there's no exposure
+// risk there.
+function shouldEnableSwagger(config: ConfigService): boolean {
+  return (
+    config.get<string>('NODE_ENV') !== 'production' ||
+    config.get<boolean>('SWAGGER_ENABLED') === true
+  );
+}
+
+function setupSwagger(app: NestExpressApplication): void {
+  const document = SwaggerModule.createDocument(
+    app,
+    new DocumentBuilder()
+      .setTitle('BongoFleet API')
+      .setDescription('BongoFleet backend API - motorcycle ownership-plan and fleet management')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build(),
+  );
+  SwaggerModule.setup('api/docs', app, document);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
@@ -49,6 +74,10 @@ async function bootstrap() {
   app.use(helmet());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({ origin: resolveCorsOrigins(config), credentials: true });
+
+  if (shouldEnableSwagger(config)) {
+    setupSwagger(app);
+  }
 
   const port = config.get<number>('PORT') ?? 3000;
   await app.listen(port);
