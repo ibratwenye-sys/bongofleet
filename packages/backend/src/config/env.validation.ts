@@ -49,4 +49,19 @@ export const envValidationSchema = Joi.object({
   // --- Ownership-plan nightly instalment generator ---
   OWNERSHIP_PLAN_GENERATOR_CRON: Joi.string().default('5 0 * * *'),
   OWNERSHIP_PLAN_BACKFILL_LOOKBACK_DAYS: Joi.number().integer().min(1).max(90).default(14),
+
+  // --- Stage S1: tenant trial and cleanup ---
+  // Two settings that happen to share a number today (both 7) and must never
+  // be collapsed into one: TENANT_TRIAL_DAYS governs how long a VERIFIED
+  // tenant may use the product before being locked (tenant-lock.util.ts);
+  // ABANDONED_SIGNUP_RETENTION_DAYS governs how long an UNVERIFIED tenant's
+  // row is kept before the cleanup cron deletes it
+  // (abandoned-signup-cleanup.service.ts). They answer unrelated questions -
+  // "how generous is the trial" versus "how long do we keep junk around" -
+  // and changing one must never silently change the other. Ibrahim set the
+  // trial to 7 days here; if that number moves, this one stays put unless a
+  // second, separate decision changes it too.
+  TENANT_TRIAL_DAYS: Joi.number().integer().min(1).max(90).default(7),
+  ABANDONED_SIGNUP_RETENTION_DAYS: Joi.number().integer().min(1).max(90).default(7),
+  ABANDONED_SIGNUP_CLEANUP_CRON: Joi.string().default('30 3 * * *'),
 });

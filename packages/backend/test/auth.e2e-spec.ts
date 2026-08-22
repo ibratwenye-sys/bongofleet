@@ -7,6 +7,7 @@ import { RedisService } from '../src/redis/redis.service';
 import { refreshKey } from '../src/modules/auth/auth.constants';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 // No verification needed - these are the app's own freshly-issued tokens
 // within the test itself; decoding the payload is enough to compute the
@@ -165,18 +166,15 @@ describe('Auth (e2e)', () => {
     const nextPhone = () => `+25570000${(phoneSeed++ % 100).toString().padStart(2, '0')}`;
 
     async function signupOwner(email: string, company: string) {
-      const res = await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send({
-          email,
-          password: 'owner-password-123',
-          companyName: company,
-          firstName: 'Own',
-          lastName: 'Er',
-          phone: nextPhone(),
-        })
-        .expect(201);
-      return res.body.accessToken as string;
+      const { accessToken } = await signupAndActivateOwner(app, {
+        email,
+        password: 'owner-password-123',
+        companyName: company,
+        firstName: 'Own',
+        lastName: 'Er',
+        phone: nextPhone(),
+      });
+      return accessToken;
     }
 
     async function createDriver(ownerToken: string, email: string, password: string) {

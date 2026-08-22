@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 async function signupOwner(app: INestApplication, overrides: Partial<Record<string, string>> = {}) {
   const body = {
@@ -16,12 +17,8 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
     phone: '+254700000001',
     ...overrides,
   };
-  const res = await request(app.getHttpServer()).post('/auth/signup').send(body).expect(201);
-  const me = await request(app.getHttpServer())
-    .get('/auth/me')
-    .set('Authorization', `Bearer ${res.body.accessToken}`)
-    .expect(200);
-  return { accessToken: res.body.accessToken as string, tenantId: me.body.tenantId as string };
+  const { accessToken, tenantId } = await signupAndActivateOwner(app, body);
+  return { accessToken, tenantId };
 }
 
 async function createDriver(

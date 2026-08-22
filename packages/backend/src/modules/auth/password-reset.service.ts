@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import { Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PasswordResetChannel, PasswordResetRoute, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,8 +5,9 @@ import { RedisService } from '../../redis/redis.service';
 import { MailerService } from '../notification/mailer.service';
 import { requestContext } from '../../common/context/request-context';
 import { deleteKeysByPrefix } from '../../redis/redis-key-sweep.util';
+import { VerificationCodeService } from '../../common/verification-code/verification-code.service';
 import { AuthenticatedUser } from './auth.types';
-import { hashPassword, comparePassword } from './utils/password.util';
+import { hashPassword } from './utils/password.util';
 import {
   RESET_CODE_LENGTH,
   RESET_CODE_MAX_ATTEMPTS,
@@ -50,6 +50,7 @@ export class PasswordResetService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly mailer: MailerService,
+    private readonly verificationCodes: VerificationCodeService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -187,22 +188,16 @@ export class PasswordResetService {
     );
 
     for (const user of users) {
-      const code = this.generateCode();
-      const codeHash = await hashPassword(code);
-
       // Stored hashed, with the attempt counter alongside it, under a TTL so
       // an unused code expires on its own rather than waiting for someone to
       // clean it up. bcrypt rather than the sha256 used for refresh tokens:
       // a six-digit code has only a million possible values, and a fast hash
       // of one is reversible in the time it takes to read this sentence if
       // the Redis contents ever leak.
-      const key = passwordResetKey(user.id);
-      await this.redis
-        .multi()
-        .del(key)
-        .hset(key, { hash: codeHash, attempts: '0' })
-        .expire(key, RESET_CODE_TTL_SECONDS)
-        .exec();
+      const code = await this.verificationCodes.issue(passwordResetKey(user.id), {
+        length: RESET_CODE_LENGTH,
+        ttlSeconds: RESET_CODE_TTL_SECONDS,
+      });
 
       await this.deliverCode(user, code, channel);
     }
@@ -226,30 +221,12 @@ export class PasswordResetService {
     );
 
     for (const user of users) {
-      const key = passwordResetKey(user.id);
-      const stored = await this.redis.hgetall(key);
-      if (!stored?.hash) continue;
-
-      const attempts = Number(stored.attempts ?? '0');
-      if (attempts >= RESET_CODE_MAX_ATTEMPTS) {
-        await this.redis.del(key);
-        continue;
-      }
-
-      if (!(await comparePassword(code, stored.hash))) {
-        // Count the miss against this code. Once the budget is gone the code
-        // is destroyed rather than the account being locked - see
-        // RESET_CODE_MAX_ATTEMPTS.
-        const next = await this.redis.hincrby(key, 'attempts', 1);
-        if (next >= RESET_CODE_MAX_ATTEMPTS) {
-          await this.redis.del(key);
-        }
-        continue;
-      }
-
-      // Single use: gone before the reset is applied, so a retry of the same
-      // request cannot spend it twice.
-      await this.redis.del(key);
+      const ok = await this.verificationCodes.verify(
+        passwordResetKey(user.id),
+        code,
+        RESET_CODE_MAX_ATTEMPTS,
+      );
+      if (!ok) continue;
 
       await this.applyReset({
         userId: user.id,
@@ -310,16 +287,5 @@ export class PasswordResetService {
         'message - nothing has changed on your account.',
       ].join('\n'),
     });
-  }
-
-  /**
-   * randomInt, not Math.random: this is a credential for the length of its
-   * life, and Math.random is predictable from prior outputs. Padded rather
-   * than assembled digit by digit so every value in the range is equally
-   * likely, leading zeroes included.
-   */
-  private generateCode(): string {
-    const max = 10 ** RESET_CODE_LENGTH;
-    return String(randomInt(0, max)).padStart(RESET_CODE_LENGTH, '0');
   }
 }

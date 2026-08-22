@@ -7,6 +7,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { requestContext } from '../src/common/context/request-context';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 function isoDaysAgo(days: number): string {
   const date = new Date();
@@ -15,18 +16,15 @@ function isoDaysAgo(days: number): string {
 }
 
 async function signupOwner(app: INestApplication, email: string, company: string) {
-  const res = await request(app.getHttpServer())
-    .post('/auth/signup')
-    .send({
-      email,
-      password: 'password123',
-      companyName: company,
-      firstName: 'Own',
-      lastName: 'Er',
-      phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
-    })
-    .expect(201);
-  return res.body.accessToken as string;
+  const { accessToken } = await signupAndActivateOwner(app, {
+    email,
+    password: 'password123',
+    companyName: company,
+    firstName: 'Own',
+    lastName: 'Er',
+    phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
+  });
+  return accessToken;
 }
 
 async function setupFleet(app: INestApplication, token: string, tag: string) {

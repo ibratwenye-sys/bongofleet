@@ -9,7 +9,12 @@ import { requestContext } from '../../common/context/request-context';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
-import { AuthenticatedUser, JwtAccessPayload, JwtRefreshPayload } from './auth.types';
+import {
+  AuthenticatedUser,
+  AuthenticatedUserWithTenantLock,
+  JwtAccessPayload,
+  JwtRefreshPayload,
+} from './auth.types';
 import { hashPassword, comparePassword } from './utils/password.util';
 import { hashRefreshToken } from './utils/refresh-token.util';
 import {
@@ -173,9 +178,21 @@ export class AuthService {
     await this.redis.del(refreshKey(userId, jti));
   }
 
-  async validateToken(payload: JwtAccessPayload): Promise<AuthenticatedUser> {
+  /**
+   * Stage S1 - also loads the tenant's lock-relevant fields (status,
+   * trialEndsAt, billingExemptAt) and carries them onto AuthenticatedUser.
+   * This method deliberately does NOT throw for a locked tenant - it only
+   * reports isActive/tenant-match, exactly as before. The lock decision
+   * belongs to JwtAuthGuard, which knows which route is being called and can
+   * let a handful of routes (@AllowWhenLocked) through anyway; this method
+   * has no route context to make that call correctly.
+   */
+  async validateToken(payload: JwtAccessPayload): Promise<AuthenticatedUserWithTenantLock> {
     const user = await requestContext.runUnscoped(() =>
-      this.prisma.client.user.findUnique({ where: { id: payload.sub } }),
+      this.prisma.client.user.findUnique({
+        where: { id: payload.sub },
+        include: { tenant: { select: { status: true, trialEndsAt: true, billingExemptAt: true } } },
+      }),
     );
 
     if (!user || user.tenantId !== payload.tenant_id || !user.isActive) {
@@ -190,6 +207,9 @@ export class AuthService {
       firstName: user.firstName,
       lastName: user.lastName,
       jti: payload.jti,
+      tenantStatus: user.tenant.status,
+      trialEndsAt: user.tenant.trialEndsAt,
+      billingExemptAt: user.tenant.billingExemptAt,
     };
   }
 

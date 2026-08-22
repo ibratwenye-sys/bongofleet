@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 /**
  * Split out from ownership-plan.e2e-spec.ts (Stage G) rather than added to
@@ -23,8 +24,8 @@ async function signupOwner(app: INestApplication, overrides: Partial<Record<stri
     phone: '+254700000301',
     ...overrides,
   };
-  const res = await request(app.getHttpServer()).post('/auth/signup').send(body).expect(201);
-  return { accessToken: res.body.accessToken as string };
+  const { accessToken } = await signupAndActivateOwner(app, body);
+  return { accessToken };
 }
 
 describe('OwnershipPlan guarantorId + ledger (e2e, Stage G Part 3/3b)', () => {

@@ -8,6 +8,7 @@ import { requestContext } from '../src/common/context/request-context';
 import { hashPassword } from '../src/modules/auth/utils/password.util';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 describe('Tenant settings (e2e, Stage G Part 2)', () => {
   let app: INestApplication;
@@ -40,8 +41,8 @@ describe('Tenant settings (e2e, Stage G Part 2)', () => {
       phone: '+254700000401',
       ...overrides,
     };
-    const res = await request(app.getHttpServer()).post('/auth/signup').send(body).expect(201);
-    return { accessToken: res.body.accessToken as string };
+    const { accessToken } = await signupAndActivateOwner(app, body);
+    return { accessToken };
   }
 
   it('GET returns null physicalAddress/directorName for a freshly signed-up tenant', async () => {

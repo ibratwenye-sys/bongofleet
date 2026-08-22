@@ -14,6 +14,7 @@ import {
 } from '../src/modules/auth/password-reset.constants';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 /**
  * Stage H0f. Before this stage there was no way to reset a password at all -
@@ -98,18 +99,21 @@ describe('Password reset (e2e)', () => {
   const nextPhone = () => `+25570000000${phoneSeed++ % 10}`;
 
   async function signupOwner(email: string, company: string) {
-    const res = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({
-        email,
-        password: 'password123',
-        companyName: company,
-        firstName: 'Own',
-        lastName: 'Er',
-        phone: nextPhone(),
-      })
-      .expect(201);
-    return res.body.accessToken as string;
+    const { accessToken } = await signupAndActivateOwner(app, {
+      email,
+      password: 'password123',
+      companyName: company,
+      firstName: 'Own',
+      lastName: 'Er',
+      phone: nextPhone(),
+    });
+    // Stage S1 - signup now sends its own verification email through this
+    // same captured mailer. Discarded here rather than left in `mailer.sent`
+    // - every assertion below indexes into that array expecting only
+    // PASSWORD-RESET messages; this file's helper is the one place that
+    // signup noise enters it.
+    mailer.sent.length = 0;
+    return accessToken;
   }
 
   async function createDriver(token: string, email: string) {

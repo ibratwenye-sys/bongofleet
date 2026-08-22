@@ -15,6 +15,27 @@ enum UserRole {
   @@map("user_role")
 }
 
+/// Stage S1. Where a tenant sits in the signup/billing lifecycle - checked
+/// on every authenticated request via tenant-lock.util.ts's checkTenantLock,
+/// which is the one place this enum's meaning is actually decided.
+enum TenantStatus {
+  /// Just signed up, has not yet proved control of the owner's email. Locked
+  /// unconditionally - see checkTenantLock - regardless of any other field.
+  PENDING_VERIFICATION
+  /// Verified. Still locked if trialEndsAt has passed - see checkTenantLock -
+  /// there is no separate "trialing" status; the trial is a clock on this
+  /// status, not a status of its own.
+  ACTIVE
+  /// Reserved for a future billing integration to set on a failed charge.
+  /// Nothing in this stage ever sets it - the enum value exists now so the
+  /// lock predicate and its tests are already correct on the day something
+  /// does.
+  PAST_DUE
+  CANCELLED
+
+  @@map("tenant_status")
+}
+
 enum PaymentStatus {
   PENDING
   COMPLETED
@@ -108,8 +129,34 @@ model Tenant {
   physicalAddress String?  @map("physical_address")
   directorName    String?  @map("director_name")
   isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  /// Stage S1 - see TenantStatus. Independent of isActive above: isActive is
+  /// the existing, separate switch the notification cron jobs already filter
+  /// on (document-expiry-notification.service.ts and friends); this is
+  /// specifically whether the tenant's OWN USERS can use the product. A
+  /// PAST_DUE tenant should keep receiving its own missed-payment reminders,
+  /// for instance - isActive and status are deliberately never made to imply
+  /// each other.
+  status TenantStatus @default(PENDING_VERIFICATION)
+
+  /// Stamped once, when verification succeeds. Never cleared.
+  verifiedAt DateTime? @map("verified_at")
+
+  /// Stage S1 Part 2 - set at VERIFICATION, not at signup. An owner who
+  /// opens his email the next morning must not have already burned a third
+  /// of a 7-day trial on nothing. Null until then; null also for every
+  /// tenant grandfathered ACTIVE by this migration, which is what "no trial
+  /// clock running" means for an account that predates trials entirely.
+  trialEndsAt DateTime? @map("trial_ends_at")
+
+  /// Stage S1 Part 3 - overrides every other field in checkTenantLock,
+  /// unconditionally: an exempt tenant is never locked, whatever its status
+  /// or dates say. Ibrahim's own fleet is set exempt in this migration - his
+  /// own product must never lock him out of it or bill him.
+  billingExemptAt DateTime? @map("billing_exempt_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   users             User[]
   drivers           Driver[]

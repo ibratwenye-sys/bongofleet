@@ -1,12 +1,18 @@
 import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { TenantStatus, UserRole } from '@prisma/client';
 import { AuthController } from './auth.controller';
 import { PasswordResetService } from './password-reset.service';
+import { SignupVerificationService } from './signup-verification.service';
 import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
   let service: { signup: jest.Mock; login: jest.Mock; refreshToken: jest.Mock; logout: jest.Mock };
+  let signupVerificationService: {
+    sendCode: jest.Mock;
+    confirmCode: jest.Mock;
+    resendCode: jest.Mock;
+  };
 
   const tokenPair = { accessToken: 'a', refreshToken: 'r', expiresIn: 900 };
 
@@ -16,6 +22,11 @@ describe('AuthController', () => {
       login: jest.fn().mockResolvedValue(tokenPair),
       refreshToken: jest.fn().mockResolvedValue(tokenPair),
       logout: jest.fn().mockResolvedValue(undefined),
+    };
+    signupVerificationService = {
+      sendCode: jest.fn().mockResolvedValue(undefined),
+      confirmCode: jest.fn().mockResolvedValue(undefined),
+      resendCode: jest.fn().mockResolvedValue(undefined),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -31,13 +42,16 @@ describe('AuthController', () => {
           provide: PasswordResetService,
           useValue: { requestReset: jest.fn(), confirmReset: jest.fn() },
         },
+        // Stage S1 - same reasoning: covered end to end in
+        // test/signup-verification.e2e-spec.ts.
+        { provide: SignupVerificationService, useValue: signupVerificationService },
       ],
     }).compile();
 
     controller = moduleRef.get(AuthController);
   });
 
-  it('signup delegates to AuthService.signup and returns tokens', async () => {
+  it('signup delegates to AuthService.signup, sends a verification code, and returns tokens', async () => {
     const dto = {
       email: 'a@b.com',
       password: 'password123',
@@ -48,6 +62,7 @@ describe('AuthController', () => {
     };
     await expect(controller.signup(dto)).resolves.toBe(tokenPair);
     expect(service.signup).toHaveBeenCalledWith(dto);
+    expect(signupVerificationService.sendCode).toHaveBeenCalledWith(dto.email);
   });
 
   it('login delegates to AuthService.login', async () => {
@@ -70,6 +85,9 @@ describe('AuthController', () => {
       firstName: 'A',
       lastName: 'B',
       jti: 'jti-1',
+      tenantStatus: TenantStatus.ACTIVE,
+      trialEndsAt: null,
+      billingExemptAt: null,
     };
 
     const result = controller.me(user);
@@ -81,6 +99,8 @@ describe('AuthController', () => {
       role: UserRole.OWNER,
       firstName: 'A',
       lastName: 'B',
+      tenantStatus: TenantStatus.ACTIVE,
+      trialEndsAt: null,
     });
     expect(result).not.toHaveProperty('passwordHash');
   });
@@ -94,6 +114,9 @@ describe('AuthController', () => {
       firstName: 'A',
       lastName: 'B',
       jti: 'jti-1',
+      tenantStatus: TenantStatus.ACTIVE,
+      trialEndsAt: null,
+      billingExemptAt: null,
     };
 
     await controller.logout(user);

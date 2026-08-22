@@ -8,6 +8,7 @@ import { DocumentExpiryNotificationService } from '../src/modules/notification/d
 import { requestContext } from '../src/common/context/request-context';
 import { cleanDatabase, CLEAN_DATABASE_HOOK_TIMEOUT_MS } from './utils/prisma-test.util';
 import { createTestApp } from './utils/create-test-app';
+import { signupAndActivateOwner } from './utils/verified-signup.util';
 
 const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -21,18 +22,15 @@ function isoDaysFromNow(days: number): string {
 }
 
 async function signupOwner(app: INestApplication, email: string, company: string) {
-  const res = await request(app.getHttpServer())
-    .post('/auth/signup')
-    .send({
-      email,
-      password: 'password123',
-      companyName: company,
-      firstName: 'Own',
-      lastName: 'Er',
-      phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
-    })
-    .expect(201);
-  return { accessToken: res.body.accessToken as string };
+  const { accessToken } = await signupAndActivateOwner(app, {
+    email,
+    password: 'password123',
+    companyName: company,
+    firstName: 'Own',
+    lastName: 'Er',
+    phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
+  });
+  return { accessToken };
 }
 
 async function createMotorcycle(app: INestApplication, token: string, reg: string) {
