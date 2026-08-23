@@ -36,7 +36,14 @@ export class TransportController {
     return this.transportService.createJob(dto, actor);
   }
 
+  // Stage DM4 - the two RIDER-accessible routes, overriding the class-level
+  // OWNER/MANAGER-only default (Reflector.getAllAndOverride: a handler-level
+  // @Roles fully replaces the class-level one for that route, it doesn't
+  // add to it - verified against roles.guard.ts before relying on it).
+  // POST/PATCH/DELETE and /summary stay OWNER/MANAGER only - a driver does
+  // not create, update, or delete transport jobs in this stage.
   @Get()
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
   list(@Query() query: ListTransportJobsQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.transportService.listJobs(query, actor);
   }
@@ -47,6 +54,7 @@ export class TransportController {
   }
 
   @Get(':id')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
   get(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.transportService.getJob(id, actor);
   }

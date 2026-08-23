@@ -306,7 +306,11 @@ describe('TransportService', () => {
       const result = await service.getJob('job-1', owner);
 
       expect(result.expensesTotal).toBe('150000.00');
-      expect(result.netProfit).toBe('350000.00');
+      // Stage DM4 - getJob's return type is now a role-conditional union
+      // (RIDER's response omits revenue/netProfit); TS can't statically know
+      // this call used an OWNER actor, so the cast asserts what's true at
+      // runtime rather than widening the real (correct) return type.
+      expect((result as unknown as { netProfit: string }).netProfit).toBe('350000.00');
     });
 
     it('throws NotFound for an unknown job', async () => {

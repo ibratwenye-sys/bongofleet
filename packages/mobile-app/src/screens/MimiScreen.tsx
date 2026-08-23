@@ -8,12 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useDriverData } from '../context/DriverDataContext';
 import { apiFetch, ApiError, NetworkError } from '../api';
 import { formatTZS } from '../format';
 import type { Assignment, DriverType, Payment } from '../types';
-import type { RiderTabParamList } from '../navigation/RiderTabNavigator';
 
 const CATEGORY_LABELS: Record<DriverType, string> = {
   RIDER: 'Rider',
@@ -41,7 +39,16 @@ function monthsSince(dateStr: string): number {
   return Math.max(0, months);
 }
 
-type Props = BottomTabScreenProps<RiderTabParamList, 'Mimi'>;
+// Stage DM4 - typed against just the one route Mimi actually navigates to,
+// not a specific tab navigator's full ParamList. Mimi is shared verbatim
+// between RiderTabNavigator and the new DriverTabNavigator (both host a
+// hidden 'Mkataba' route, per Mimi's Mkataba wangu link - ownership plans
+// are driverType-generic, confirmed via schema/service read, not RIDER-only,
+// see DM4 report), and a ParamList-specific BottomTabScreenProps type from
+// one navigator isn't assignable to the other's screen slot.
+interface Props {
+  navigation: { navigate: (screen: 'Mkataba') => void };
+}
 
 export function MimiScreen({ navigation }: Props) {
   const { me, logout } = useDriverData();

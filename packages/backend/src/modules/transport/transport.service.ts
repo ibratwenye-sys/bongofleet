@@ -22,6 +22,26 @@ function assertOwnerOrManager(actor: AuthenticatedUser): void {
   }
 }
 
+/**
+ * Stage DM4. revenue is the owner's earnings on the job, not the driver's
+ * business - and netProfit (= revenue - expensesTotal, see withPnl below)
+ * is the SAME secret in a different shape: with expensesTotal still
+ * visible, a RIDER could recover the excluded revenue exactly as
+ * `netProfit + expensesTotal`. Both are stripped together for that reason,
+ * not just revenue alone. expensesTotal and the raw expenses[] stay
+ * visible - today they're owner-recorded like everything else here, but
+ * they're the job's operational cost record rather than the owner's
+ * earnings, and Stage H's driver-submitted-expenses work will make them
+ * literally the driver's own data.
+ */
+function omitOwnerFinancials<T extends { revenue: unknown; netProfit: unknown }>(
+  job: T,
+): Omit<T, 'revenue' | 'netProfit'> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- rest-sibling omission, the whole point is to discard these two
+  const { revenue: _revenue, netProfit: _netProfit, ...rest } = job;
+  return rest;
+}
+
 function money(value: Prisma.Decimal | number | string | null | undefined): string {
   return new Prisma.Decimal(value ?? 0).toFixed(2);
 }
@@ -132,12 +152,22 @@ export class TransportService {
     }
   }
 
+  /**
+   * Stage DM4 - OWNER/MANAGER see every job in the tenant (unchanged); a
+   * RIDER sees only their own, narrowed server-side by their own driverId
+   * exactly like AssignmentService/PaymentService's listPayments - not
+   * left to the client to filter, and not a separate query.
+   */
   async listJobs(query: ListTransportJobsQueryDto, actor: AuthenticatedUser) {
-    assertOwnerOrManager(actor);
-
     const where: Prisma.TransportJobWhereInput = {};
-    if (query.motorcycleId) {
-      where.motorcycleId = query.motorcycleId;
+
+    if (actor.role === UserRole.RIDER) {
+      where.driverId = await this.getOwnDriverId(actor);
+    } else {
+      assertOwnerOrManager(actor);
+      if (query.motorcycleId) {
+        where.motorcycleId = query.motorcycleId;
+      }
     }
     if (query.status) {
       where.status = query.status;
@@ -152,22 +182,29 @@ export class TransportService {
     const jobs = await this.prisma.client.transportJob.findMany({
       where,
       orderBy: { scheduledDate: 'desc' },
-      include: { motorcycle: true, driver: { include: { user: true } } },
+      include: {
+        motorcycle: true,
+        driver: { include: { user: { select: { firstName: true, lastName: true } } } },
+      },
     });
 
     const expenseByJob = await this.sumExpensesByJob(jobs.map((j) => j.id));
+    const withFigures = jobs.map((job) => this.withPnl(job, expenseByJob.get(job.id)));
 
-    return jobs.map((job) => this.withPnl(job, expenseByJob.get(job.id)));
+    return actor.role === UserRole.RIDER ? withFigures.map(omitOwnerFinancials) : withFigures;
   }
 
+  /**
+   * Stage DM4 - same "404, not 403" convention as everywhere else in this
+   * codebase for a RIDER on someone else's resource: an id that is real but
+   * not theirs must look identical to an id that doesn't exist.
+   */
   async getJob(id: string, actor: AuthenticatedUser) {
-    assertOwnerOrManager(actor);
-
     const job = await this.prisma.client.transportJob.findUnique({
       where: { id },
       include: {
         motorcycle: true,
-        driver: { include: { user: true } },
+        driver: { include: { user: { select: { firstName: true, lastName: true } } } },
         expenses: { orderBy: { incurredAt: 'desc' } },
       },
     });
@@ -175,12 +212,22 @@ export class TransportService {
       throw new NotFoundException('Transport job not found');
     }
 
+    if (actor.role === UserRole.RIDER) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (job.driverId !== ownDriverId) {
+        throw new NotFoundException('Transport job not found');
+      }
+    } else {
+      assertOwnerOrManager(actor);
+    }
+
     const expenseTotal = job.expenses.reduce(
       (sum, e) => sum.plus(new Prisma.Decimal(e.amount)),
       new Prisma.Decimal(0),
     );
 
-    return this.withPnl(job, expenseTotal);
+    const withFigures = this.withPnl(job, expenseTotal);
+    return actor.role === UserRole.RIDER ? omitOwnerFinancials(withFigures) : withFigures;
   }
 
   async updateJob(id: string, dto: UpdateTransportJobDto, actor: AuthenticatedUser) {
@@ -346,6 +393,16 @@ export class TransportService {
         netProfit: acc.revenue.minus(acc.expenses).toFixed(2),
       }))
       .sort((a, b) => Number(a.netProfit) - Number(b.netProfit)); // losses first
+  }
+
+  private async getOwnDriverId(actor: AuthenticatedUser): Promise<string> {
+    const driver = await this.prisma.client.driver.findUnique({
+      where: { userId: actor.userId },
+    });
+    if (!driver) {
+      throw new ForbiddenException('No driver profile is associated with this account');
+    }
+    return driver.id;
   }
 
   private async sumExpensesByJob(jobIds: string[]): Promise<Map<string, Prisma.Decimal>> {

@@ -109,6 +109,48 @@ export interface OwnershipPlanLedgerEntry {
   runningPosition: string;
 }
 
+export type TransportJobStatus = 'SCHEDULED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED';
+
+export interface TransportJobExpense {
+  id: string;
+  category: string;
+  amount: string;
+  incurredAt: string;
+  description: string | null;
+}
+
+/**
+ * GET /transport-jobs and GET /transport-jobs/:id (RIDER-narrowed to the
+ * caller's own driverId - Stage DM4). revenue and netProfit are both
+ * omitted from a RIDER's response body server-side (TransportService's
+ * omitOwnerFinancials): revenue is the owner's earnings on the job, not the
+ * driver's business, and netProfit (= revenue - expensesTotal) is the same
+ * secret in a different shape - so neither field exists on this type.
+ * expensesTotal stays visible; it's the job's operational cost record, not
+ * the owner's earnings.
+ */
+export interface TransportJob {
+  id: string;
+  driverId: string | null;
+  motorcycleId: string;
+  ownerDriven: boolean;
+  reference: string | null;
+  origin: string;
+  destination: string;
+  cargo: string | null;
+  status: TransportJobStatus;
+  scheduledDate: string;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  expensesTotal: string;
+  motorcycle: Motorcycle;
+}
+
+/** GET /transport-jobs/:id adds the per-job expense list on top of the list shape. */
+export interface TransportJobDetail extends TransportJob {
+  expenses: TransportJobExpense[];
+}
+
 /** A payment recorded while offline, waiting to be sent to the server. */
 export interface QueuedPayment {
   clientId: string;

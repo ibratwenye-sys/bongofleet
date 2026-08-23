@@ -10,13 +10,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { apiFetch, apiFetchBlob, ApiError, NetworkError } from '../api';
 import { formatTZS } from '../format';
 import type { Assignment, OwnershipPlan, OwnershipPlanLedgerEntry } from '../types';
-import type { RiderTabParamList } from '../navigation/RiderTabNavigator';
 
-type Props = BottomTabScreenProps<RiderTabParamList, 'Mkataba'>;
+// Stage DM4 - decoupled from RiderTabParamList for the same reason as
+// MimiScreen: this screen is now hosted as a hidden route on both
+// RiderTabNavigator and the new DriverTabNavigator.
+interface Props {
+  navigation: { navigate: (screen: 'Mimi') => void };
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
