@@ -163,3 +163,61 @@ export interface QueuedPayment {
   paymentMethod?: string;
   queuedAt: string;
 }
+
+export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/**
+ * Stage H4. GET /expenses/mine (RIDER-narrowed to the caller's own
+ * submissions - Stage H2) returns every Expense column; only what Matumizi
+ * actually renders is typed here, same convention as Payment above (which
+ * likewise omits backend-only fields this app never reads).
+ */
+export interface RiderExpense {
+  id: string;
+  category: string;
+  amount: string;
+  incurredAt: string;
+  description: string | null;
+  status: ExpenseStatus;
+  rejectionReason: string | null;
+  receiptFileName: string | null;
+  receiptUploadedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * An expense recorded while offline, waiting to be sent to the server.
+ * Mirrors QueuedPayment's role exactly, but lives in its own queue - see
+ * expenseQueue.ts's own comment on why this isn't folded into queue.ts.
+ * photoUri/photoMimeType/photoName travel alongside the text fields as
+ * passengers only: the photo itself is never uploaded until the expense
+ * has synced and the server has handed back a real id (there is no id to
+ * upload a receipt against before that), so only the local file URI is
+ * kept here, never the image bytes - AsyncStorage isn't built for that.
+ */
+export interface QueuedExpense {
+  clientId: string;
+  category: string;
+  amount: number;
+  incurredAt: string;
+  description?: string;
+  photoUri?: string;
+  photoMimeType?: string;
+  photoName?: string;
+  queuedAt: string;
+}
+
+/**
+ * A successfully-submitted expense (it has a real server id) whose receipt
+ * photo hasn't made it up yet - either the upload right after submission
+ * failed, or a queued expense's own follow-up upload failed once the
+ * expense itself flushed. Persisted (not just React state) so "receipt
+ * pending upload" survives the app being closed and reopened before the
+ * photo makes it up, per the design's own requirement.
+ */
+export interface PendingReceiptUpload {
+  expenseId: string;
+  photoUri: string;
+  photoMimeType: string;
+  photoName: string;
+}

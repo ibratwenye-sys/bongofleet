@@ -65,6 +65,13 @@ interface DriverData {
   loading: boolean;
   refreshing: boolean;
   banner: Banner | null;
+  /** Stage H4 - exposed so a screen outside this provider's own closure
+   *  (Matumizi) can use the same notice-banner pattern every other screen
+   *  uses, rather than inventing its own. Payment-specific state
+   *  (recordPayment/uploadReceipt/the payment queue) stays exactly as it
+   *  was - this is the one general-purpose piece of the provider that
+   *  genuinely needed to be reusable. */
+  showBanner: (message: string, kind: 'success' | 'error') => void;
   submitting: boolean;
   uploadingId: string | null;
   refresh: () => Promise<void>;
@@ -319,6 +326,7 @@ export function DriverDataProvider({
       loading,
       refreshing,
       banner,
+      showBanner,
       submitting,
       uploadingId,
       refresh,
@@ -338,6 +346,7 @@ export function DriverDataProvider({
       loading,
       refreshing,
       banner,
+      showBanner,
       submitting,
       uploadingId,
       refresh,

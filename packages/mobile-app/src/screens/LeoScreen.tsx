@@ -224,6 +224,13 @@ export function LeoScreen({ navigation }: Props) {
             <Text style={styles.empty}>No assignment for today yet.</Text>
           </View>
         ) : null}
+
+        <TouchableOpacity
+          style={styles.addExpenseButton}
+          onPress={() => navigation.navigate('Matumizi')}
+        >
+          <Text style={styles.addExpenseButtonText}>Add expense</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -324,4 +331,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   errorText: { color: '#991b1b', textAlign: 'center', fontSize: 13 },
+  // Stage H4 - reached from here, not a fifth tab; see RiderTabNavigator's
+  // own comment. Outlined rather than filled dark: this button sits below
+  // the card(s) it belongs to, and a second solid-dark button right under
+  // Pay/the plan's "View contract" would compete with them for attention.
+  addExpenseButton: {
+    borderWidth: 1,
+    borderColor: '#111827',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  addExpenseButtonText: { color: '#111827', fontSize: 15, fontWeight: '600' },
 });
