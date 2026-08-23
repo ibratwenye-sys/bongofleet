@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
-import { PaymentStatus } from '@prisma/client';
+import { ExpenseStatus, PaymentStatus } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { requestContext } from '../src/common/context/request-context';
@@ -184,6 +184,68 @@ describe('Analytics & expenses (e2e)', () => {
       .expect(200);
     expect(pnl.body.revenue).toBe('6000.00');
     expect(pnl.body.paymentCount).toBe(1);
+  });
+
+  // Stage H1 (DESIGN_RIDER_EXPENSES.md §3) - the load-bearing test for
+  // COUNTED_EXPENSE. POST /expenses can't produce a PENDING row today (no
+  // status field on the DTO, and every row defaults to APPROVED - see the
+  // Expense model's own comment on why APPROVED, not PENDING, is the
+  // default), so the PENDING expense is created directly via Prisma, same
+  // as this file's existing maintenanceLog direct-create for "no API yet."
+  // The APPROVED->APPROVED flip has no endpoint either (that's H2's approve
+  // route) and is likewise done directly via Prisma.
+  it('excludes a PENDING expense from P&L until it is approved', async () => {
+    const token = await signupOwner(app, 'owner-e@fleet-e.test', 'Fleet E');
+    const { driverId, motorcycleId } = await setupFleet(app, token, 'E1');
+    const tenantId = await currentTenantId(prisma, 'owner-e@fleet-e.test');
+
+    // Revenue: one completed payment of 20000.
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(1), 20000, 20000);
+
+    // Approved expense (via the real endpoint - defaults to APPROVED).
+    await request(app.getHttpServer())
+      .post('/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ category: 'Fuel', amount: 3000, incurredAt: isoDaysAgo(1), motorcycleId })
+      .expect(201);
+
+    // Pending expense of a DIFFERENT amount, created directly since no
+    // endpoint can produce PENDING yet.
+    const pending = await requestContext.runUnscoped(() =>
+      prisma.client.expense.create({
+        data: {
+          tenantId,
+          motorcycleId,
+          category: 'Repairs',
+          amount: 5000,
+          incurredAt: new Date(`${isoDaysAgo(1)}T00:00:00.000Z`),
+          status: ExpenseStatus.PENDING,
+        },
+      }),
+    );
+
+    const before = await request(app.getHttpServer())
+      .get('/analytics/pnl')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    // Only the 3000 APPROVED expense counts - the 5000 PENDING one must not
+    // move this number at all, in either direction.
+    expect(before.body.expenses).toBe('3000.00');
+    expect(before.body.netProfit).toBe('17000.00'); // 20000 - 3000
+
+    await requestContext.runUnscoped(() =>
+      prisma.client.expense.update({
+        where: { id: pending.id },
+        data: { status: ExpenseStatus.APPROVED },
+      }),
+    );
+
+    const after = await request(app.getHttpServer())
+      .get('/analytics/pnl')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(after.body.expenses).toBe('8000.00'); // 3000 + 5000
+    expect(after.body.netProfit).toBe('12000.00'); // 20000 - 8000
   });
 
   it('keeps each tenant to its own numbers and forbids drivers', async () => {

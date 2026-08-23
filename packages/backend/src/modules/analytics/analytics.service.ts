@@ -1,11 +1,22 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { PaymentStatus, Prisma, UserRole, VehicleType } from '@prisma/client';
+import { ExpenseStatus, PaymentStatus, Prisma, UserRole, VehicleType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { buildDateRangeFilter } from '../expense/expense.service';
 import { ReportRangeQueryDto } from './dto/report-range-query.dto';
 
 const MAINTENANCE_CATEGORY = 'Maintenance';
+
+/**
+ * Stage H1 (DESIGN_RIDER_EXPENSES.md). A PENDING or REJECTED expense is not
+ * yet, or never was, a real cost - it must not move P&L until an
+ * OWNER/MANAGER approves it (H2). Folded into expenseWhere() below, the one
+ * shared where-builder already used everywhere Expense feeds into P&L (the
+ * tenant-summary aggregate, the per-motorcycle rollup, and the category
+ * groupBy) - every one of those inherits this filter automatically, rather
+ * than needing to be touched individually.
+ */
+export const COUNTED_EXPENSE: Prisma.ExpenseWhereInput = { status: ExpenseStatus.APPROVED };
 
 type DateRange = ReturnType<typeof buildDateRangeFilter>;
 
@@ -92,6 +103,7 @@ export class AnalyticsService {
 
   private expenseWhere(range: DateRange, vt?: VehicleType): Prisma.ExpenseWhereInput {
     return {
+      ...COUNTED_EXPENSE,
       ...(range ? { incurredAt: range } : {}),
       ...(vt ? { motorcycle: { vehicleType: vt } } : {}),
     };

@@ -119,16 +119,16 @@ enum MaintenanceReminderKind {
 /// A fleet-owning company/account. Root of multi-tenancy - every other table
 /// scopes its data to a tenantId.
 model Tenant {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   name            String
-  contactEmail    String?  @map("contact_email")
-  contactPhone    String?  @map("contact_phone")
+  contactEmail    String? @map("contact_email")
+  contactPhone    String? @map("contact_phone")
   /// Company party block on the hire-purchase contract (§Part 1). No API
   /// currently sets these - there is no Tenant CRUD surface in this codebase
   /// yet - so they render "Haijajazwa / Not on file" until one exists.
-  physicalAddress String?  @map("physical_address")
-  directorName    String?  @map("director_name")
-  isActive        Boolean  @default(true) @map("is_active")
+  physicalAddress String? @map("physical_address")
+  directorName    String? @map("director_name")
+  isActive        Boolean @default(true) @map("is_active")
 
   /// Stage S1 - see TenantStatus. Independent of isActive above: isActive is
   /// the existing, separate switch the notification cron jobs already filter
@@ -158,22 +158,22 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users             User[]
-  drivers           Driver[]
-  motorcycles       Motorcycle[]
-  dailyAssignments  DailyAssignment[]
-  dailyPayments     DailyPayment[]
-  gpsLocations      GpsLocation[]
-  maintenanceLogs   MaintenanceLog[]
-  expenses          Expense[]
-  guarantors        Guarantor[]
-  documents         Document[]
-  documentAlerts    DocumentAlert[]
-  assignmentAlerts  AssignmentAlert[]
+  users                User[]
+  drivers              Driver[]
+  motorcycles          Motorcycle[]
+  dailyAssignments     DailyAssignment[]
+  dailyPayments        DailyPayment[]
+  gpsLocations         GpsLocation[]
+  maintenanceLogs      MaintenanceLog[]
+  expenses             Expense[]
+  guarantors           Guarantor[]
+  documents            Document[]
+  documentAlerts       DocumentAlert[]
+  assignmentAlerts     AssignmentAlert[]
   maintenanceReminders MaintenanceReminder[]
-  transportJobs     TransportJob[]
-  paymentAccounts   PaymentAccount[]
-  dayExcusals       DayExcusal[]
+  transportJobs        TransportJob[]
+  paymentAccounts      PaymentAccount[]
+  dayExcusals          DayExcusal[]
 
   @@map("tenants")
 }
@@ -221,23 +221,23 @@ model User {
 /// Soft-deleted (isActive/deletedAt) rather than hard-deleted so that
 /// DailyAssignment/DailyPayment history stays intact.
 model Driver {
-  id                String    @id @default(cuid())
-  tenantId          String    @map("tenant_id")
-  tenant            Tenant    @relation(fields: [tenantId], references: [id])
-  userId            String    @unique @map("user_id")
-  user              User      @relation(fields: [userId], references: [id])
-  licenseNumber     String    @map("license_number")
+  id                String     @id @default(cuid())
+  tenantId          String     @map("tenant_id")
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  userId            String     @unique @map("user_id")
+  user              User       @relation(fields: [userId], references: [id])
+  licenseNumber     String     @map("license_number")
   driverType        DriverType @default(RIDER) @map("driver_type")
-  nationalId        String?   @map("national_id")
-  emergencyContact  String?   @map("emergency_contact")
+  nationalId        String?    @map("national_id")
+  emergencyContact  String?    @map("emergency_contact")
   /// The residence the hire-purchase contract identifies the driver by.
-  residenceWard     String?   @map("residence_ward")
-  residenceDistrict String?   @map("residence_district")
-  residenceRegion   String?   @map("residence_region")
-  isActive          Boolean   @default(true) @map("is_active")
-  deletedAt         DateTime? @map("deleted_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  residenceWard     String?    @map("residence_ward")
+  residenceDistrict String?    @map("residence_district")
+  residenceRegion   String?    @map("residence_region")
+  isActive          Boolean    @default(true) @map("is_active")
+  deletedAt         DateTime?  @map("deleted_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
 
   dailyAssignments DailyAssignment[]
   dailyPayments    DailyPayment[]
@@ -253,24 +253,24 @@ model Driver {
 /// bike-financing arrangement. A driver can have any number of guarantors -
 /// no minimum is enforced here (the UI will encourage at least two).
 model Guarantor {
-  id           String    @id @default(cuid())
-  tenantId     String    @map("tenant_id")
-  tenant       Tenant    @relation(fields: [tenantId], references: [id])
-  driverId     String    @map("rider_id")
-  driver       Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  firstName    String    @map("first_name")
-  lastName     String    @map("last_name")
-  phone        String
-  relationship String?
-  nationalId   String?   @map("national_id")
+  id                String    @id @default(cuid())
+  tenantId          String    @map("tenant_id")
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  driverId          String    @map("rider_id")
+  driver            Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  firstName         String    @map("first_name")
+  lastName          String    @map("last_name")
+  phone             String
+  relationship      String?
+  nationalId        String?   @map("national_id")
   /// The next-of-kin residence printed on the hire-purchase contract (§Part 1).
-  residenceWard      String?   @map("residence_ward")
-  residenceDistrict  String?   @map("residence_district")
-  residenceRegion    String?   @map("residence_region")
-  isActive     Boolean   @default(true) @map("is_active")
-  deletedAt    DateTime? @map("deleted_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  residenceWard     String?   @map("residence_ward")
+  residenceDistrict String?   @map("residence_district")
+  residenceRegion   String?   @map("residence_region")
+  isActive          Boolean   @default(true) @map("is_active")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([tenantId])
   @@index([driverId])
@@ -367,32 +367,32 @@ model Motorcycle {
 /// can only be assigned to one driver per day, and vice versa (see the two
 /// @@unique constraints below).
 model DailyAssignment {
-  id            String     @id @default(cuid())
-  tenantId      String     @map("tenant_id")
-  tenant        Tenant     @relation(fields: [tenantId], references: [id])
-  driverId      String     @map("rider_id")
-  driver        Driver     @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  motorcycleId  String     @map("motorcycle_id")
-  motorcycle    Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
-  assignedDate  DateTime   @map("assigned_date") @db.Date
-  targetAmount  Decimal    @map("target_amount") @db.Decimal(10, 2)
-  notes         String?
+  id                       String     @id @default(cuid())
+  tenantId                 String     @map("tenant_id")
+  tenant                   Tenant     @relation(fields: [tenantId], references: [id])
+  driverId                 String     @map("rider_id")
+  driver                   Driver     @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  motorcycleId             String     @map("motorcycle_id")
+  motorcycle               Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  assignedDate             DateTime   @map("assigned_date") @db.Date
+  targetAmount             Decimal    @map("target_amount") @db.Decimal(10, 2)
+  notes                    String?
   /// Permanent, never-repeating ride number (e.g. BF-7K3M9QP2) assigned when
   /// the ride is registered. All of this ride's deposits/receipts quote it, so
   /// a bank statement or mobile-money callback reconciles back to this ride.
-  reference     String?    @unique
+  reference                String?    @unique
   /// Set together, only when an OWNER overrides a driver-category/vehicle-type
   /// mismatch at creation. Null on every ordinary (compatible) assignment.
-  categoryOverrideReason   String?   @map("category_override_reason")
-  categoryOverrideByUserId String?   @map("category_override_by_user_id")
-  categoryOverrideAt       DateTime? @map("category_override_at")
+  categoryOverrideReason   String?    @map("category_override_reason")
+  categoryOverrideByUserId String?    @map("category_override_by_user_id")
+  categoryOverrideAt       DateTime?  @map("category_override_at")
   /// Non-null => generated by the hire-purchase nightly generator (a later
   /// stage). Plain scalar, not a Prisma relation - see OwnershipPlan's own
   /// comment. A plan assignment is otherwise ordinary: payments, revenue
   /// queries and the missed-payment notification all work against it unchanged.
-  ownershipPlanId String? @map("ownership_plan_id")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  ownershipPlanId          String?    @map("ownership_plan_id")
+  createdAt                DateTime   @default(now()) @map("created_at")
+  updatedAt                DateTime   @updatedAt @map("updated_at")
 
   dailyPayments DailyPayment[]
   alert         AssignmentAlert?
@@ -482,21 +482,21 @@ model GpsLocation {
 }
 
 model MaintenanceLog {
-  id           String     @id @default(cuid())
-  tenantId     String     @map("tenant_id")
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  motorcycleId String     @map("motorcycle_id")
-  motorcycle   Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
-  mechanicId   String?    @map("mechanic_id")
-  mechanic     User?      @relation(fields: [mechanicId], references: [id])
-  description  String
-  cost         Decimal    @db.Decimal(10, 2)
-  performedAt  DateTime   @map("performed_at") @db.Date
-  mileageAtService   Int?      @map("mileage_at_service")
-  nextServiceDate    DateTime? @map("next_service_date") @db.Date
-  nextServiceMileage Int?      @map("next_service_mileage")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  id                 String     @id @default(cuid())
+  tenantId           String     @map("tenant_id")
+  tenant             Tenant     @relation(fields: [tenantId], references: [id])
+  motorcycleId       String     @map("motorcycle_id")
+  motorcycle         Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  mechanicId         String?    @map("mechanic_id")
+  mechanic           User?      @relation(fields: [mechanicId], references: [id])
+  description        String
+  cost               Decimal    @db.Decimal(10, 2)
+  performedAt        DateTime   @map("performed_at") @db.Date
+  mileageAtService   Int?       @map("mileage_at_service")
+  nextServiceDate    DateTime?  @map("next_service_date") @db.Date
+  nextServiceMileage Int?       @map("next_service_mileage")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
   reminders MaintenanceReminder[]
 
@@ -512,14 +512,14 @@ model MaintenanceLog {
 /// new maintenance log (a new target), which reminds afresh. Cascade-deletes
 /// with its maintenance log.
 model MaintenanceReminder {
-  id                String                  @id @default(cuid())
-  tenantId          String                  @map("tenant_id")
-  tenant            Tenant                  @relation(fields: [tenantId], references: [id])
-  maintenanceLogId  String                  @map("maintenance_log_id")
-  maintenanceLog    MaintenanceLog          @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
-  kind              MaintenanceReminderKind
-  sentTo            String                  @map("sent_to")
-  sentAt            DateTime                @default(now()) @map("sent_at")
+  id               String                  @id @default(cuid())
+  tenantId         String                  @map("tenant_id")
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id])
+  maintenanceLogId String                  @map("maintenance_log_id")
+  maintenanceLog   MaintenanceLog          @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
+  kind             MaintenanceReminderKind
+  sentTo           String                  @map("sent_to")
+  sentAt           DateTime                @default(now()) @map("sent_at")
 
   @@unique([maintenanceLogId, kind])
   @@index([tenantId])
@@ -529,25 +529,65 @@ model MaintenanceReminder {
 /// Fleet expense, optionally tied to a specific motorcycle (fuel, repair)
 /// or tenant-wide (e.g. office rent) when motorcycleId is null.
 model Expense {
-  id           String      @id @default(cuid())
-  tenantId     String      @map("tenant_id")
-  tenant       Tenant      @relation(fields: [tenantId], references: [id])
-  motorcycleId String?     @map("motorcycle_id")
-  motorcycle   Motorcycle? @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  id                 String        @id @default(cuid())
+  tenantId           String        @map("tenant_id")
+  tenant             Tenant        @relation(fields: [tenantId], references: [id])
+  motorcycleId       String?       @map("motorcycle_id")
+  motorcycle         Motorcycle?   @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
   /// When set, this expense is attributed to a transport job for per-job P&L.
   /// Job expenses also carry motorcycleId (the job's vehicle) for per-vehicle rollups.
-  transportJobId String?       @map("transport_job_id")
-  transportJob   TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
-  category     String
-  amount       Decimal     @db.Decimal(10, 2)
-  incurredAt   DateTime    @map("incurred_at") @db.Date
-  description  String?
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  transportJobId     String?       @map("transport_job_id")
+  transportJob       TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
+  category           String
+  amount             Decimal       @db.Decimal(10, 2)
+  incurredAt         DateTime      @map("incurred_at") @db.Date
+  description        String?
+  /// Stage H1 (DESIGN_RIDER_EXPENSES.md). @default(APPROVED), not PENDING:
+  /// an OWNER/MANAGER creating an expense on the dashboard today IS the
+  /// approver, and every row that exists before this migration must keep
+  /// counting exactly as it always has - zero backfill. Only the H2
+  /// rider-submission endpoint will ever explicitly write PENDING.
+  status             ExpenseStatus @default(APPROVED)
+  /// Stage H1 - who submitted this expense, and through what channel. A
+  /// dashboard-created expense has submittedByUserId (the OWNER/MANAGER) and
+  /// no submittedByRiderId; a rider-submitted one (H2) has the reverse. Both
+  /// null is not expected once H2 ships, but is exactly every row that
+  /// exists before it - so neither is required now. Plain scalars, no
+  /// Prisma relation, matching TransportJob.categoryOverrideByUserId's
+  /// existing audit-trail-field convention.
+  submittedByUserId  String?       @map("submitted_by_user_id")
+  submittedByRiderId String?       @map("submitted_by_rider_id")
+  /// Stage H1 - which of the rider's DailyAssignment days this expense
+  /// belongs to, for a rider-submitted expense (H2). Null for every
+  /// dashboard-created expense, exactly like motorcycleId/transportJobId are
+  /// null for the kinds of expenses that don't apply to.
+  dailyAssignmentId  String?       @map("daily_assignment_id")
+  approvedByUserId   String?       @map("approved_by_user_id")
+  approvedAt         DateTime?     @map("approved_at")
+  rejectionReason    String?       @map("rejection_reason")
+  /// Mirrors DailyPayment's receipt columns exactly (same names, same
+  /// types) - applying that existing pattern to a second model, not
+  /// inventing a new one. Upload endpoint is H2/H4; these are just columns
+  /// for now.
+  receiptStorageKey  String?       @map("receipt_storage_key")
+  receiptFileName    String?       @map("receipt_file_name")
+  receiptMimeType    String?       @map("receipt_mime_type")
+  receiptSizeBytes   Int?          @map("receipt_size_bytes")
+  receiptUploadedAt  DateTime?     @map("receipt_uploaded_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
   @@index([tenantId])
   @@index([transportJobId])
   @@map("expenses")
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("expense_status")
 }
 
 enum TransportJobStatus {
@@ -562,32 +602,32 @@ enum TransportJobStatus {
 /// per-vehicle profit/loss (the cost-benefit view). Rental vehicles
 /// (motorbike/bajaji) use DailyAssignment instead.
 model TransportJob {
-  id            String             @id @default(cuid())
-  tenantId      String             @map("tenant_id")
-  tenant        Tenant             @relation(fields: [tenantId], references: [id])
-  motorcycleId  String             @map("motorcycle_id")
-  motorcycle    Motorcycle         @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
-  driverId      String?            @map("rider_id")
-  driver        Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  ownerDriven   Boolean            @default(false) @map("owner_driven")
-  reference     String?            @unique
-  origin        String
-  destination   String
-  cargo         String?
-  revenue       Decimal            @db.Decimal(12, 2)
-  status        TransportJobStatus @default(SCHEDULED)
-  scheduledDate DateTime           @map("scheduled_date") @db.Date
-  pickedUpAt    DateTime?          @map("picked_up_at")
-  deliveredAt   DateTime?          @map("delivered_at")
+  id                       String             @id @default(cuid())
+  tenantId                 String             @map("tenant_id")
+  tenant                   Tenant             @relation(fields: [tenantId], references: [id])
+  motorcycleId             String             @map("motorcycle_id")
+  motorcycle               Motorcycle         @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+  driverId                 String?            @map("rider_id")
+  driver                   Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  ownerDriven              Boolean            @default(false) @map("owner_driven")
+  reference                String?            @unique
+  origin                   String
+  destination              String
+  cargo                    String?
+  revenue                  Decimal            @db.Decimal(12, 2)
+  status                   TransportJobStatus @default(SCHEDULED)
+  scheduledDate            DateTime           @map("scheduled_date") @db.Date
+  pickedUpAt               DateTime?          @map("picked_up_at")
+  deliveredAt              DateTime?          @map("delivered_at")
   /// Set together, only when an OWNER overrides a driver-category/vehicle-type
   /// mismatch at creation. Null on every ordinary (compatible) job.
-  categoryOverrideReason   String?   @map("category_override_reason")
-  categoryOverrideByUserId String?   @map("category_override_by_user_id")
-  categoryOverrideAt       DateTime? @map("category_override_at")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
+  categoryOverrideReason   String?            @map("category_override_reason")
+  categoryOverrideByUserId String?            @map("category_override_by_user_id")
+  categoryOverrideAt       DateTime?          @map("category_override_at")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
 
-  expenses      Expense[]
+  expenses Expense[]
 
   @@index([tenantId])
   @@index([motorcycleId])
@@ -595,10 +635,10 @@ model TransportJob {
 }
 
 enum OwnershipPlanStatus {
-  ACTIVE      // generating daily instalments
-  COMPLETED   // fully paid, the vehicle is the driver's
-  DEFAULTED   // owner gave up on it
-  CANCELLED   // called off, e.g. entered by mistake
+  ACTIVE // generating daily instalments
+  COMPLETED // fully paid, the vehicle is the driver's
+  DEFAULTED // owner gave up on it
+  CANCELLED // called off, e.g. entered by mistake
 
   @@map("ownership_plan_status")
 }
@@ -619,10 +659,10 @@ enum OwnershipPlanStatus {
 /// the schema is the whole story here. Enforced again in the service layer
 /// with a clear error message; the index is the backstop, not the check.
 model OwnershipPlan {
-  id             String   @id @default(cuid())
-  tenantId       String   @map("tenant_id")
-  driverId       String   @map("driver_id")       // the buyer
-  motorcycleId   String   @map("motorcycle_id")   // the vehicle being bought
+  id           String  @id @default(cuid())
+  tenantId     String  @map("tenant_id")
+  driverId     String  @map("driver_id") // the buyer
+  motorcycleId String  @map("motorcycle_id") // the vehicle being bought
   // Stage G Part 3: the guarantor this specific plan's contract names as
   // next of kin. Nullable, and a plain scalar like tenantId/driverId/
   // motorcycleId above (DESIGN_HIRE_PURCHASE.md §3) - existence, same-tenant,
@@ -632,23 +672,23 @@ model OwnershipPlan {
   // an explicit guarantorId here is what the owner actually chooses at plan
   // creation. A driver may still have several guarantors - this is which one
   // this plan's contract prints, nothing more.
-  guarantorId    String?  @map("guarantor_id")
+  guarantorId  String? @map("guarantor_id")
 
-  dailyAmount    Decimal  @db.Decimal(10, 2) @map("daily_amount")   // e.g. 12000.00
+  dailyAmount     Decimal @map("daily_amount") @db.Decimal(10, 2) // e.g. 12000.00
   // Stage G7 - the agreed number of payment days, negotiated directly between
   // owner and driver alongside dailyAmount. totalOwed = dailyAmount *
   // instalmentCount, exactly, always - see ownership-plan.derivation.ts. This
   // replaced totalOwed = totalPrice - downPayment, which forced a division by
   // dailyAmount that only sometimes came out even.
-  instalmentCount Int    @map("instalment_count")
+  instalmentCount Int     @map("instalment_count")
   // Declared value of the vehicle and the deposit taken - printed on the
   // contract, but (Stage G7) no longer used to derive totalOwed or anything
   // else arithmetic. May legitimately differ from dailyAmount * instalmentCount.
-  totalPrice     Decimal  @db.Decimal(12, 2) @map("total_price")
-  downPayment    Decimal  @db.Decimal(12, 2) @default(0) @map("down_payment")
+  totalPrice      Decimal @map("total_price") @db.Decimal(12, 2)
+  downPayment     Decimal @default(0) @map("down_payment") @db.Decimal(12, 2)
 
-  startDate       DateTime  @db.Date @map("start_date")        // contract begins
-  contractEndDate DateTime? @db.Date @map("contract_end_date") // agreed end, see §5
+  startDate       DateTime  @map("start_date") @db.Date // contract begins
+  contractEndDate DateTime? @map("contract_end_date") @db.Date // agreed end, see §5
   // All seven days, matching "siku ... mfululizo" (consecutive calendar days,
   // no weekend exclusion) in the real contract - Mon-Sat-only was a wrong
   // assumption in an earlier stage. Existing rows are NOT migrated: this
@@ -661,8 +701,8 @@ model OwnershipPlan {
   // money that moves them closer to owning the vehicle, so this must never
   // join totalOwed/amountBilled/amountPaid/remainingToBill/remainingToOwn/
   // remainingUnreserved. The owner collects it by hand.
-  lateFeeAmount                    Decimal?  @db.Decimal(10, 2) @map("late_fee_amount")
-  breachAfterConsecutiveMissedDays Int       @default(5) @map("breach_after_consecutive_missed_days")
+  lateFeeAmount                    Decimal? @map("late_fee_amount") @db.Decimal(10, 2)
+  breachAfterConsecutiveMissedDays Int      @default(5) @map("breach_after_consecutive_missed_days")
 
   // Completion checklist - set later, by hand, once the plan is fully paid.
   // Not read by the contract renderer (all null at contract-generation time);
@@ -671,13 +711,13 @@ model OwnershipPlan {
   spareKeyHandedOverAt         DateTime? @map("spare_key_handed_over_at")
   nameTransferConfirmedAt      DateTime? @map("name_transfer_confirmed_at")
 
-  status         OwnershipPlanStatus @default(ACTIVE)
-  completedAt    DateTime? @map("completed_at")
-  defaultedAt    DateTime? @map("defaulted_at")
-  notes          String?
+  status      OwnershipPlanStatus @default(ACTIVE)
+  completedAt DateTime?           @map("completed_at")
+  defaultedAt DateTime?           @map("defaulted_at")
+  notes       String?
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([tenantId, status])
   @@index([tenantId, driverId])
@@ -720,19 +760,19 @@ enum DayExcusalStatus {
 /// remainingToOwn, the same rule DESIGN_HIRE_PURCHASE.md §9c gives the late
 /// fine - the charge still stands and the driver still owes it.
 model DayExcusal {
-  id              String           @id @default(cuid())
-  tenantId        String           @map("tenant_id")
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
-  ownershipPlanId String           @map("ownership_plan_id")
-  excusedDate     DateTime         @db.Date @map("excused_date")
-  reason          String
-  status          DayExcusalStatus @default(REQUESTED)
+  id                String           @id @default(cuid())
+  tenantId          String           @map("tenant_id")
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  ownershipPlanId   String           @map("ownership_plan_id")
+  excusedDate       DateTime         @map("excused_date") @db.Date
+  reason            String
+  status            DayExcusalStatus @default(REQUESTED)
   /// Null when staff-created (an OWNER/MANAGER typing this in on the
   /// driver's behalf) - set once the driver app can create these itself.
-  requestedByUserId String?   @map("requested_by_user_id")
-  decidedByUserId   String?   @map("decided_by_user_id")
-  decidedAt         DateTime? @map("decided_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  requestedByUserId String?          @map("requested_by_user_id")
+  decidedByUserId   String?          @map("decided_by_user_id")
+  decidedAt         DateTime?        @map("decided_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   @@index([tenantId, ownershipPlanId, excusedDate])
   @@map("day_excusals")
