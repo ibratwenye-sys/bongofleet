@@ -95,8 +95,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
   @ApiBearerAuth()
-  me(@CurrentUser() user: AuthenticatedUserWithTenantLock): UserResponseDto {
-    return UserResponseDto.fromProfile(user);
+  async me(@CurrentUser() user: AuthenticatedUserWithTenantLock): Promise<UserResponseDto> {
+    const driverType = await this.authService.getDriverType(user);
+    return UserResponseDto.fromProfile({ ...user, driverType });
   }
 
   // Stage S1 - allow-listed: leaving must always work, locked or not.

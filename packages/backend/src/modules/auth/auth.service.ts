@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UserRole } from '@prisma/client';
+import { DriverType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { requestContext } from '../../common/context/request-context';
@@ -211,6 +211,33 @@ export class AuthService {
       trialEndsAt: user.tenant.trialEndsAt,
       billingExemptAt: user.tenant.billingExemptAt,
     };
+  }
+
+  /**
+   * Stage DM1 - the driver app's /auth/me needs to know rider vs car/truck
+   * driver, but that's a Driver-table fact and deliberately NOT loaded in
+   * validateToken above: that method runs on EVERY authenticated request via
+   * JwtStrategy (see jwt.strategy.ts), not just this one, so joining Driver
+   * there would tax every single API call in the app to serve a field only
+   * /auth/me's response actually uses. This is a second, separate query,
+   * run only when /auth/me is called.
+   *
+   * Only a RIDER-role user ever has a Driver row - OWNER/MANAGER/MECHANIC
+   * don't (see driver.service.ts's create, which always sets role: RIDER).
+   * The role check below is an optimization, not a security boundary: this
+   * runs inside request context, so the tenant-scoping extension already
+   * ensures it can only ever resolve the caller's own row.
+   */
+  async getDriverType(user: AuthenticatedUser): Promise<DriverType | null> {
+    if (user.role !== UserRole.RIDER) {
+      return null;
+    }
+
+    const driver = await this.prisma.client.driver.findUnique({
+      where: { userId: user.userId },
+      select: { driverType: true },
+    });
+    return driver?.driverType ?? null;
   }
 
   private async issueTokenPair(profile: Omit<AuthenticatedUser, 'jti'>): Promise<TokenResponseDto> {

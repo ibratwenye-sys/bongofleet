@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { DriverType, UserRole } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -16,6 +16,9 @@ describe('AuthService', () => {
       user: {
         findFirst: jest.Mock;
         findMany: jest.Mock;
+        findUnique: jest.Mock;
+      };
+      driver: {
         findUnique: jest.Mock;
       };
       $transaction: jest.Mock;
@@ -39,6 +42,7 @@ describe('AuthService', () => {
     prisma = {
       client: {
         user: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+        driver: { findUnique: jest.fn() },
         $transaction: jest.fn(),
       },
     };
@@ -193,6 +197,53 @@ describe('AuthService', () => {
       });
 
       await expect(service.refreshToken('garbage')).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('getDriverType', () => {
+    const riderActor = {
+      userId: 'user-rider',
+      tenantId: 'tenant-1',
+      role: UserRole.RIDER,
+      email: 'rider@example.com',
+      firstName: 'R',
+      lastName: 'Ider',
+      jti: 'jti-1',
+    };
+
+    it('returns RIDER for a rider-mode driver', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ driverType: DriverType.RIDER });
+
+      await expect(service.getDriverType(riderActor)).resolves.toBe(DriverType.RIDER);
+      expect(prisma.client.driver.findUnique).toHaveBeenCalledWith({
+        where: { userId: 'user-rider' },
+        select: { driverType: true },
+      });
+    });
+
+    it('returns CAR_DRIVER for a car-driver-mode driver', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ driverType: DriverType.CAR_DRIVER });
+
+      await expect(service.getDriverType(riderActor)).resolves.toBe(DriverType.CAR_DRIVER);
+    });
+
+    it('returns TRUCK_DRIVER for a truck-driver-mode driver', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue({ driverType: DriverType.TRUCK_DRIVER });
+
+      await expect(service.getDriverType(riderActor)).resolves.toBe(DriverType.TRUCK_DRIVER);
+    });
+
+    it('never queries Driver for a non-RIDER role - OWNER/MANAGER/MECHANIC have no Driver row', async () => {
+      const ownerActor = { ...riderActor, userId: 'user-owner', role: UserRole.OWNER };
+
+      await expect(service.getDriverType(ownerActor)).resolves.toBeNull();
+      expect(prisma.client.driver.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('returns null if a RIDER-role user unexpectedly has no Driver row', async () => {
+      prisma.client.driver.findUnique.mockResolvedValue(null);
+
+      await expect(service.getDriverType(riderActor)).resolves.toBeNull();
     });
   });
 });

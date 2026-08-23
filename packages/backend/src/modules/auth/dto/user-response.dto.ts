@@ -1,4 +1,4 @@
-import { TenantStatus, UserRole } from '@prisma/client';
+import { DriverType, TenantStatus, UserRole } from '@prisma/client';
 
 export class UserResponseDto {
   id: string;
@@ -13,6 +13,11 @@ export class UserResponseDto {
   // request fail with no way to explain why.
   tenantStatus: TenantStatus;
   trialEndsAt: Date | null;
+  // Stage DM1 - null for anyone without a Driver row (OWNER/MANAGER/
+  // MECHANIC); the driver app reads this to decide rider vs car/truck-driver
+  // UI. See AuthService.getDriverType for why this is a separate lookup
+  // rather than something validateToken already carries.
+  driverType: DriverType | null;
 
   static fromProfile(profile: {
     userId: string;
@@ -23,6 +28,7 @@ export class UserResponseDto {
     lastName: string;
     tenantStatus: TenantStatus;
     trialEndsAt: Date | null;
+    driverType: DriverType | null;
   }): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = profile.userId;
@@ -33,6 +39,7 @@ export class UserResponseDto {
     dto.lastName = profile.lastName;
     dto.tenantStatus = profile.tenantStatus;
     dto.trialEndsAt = profile.trialEndsAt;
+    dto.driverType = profile.driverType;
     return dto;
   }
 }

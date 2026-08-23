@@ -4,7 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { setOnSessionExpired } from './src/api';
 import { getAccessToken } from './src/storage';
 import { LoginScreen } from './src/screens/LoginScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
+import { DriverModeGate } from './src/screens/DriverModeGate';
+import { DriverDataProvider } from './src/context/DriverDataContext';
 
 type Screen = 'loading' | 'login' | 'home';
 
@@ -25,7 +26,11 @@ export default function App() {
         </View>
       )}
       {screen === 'login' && <LoginScreen onLoggedIn={() => setScreen('home')} />}
-      {screen === 'home' && <HomeScreen onLoggedOut={() => setScreen('login')} />}
+      {screen === 'home' && (
+        <DriverDataProvider onLoggedOut={() => setScreen('login')}>
+          <DriverModeGate />
+        </DriverDataProvider>
+      )}
     </View>
   );
 }

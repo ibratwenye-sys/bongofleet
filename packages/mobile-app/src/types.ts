@@ -6,12 +6,16 @@ export interface TokenResponse {
   expiresIn: number;
 }
 
+export type DriverType = 'RIDER' | 'CAR_DRIVER' | 'TRUCK_DRIVER';
+
 export interface Me {
   id: string;
   email: string;
   role: 'OWNER' | 'MANAGER' | 'RIDER' | 'MECHANIC';
   firstName: string;
   lastName: string;
+  /** Null for anyone without a Driver row (OWNER/MANAGER/MECHANIC). */
+  driverType: DriverType | null;
 }
 
 export interface Assignment {

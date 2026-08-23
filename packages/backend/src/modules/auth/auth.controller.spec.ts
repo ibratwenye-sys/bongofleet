@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { TenantStatus, UserRole } from '@prisma/client';
+import { DriverType, TenantStatus, UserRole } from '@prisma/client';
 import { AuthController } from './auth.controller';
 import { PasswordResetService } from './password-reset.service';
 import { SignupVerificationService } from './signup-verification.service';
@@ -7,7 +7,13 @@ import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let service: { signup: jest.Mock; login: jest.Mock; refreshToken: jest.Mock; logout: jest.Mock };
+  let service: {
+    signup: jest.Mock;
+    login: jest.Mock;
+    refreshToken: jest.Mock;
+    logout: jest.Mock;
+    getDriverType: jest.Mock;
+  };
   let signupVerificationService: {
     sendCode: jest.Mock;
     confirmCode: jest.Mock;
@@ -22,6 +28,7 @@ describe('AuthController', () => {
       login: jest.fn().mockResolvedValue(tokenPair),
       refreshToken: jest.fn().mockResolvedValue(tokenPair),
       logout: jest.fn().mockResolvedValue(undefined),
+      getDriverType: jest.fn().mockResolvedValue(null),
     };
     signupVerificationService = {
       sendCode: jest.fn().mockResolvedValue(undefined),
@@ -76,7 +83,7 @@ describe('AuthController', () => {
     expect(service.refreshToken).toHaveBeenCalledWith('r');
   });
 
-  it('me maps the authenticated user to a UserResponseDto', () => {
+  it('me maps the authenticated user to a UserResponseDto, driverType null for a non-driver role', async () => {
     const user = {
       userId: 'u1',
       tenantId: 't1',
@@ -90,8 +97,9 @@ describe('AuthController', () => {
       billingExemptAt: null,
     };
 
-    const result = controller.me(user);
+    const result = await controller.me(user);
 
+    expect(service.getDriverType).toHaveBeenCalledWith(user);
     expect(result).toEqual({
       id: 'u1',
       tenantId: 't1',
@@ -101,8 +109,29 @@ describe('AuthController', () => {
       lastName: 'B',
       tenantStatus: TenantStatus.ACTIVE,
       trialEndsAt: null,
+      driverType: null,
     });
     expect(result).not.toHaveProperty('passwordHash');
+  });
+
+  it('me carries a RIDER driver type through to the response', async () => {
+    const user = {
+      userId: 'u2',
+      tenantId: 't1',
+      role: UserRole.RIDER,
+      email: 'rider@b.com',
+      firstName: 'R',
+      lastName: 'Ider',
+      jti: 'jti-2',
+      tenantStatus: TenantStatus.ACTIVE,
+      trialEndsAt: null,
+      billingExemptAt: null,
+    };
+    service.getDriverType.mockResolvedValueOnce(DriverType.TRUCK_DRIVER);
+
+    const result = await controller.me(user);
+
+    expect(result.driverType).toBe(DriverType.TRUCK_DRIVER);
   });
 
   it('logout delegates to AuthService.logout with userId and jti', async () => {
