@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { CacheModule } from './cache/cache.module';
 import { ThrottlerRedisService } from './redis/throttler-redis.service';
 import { buildThrottlerOptions } from './common/throttle/throttler-options.factory';
 import { AuthModule } from './modules/auth/auth.module';
@@ -50,6 +51,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
+    CacheModule,
     AuthModule,
     PaymentModule,
     AssignmentModule,

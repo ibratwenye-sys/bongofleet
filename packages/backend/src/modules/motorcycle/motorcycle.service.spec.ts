@@ -3,6 +3,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 import { MotorcycleStatus, UserRole } from '@prisma/client';
 import { MotorcycleService } from './motorcycle.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 
 describe('MotorcycleService', () => {
@@ -54,8 +55,18 @@ describe('MotorcycleService', () => {
       },
     };
 
+    const cache = {
+      get: jest.fn().mockResolvedValue(undefined),
+      set: jest.fn().mockResolvedValue(undefined),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
+
     const moduleRef = await Test.createTestingModule({
-      providers: [MotorcycleService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        MotorcycleService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: TenantCacheService, useValue: cache },
+      ],
     }).compile();
 
     service = moduleRef.get(MotorcycleService);

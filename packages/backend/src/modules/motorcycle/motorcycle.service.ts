@@ -4,12 +4,25 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { Motorcycle, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { CreateMotorcycleDto } from './dto/create-motorcycle.dto';
 import { UpdateMotorcycleDto } from './dto/update-motorcycle.dto';
 import { ListMotorcyclesQueryDto } from './dto/list-motorcycles-query.dto';
+
+const CACHE_RESOURCE = 'motorcycles';
+// The only cached shape is the plain, unfiltered, active-only list - the
+// common case (dashboard/list page load) and the one every write below can
+// invalidate with a single exact key. A status/vehicleType/search/
+// includeInactive query bypasses the cache entirely rather than caching
+// every filter combination - see list() below.
+const CACHE_PARAMS = 'default';
+
+function isDefaultQuery(query: ListMotorcyclesQueryDto): boolean {
+  return !query.includeInactive && !query.status && !query.vehicleType && !query.search;
+}
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
@@ -19,7 +32,14 @@ function assertOwnerOrManager(actor: AuthenticatedUser): void {
 
 @Injectable()
 export class MotorcycleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: TenantCacheService,
+  ) {}
+
+  private invalidateList(tenantId: string): Promise<void> {
+    return this.cache.invalidate(tenantId, CACHE_RESOURCE, CACHE_PARAMS);
+  }
 
   async create(dto: CreateMotorcycleDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
@@ -41,7 +61,7 @@ export class MotorcycleService {
     }
 
     try {
-      return await this.prisma.client.motorcycle.create({
+      const created = await this.prisma.client.motorcycle.create({
         data: {
           tenantId: actor.tenantId,
           registrationNumber: dto.registrationNumber,
@@ -55,6 +75,8 @@ export class MotorcycleService {
           status: dto.status,
         },
       });
+      await this.invalidateList(actor.tenantId);
+      return created;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException(
@@ -67,6 +89,24 @@ export class MotorcycleService {
 
   async list(query: ListMotorcyclesQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
+
+    if (isDefaultQuery(query)) {
+      const cached = await this.cache.get<Motorcycle[]>(
+        actor.tenantId,
+        CACHE_RESOURCE,
+        CACHE_PARAMS,
+      );
+      if (cached) {
+        return cached;
+      }
+
+      const list = await this.prisma.client.motorcycle.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      await this.cache.set(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS, list);
+      return list;
+    }
 
     const where: Prisma.MotorcycleWhereInput = query.includeInactive ? {} : { isActive: true };
 
@@ -123,7 +163,7 @@ export class MotorcycleService {
     }
 
     try {
-      return await this.prisma.client.motorcycle.update({
+      const updated = await this.prisma.client.motorcycle.update({
         where: { id },
         data: {
           registrationNumber: dto.registrationNumber,
@@ -137,6 +177,8 @@ export class MotorcycleService {
           status: dto.status,
         },
       });
+      await this.invalidateList(actor.tenantId);
+      return updated;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException(
@@ -159,6 +201,7 @@ export class MotorcycleService {
       where: { id },
       data: { isActive: false, deletedAt: new Date() },
     });
+    await this.invalidateList(actor.tenantId);
   }
 
   async reactivate(id: string, actor: AuthenticatedUser) {
@@ -169,9 +212,11 @@ export class MotorcycleService {
       throw new NotFoundException('Motorcycle not found');
     }
 
-    return this.prisma.client.motorcycle.update({
+    const reactivated = await this.prisma.client.motorcycle.update({
       where: { id },
       data: { isActive: true, deletedAt: null },
     });
+    await this.invalidateList(actor.tenantId);
+    return reactivated;
   }
 }

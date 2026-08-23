@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 
@@ -8,6 +9,18 @@ function assertOwner(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER) {
     throw new ForbiddenException('Only OWNER may view or change tenant settings');
   }
+}
+
+const CACHE_RESOURCE = 'tenant-settings';
+// No filters exist on this lookup at all - one tenant, one settings object -
+// so unlike the list endpoints above there is no "default vs filtered" split
+// to make; every call is cacheable.
+const CACHE_PARAMS = 'default';
+
+export interface TenantSettings {
+  name: string;
+  physicalAddress: string | null;
+  directorName: string | null;
 }
 
 /**
@@ -24,24 +37,41 @@ function assertOwner(actor: AuthenticatedUser): void {
  */
 @Injectable()
 export class TenantService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: TenantCacheService,
+  ) {}
 
-  async getSettings(actor: AuthenticatedUser) {
+  async getSettings(actor: AuthenticatedUser): Promise<TenantSettings> {
     assertOwner(actor);
+
+    const cached = await this.cache.get<TenantSettings>(
+      actor.tenantId,
+      CACHE_RESOURCE,
+      CACHE_PARAMS,
+    );
+    if (cached) {
+      return cached;
+    }
 
     const tenant = await this.prisma.client.tenant.findUnique({ where: { id: actor.tenantId } });
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
 
-    return {
+    const settings: TenantSettings = {
       name: tenant.name,
       physicalAddress: tenant.physicalAddress,
       directorName: tenant.directorName,
     };
+    await this.cache.set(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS, settings);
+    return settings;
   }
 
-  async updateSettings(dto: UpdateTenantSettingsDto, actor: AuthenticatedUser) {
+  async updateSettings(
+    dto: UpdateTenantSettingsDto,
+    actor: AuthenticatedUser,
+  ): Promise<TenantSettings> {
     assertOwner(actor);
 
     const existing = await this.prisma.client.tenant.findUnique({
@@ -59,10 +89,12 @@ export class TenantService {
       },
     });
 
-    return {
+    const settings: TenantSettings = {
       name: tenant.name,
       physicalAddress: tenant.physicalAddress,
       directorName: tenant.directorName,
     };
+    await this.cache.invalidate(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS);
+    return settings;
   }
 }

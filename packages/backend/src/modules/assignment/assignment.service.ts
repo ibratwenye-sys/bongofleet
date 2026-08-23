@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { OwnershipPlanStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { generateRideReference } from '../../common/reference.util';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
@@ -15,11 +16,33 @@ import { describeOwnershipConflict } from '../../common/ownership-plan-conflict'
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
+const CACHE_RESOURCE = 'assignments';
+// OWNER/MANAGER only, deliberately - see listAssignments below. A RIDER's
+// result is narrowed to their OWN driverId (getOwnDriverId), which the plain
+// tenant:{tenantId}:assignments:default key cannot distinguish between
+// riders: caching it for a RIDER would mean the first rider to hit an empty
+// cache warms it, and every OTHER rider in the same tenant sees THAT
+// rider's assignments for the rest of the TTL - a cross-user leak inside
+// one tenant, same failure shape as the cross-tenant leak this whole
+// caching layer exists to avoid. RIDER calls always hit Prisma directly.
+const CACHE_PARAMS = 'default';
+
+function isDefaultOwnerQuery(query: ListAssignmentsQueryDto): boolean {
+  return !query.driverId && !query.motorcycleId && !query.dateFrom && !query.dateTo;
+}
+
 @Injectable()
 export class AssignmentService {
   private readonly logger = new Logger(AssignmentService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: TenantCacheService,
+  ) {}
+
+  private invalidateList(tenantId: string): Promise<void> {
+    return this.cache.invalidate(tenantId, CACHE_RESOURCE, CACHE_PARAMS);
+  }
 
   async createAssignment(dto: CreateAssignmentDto, actor: AuthenticatedUser) {
     if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
@@ -101,7 +124,7 @@ export class AssignmentService {
     // conflict on motorcycle/driver is a real ConflictException, not a retry.
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this.prisma.client.dailyAssignment.create({
+        const created = await this.prisma.client.dailyAssignment.create({
           data: {
             tenantId: actor.tenantId,
             motorcycleId: dto.motorcycleId,
@@ -113,6 +136,8 @@ export class AssignmentService {
             ...categoryOverride,
           },
         });
+        await this.invalidateList(actor.tenantId);
+        return created;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           const target = error.meta?.target;
@@ -132,6 +157,18 @@ export class AssignmentService {
   }
 
   async listAssignments(query: ListAssignmentsQueryDto, actor: AuthenticatedUser) {
+    const cacheable = actor.role !== UserRole.RIDER && isDefaultOwnerQuery(query);
+    if (cacheable) {
+      const cached = await this.cache.get<Prisma.DailyAssignmentGetPayload<object>[]>(
+        actor.tenantId,
+        CACHE_RESOURCE,
+        CACHE_PARAMS,
+      );
+      if (cached) {
+        return cached;
+      }
+    }
+
     const where: Prisma.DailyAssignmentWhereInput = {};
 
     if (actor.role === UserRole.RIDER) {
@@ -151,10 +188,15 @@ export class AssignmentService {
       };
     }
 
-    return this.prisma.client.dailyAssignment.findMany({
+    const list = await this.prisma.client.dailyAssignment.findMany({
       where,
       orderBy: { assignedDate: 'desc' },
     });
+
+    if (cacheable) {
+      await this.cache.set(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS, list);
+    }
+    return list;
   }
 
   async getAssignment(id: string, actor: AuthenticatedUser) {
@@ -197,6 +239,7 @@ export class AssignmentService {
     }
 
     await this.prisma.client.dailyAssignment.delete({ where: { id } });
+    await this.invalidateList(actor.tenantId);
   }
 
   async getAssignmentsByDate(dateParam: string, actor: AuthenticatedUser) {

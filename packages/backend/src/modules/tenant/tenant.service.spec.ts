@@ -3,6 +3,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { TenantService } from './tenant.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 
 describe('TenantService (Stage G Part 2)', () => {
@@ -35,8 +36,18 @@ describe('TenantService (Stage G Part 2)', () => {
 
   beforeEach(async () => {
     prisma = { client: { tenant: { findUnique: jest.fn(), update: jest.fn() } } };
+    const cache = {
+      get: jest.fn().mockResolvedValue(undefined),
+      set: jest.fn().mockResolvedValue(undefined),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
+
     const moduleRef = await Test.createTestingModule({
-      providers: [TenantService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        TenantService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: TenantCacheService, useValue: cache },
+      ],
     }).compile();
     service = moduleRef.get(TenantService);
   });

@@ -7,12 +7,23 @@ import {
 import { Prisma, UserRole } from '@prisma/client';
 import { DRIVER_SEARCH_RESULT_LIMIT, normalizeSearchQuery } from '@bongofleet/shared-lib';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { hashPassword } from '../auth/utils/password.util';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { ListDriversQueryDto } from './dto/list-drivers-query.dto';
 import { SearchDriversQueryDto } from './dto/search-drivers-query.dto';
+
+const CACHE_RESOURCE = 'drivers';
+// Same reasoning as motorcycle.service.ts's CACHE_PARAMS: only the plain,
+// unfiltered, active-only list is cached; a search/includeInactive query
+// bypasses the cache entirely.
+const CACHE_PARAMS = 'default';
+
+function isDefaultQuery(query: ListDriversQueryDto): boolean {
+  return !query.includeInactive && !query.search;
+}
 
 export interface DriverSearchResult {
   id: string;
@@ -45,6 +56,10 @@ const SAFE_USER_SELECT = {
   emailProvenAt: true,
 } satisfies Prisma.UserSelect;
 
+type DriverListItem = Prisma.DriverGetPayload<{
+  include: { user: { select: typeof SAFE_USER_SELECT } };
+}>;
+
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
     throw new ForbiddenException('Only OWNER or MANAGER may manage drivers');
@@ -53,7 +68,14 @@ function assertOwnerOrManager(actor: AuthenticatedUser): void {
 
 @Injectable()
 export class DriverService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: TenantCacheService,
+  ) {}
+
+  private invalidateList(tenantId: string): Promise<void> {
+    return this.cache.invalidate(tenantId, CACHE_RESOURCE, CACHE_PARAMS);
+  }
 
   async create(dto: CreateDriverDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
@@ -114,6 +136,7 @@ export class DriverService {
         return { driver, user };
       });
 
+      await this.invalidateList(actor.tenantId);
       return { ...driver, user };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -128,6 +151,21 @@ export class DriverService {
   async list(query: ListDriversQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
+    if (isDefaultQuery(query)) {
+      const cached = await this.cache.get<DriverListItem[]>(
+        actor.tenantId,
+        CACHE_RESOURCE,
+        CACHE_PARAMS,
+      );
+      if (cached) {
+        return cached;
+      }
+
+      const list = await this.fetchDefaultList();
+      await this.cache.set(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS, list);
+      return list;
+    }
+
     const where: Prisma.DriverWhereInput = query.includeInactive ? {} : { isActive: true };
 
     if (query.search) {
@@ -140,6 +178,14 @@ export class DriverService {
 
     return this.prisma.client.driver.findMany({
       where,
+      include: { user: { select: SAFE_USER_SELECT } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private fetchDefaultList() {
+    return this.prisma.client.driver.findMany({
+      where: { isActive: true },
       include: { user: { select: SAFE_USER_SELECT } },
       orderBy: { createdAt: 'desc' },
     });
@@ -305,6 +351,7 @@ export class DriverService {
         return { driver, user };
       });
 
+      await this.invalidateList(actor.tenantId);
       return { ...driver, user };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -334,6 +381,7 @@ export class DriverService {
         data: { isActive: false },
       });
     });
+    await this.invalidateList(actor.tenantId);
   }
 
   async reactivate(id: string, actor: AuthenticatedUser) {
@@ -357,6 +405,7 @@ export class DriverService {
       return { driver, user };
     });
 
+    await this.invalidateList(actor.tenantId);
     return { ...driver, user };
   }
 }

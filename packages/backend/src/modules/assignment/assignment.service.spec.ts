@@ -10,6 +10,7 @@ import { DriverType, OwnershipPlanStatus, UserRole, VehicleType } from '@prisma/
 import { AssignmentService } from './assignment.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 
 describe('AssignmentService', () => {
@@ -101,8 +102,18 @@ describe('AssignmentService', () => {
       },
     };
 
+    const cache = {
+      get: jest.fn().mockResolvedValue(undefined),
+      set: jest.fn().mockResolvedValue(undefined),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
+
     const moduleRef = await Test.createTestingModule({
-      providers: [AssignmentService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        AssignmentService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: TenantCacheService, useValue: cache },
+      ],
     }).compile();
 
     service = moduleRef.get(AssignmentService);
