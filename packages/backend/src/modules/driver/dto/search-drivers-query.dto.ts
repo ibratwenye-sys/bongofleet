@@ -1,5 +1,14 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 /** Stage G6 Part 2 - the searchable driver picker's query params. `q` is
  *  matched against the driver's name, phone, and current vehicle
@@ -17,4 +26,13 @@ export class SearchDriversQueryDto {
   @Min(1)
   @Max(25)
   limit?: number;
+
+  // Stage DS1 - defaults to false (today's behaviour, everywhere) mirroring
+  // ListDriversQueryDto's includeInactive. A call site opts in only when it
+  // has a reason to want a let-go driver found, e.g. recording their final
+  // settling payment - see PaymentFormModal.
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  includeInactive?: boolean;
 }

@@ -70,6 +70,28 @@ async function assignVehicle(
     .expect(201);
 }
 
+async function createOwnershipPlan(
+  app: INestApplication,
+  accessToken: string,
+  driverId: string,
+  motorcycleId: string,
+  startDate: string,
+) {
+  const res = await request(app.getHttpServer())
+    .post('/ownership-plans')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({
+      driverId,
+      motorcycleId,
+      dailyAmount: 12000,
+      instalmentCount: 100,
+      totalPrice: 1200000,
+      startDate,
+    })
+    .expect(201);
+  return res.body as { id: string };
+}
+
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -312,6 +334,62 @@ describe('Driver search (e2e)', () => {
     expect(res.body.results).toHaveLength(1);
     expect(res.body.results[0]).toEqual(
       expect.objectContaining({ id: expect.any(String), firstName: 'Juma', lastName: 'Bakari' }),
+    );
+  });
+
+  it('excludes an inactive driver by default, and includes them (flagged) with includeInactive=true', async () => {
+    const { accessToken } = await signupOwner(app);
+    const driver = await createDriver(app, accessToken, {
+      firstName: 'Juma',
+      lastName: 'Bakari',
+      phone: '+254711111111',
+      email: 'juma@acme-fleet.test',
+      licenseNumber: 'LIC-J1',
+    });
+    await request(app.getHttpServer())
+      .delete(`/drivers/${driver.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(204);
+
+    const defaultSearch = await request(app.getHttpServer())
+      .get('/drivers/search')
+      .query({ q: 'Bakari' })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(defaultSearch.body.results).toHaveLength(0);
+
+    const inclusiveSearch = await request(app.getHttpServer())
+      .get('/drivers/search')
+      .query({ q: 'Bakari', includeInactive: 'true' })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(inclusiveSearch.body.results).toHaveLength(1);
+    expect(inclusiveSearch.body.results[0]).toEqual(
+      expect.objectContaining({ lastName: 'Bakari', isActive: false }),
+    );
+  });
+
+  it('finds a driver by their vehicle plate the same day an ACTIVE ownership plan is created, before any assignment exists', async () => {
+    const { accessToken } = await signupOwner(app);
+    const driver = await createDriver(app, accessToken, {
+      firstName: 'Amina',
+      lastName: 'Said',
+      phone: '+254711111199',
+      email: 'amina@acme-fleet.test',
+      licenseNumber: 'LIC-A1',
+    });
+    const motorcycle = await createMotorcycle(app, accessToken, 'T555 PLN');
+    await createOwnershipPlan(app, accessToken, driver.id, motorcycle.id, todayDateString());
+
+    const res = await request(app.getHttpServer())
+      .get('/drivers/search')
+      .query({ q: 'T555' })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(res.body.results).toHaveLength(1);
+    expect(res.body.results[0]).toEqual(
+      expect.objectContaining({ lastName: 'Said', registrationNumber: 'T555 PLN' }),
     );
   });
 });

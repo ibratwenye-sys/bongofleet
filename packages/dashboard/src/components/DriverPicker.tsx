@@ -18,10 +18,14 @@ export function DriverPicker({
   value,
   onSelect,
   placeholder = 'Search by name, phone, or plate…',
+  includeInactive = false,
 }: {
   value: DriverSearchResult | null;
   onSelect: (driver: DriverSearchResult | null) => void;
   placeholder?: string;
+  /** Stage DS1 - opt in per call site; see PaymentFormModal for why its
+   *  rent-to-own flow passes true. */
+  includeInactive?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DriverSearchResult[]>([]);
@@ -44,7 +48,11 @@ export function DriverPicker({
 
     setLoading(true);
     const timer = setTimeout(() => {
-      apiFetch<DriverSearchResponse>(`/drivers/search?q=${encodeURIComponent(trimmed)}`)
+      const params = new URLSearchParams({ q: trimmed });
+      if (includeInactive) {
+        params.set('includeInactive', 'true');
+      }
+      apiFetch<DriverSearchResponse>(`/drivers/search?${params.toString()}`)
         .then((res) => {
           setResults(res.results);
           setHasMore(res.hasMore);
@@ -60,7 +68,7 @@ export function DriverPicker({
     }, DRIVER_SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, includeInactive]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -101,6 +109,11 @@ export function DriverPicker({
       <div className="flex items-center justify-between rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm">
         <span className="text-gray-900">
           {value.firstName} {value.lastName}
+          {!value.isActive && (
+            <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+              Inactive
+            </span>
+          )}
           {' — '}
           {value.registrationNumber ?? 'no vehicle on file'}
           {' — '}
@@ -158,6 +171,11 @@ export function DriverPicker({
                 >
                   <div className="font-medium text-gray-900">
                     {driver.firstName} {driver.lastName}
+                    {!driver.isActive && (
+                      <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                        Inactive
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-500">
                     {driver.registrationNumber ?? 'No vehicle on file'} · {driver.phone}

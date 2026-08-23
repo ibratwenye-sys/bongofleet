@@ -14,6 +14,8 @@ describe('DriverService', () => {
       user: { findFirst: jest.Mock };
       driver: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
       dailyAssignment: { findMany: jest.Mock };
+      ownershipPlan: { findMany: jest.Mock };
+      motorcycle: { findMany: jest.Mock };
       $transaction: jest.Mock;
     };
   };
@@ -52,7 +54,9 @@ describe('DriverService', () => {
       client: {
         user: { findFirst: jest.fn() },
         driver: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
-        dailyAssignment: { findMany: jest.fn() },
+        dailyAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+        ownershipPlan: { findMany: jest.fn().mockResolvedValue([]) },
+        motorcycle: { findMany: jest.fn().mockResolvedValue([]) },
         $transaction: jest.fn(),
       },
     };
@@ -199,8 +203,18 @@ describe('DriverService', () => {
   });
 
   describe('search', () => {
-    function driverRow(id: string, firstName: string, lastName: string, phone: string) {
-      return { id, user: { id: `user-${id}`, firstName, lastName, phone, isActive: true } };
+    function driverRow(
+      id: string,
+      firstName: string,
+      lastName: string,
+      phone: string,
+      isActive = true,
+    ) {
+      return {
+        id,
+        isActive,
+        user: { id: `user-${id}`, firstName, lastName, phone, isActive: true },
+      };
     }
 
     it('issues exactly one dailyAssignment query for the whole page of results, not one per result', async () => {
@@ -282,6 +296,87 @@ describe('DriverService', () => {
         ForbiddenException,
       );
       expect(prisma.client.driver.findMany).not.toHaveBeenCalled();
+    });
+
+    it('defaults to active-only drivers', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'Juma' }, owner);
+
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ isActive: true }) }),
+      );
+    });
+
+    it('omits the isActive filter when includeInactive is true', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'Juma', includeInactive: true }, owner);
+
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.not.objectContaining({ isActive: true }) }),
+      );
+    });
+
+    it("carries each result's isActive flag", async () => {
+      prisma.client.driver.findMany.mockResolvedValue([
+        driverRow('d1', 'Juma', 'A', '+254711111111', false),
+      ]);
+
+      const result = await service.search({ q: 'Juma', includeInactive: true }, owner);
+
+      expect(result.results[0].isActive).toBe(false);
+    });
+
+    it("folds an ACTIVE ownership plan's vehicle plate into that token's match, with no assignment rows yet", async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([
+        { driverId: 'd1', motorcycleId: 'm1' },
+      ]);
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        { id: 'm1', registrationNumber: 'T999 XYZ' },
+      ]);
+
+      await service.search({ q: 'T999' }, owner);
+
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: { in: ['m1'] } } }),
+      );
+      expect(prisma.client.driver.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            AND: [
+              expect.objectContaining({
+                OR: expect.arrayContaining([{ id: { in: ['d1'] } }]),
+              }),
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('skips the motorcycle query entirely when there are no ACTIVE plans', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([]);
+
+      await service.search({ q: 'Juma' }, owner);
+
+      expect(prisma.client.motorcycle.findMany).not.toHaveBeenCalled();
+    });
+
+    it('issues exactly one ownershipPlan query and one motorcycle query regardless of token count', async () => {
+      prisma.client.driver.findMany.mockResolvedValue([]);
+      prisma.client.ownershipPlan.findMany.mockResolvedValue([
+        { driverId: 'd1', motorcycleId: 'm1' },
+      ]);
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        { id: 'm1', registrationNumber: 'T999 XYZ' },
+      ]);
+
+      await service.search({ q: 'Juma Bakari' }, owner);
+
+      expect(prisma.client.ownershipPlan.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledTimes(1);
     });
   });
 

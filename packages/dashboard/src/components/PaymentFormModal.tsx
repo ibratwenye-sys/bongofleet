@@ -141,7 +141,13 @@ export function PaymentFormModal({
             {mode === 'rentToOwn' ? (
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
-                <DriverPicker value={selectedDriver} onSelect={setSelectedDriver} />
+                {/* Stage DS1 - includeInactive: recording a payment is exactly the
+                    "driver who was let go" case DriverService.search's includeInactive
+                    exists for - the owner still needs to find them to record a final
+                    settling payment against their old rent-to-own plan. Unlike a
+                    vehicle-assignment picker, excluding inactive drivers here would
+                    make that impossible. */}
+                <DriverPicker value={selectedDriver} onSelect={setSelectedDriver} includeInactive />
                 {selectedDriver && rentToOwnAssignment && (
                   <p className="mt-1 text-xs text-gray-500">
                     Latest charge: {rentToOwnAssignment.assignedDate.slice(0, 10)} — target{' '}

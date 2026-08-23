@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { OwnershipPlanStatus, Prisma, UserRole } from '@prisma/client';
 import { DRIVER_SEARCH_RESULT_LIMIT, normalizeSearchQuery } from '@bongofleet/shared-lib';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantCacheService } from '../../cache/tenant-cache.service';
@@ -35,6 +35,10 @@ export interface DriverSearchResult {
    *  needs to show the plate, or it can't do its one job: telling three
    *  Jumas apart. Null if this driver has never been assigned a vehicle. */
   registrationNumber: string | null;
+  /** Stage DS1 - present so a call site that opts into includeInactive can
+   *  render an "Inactive" badge; default (includeInactive=false) callers
+   *  never see false here since inactive drivers are filtered out already. */
+  isActive: boolean;
 }
 
 export interface DriverSearchResponse {
@@ -204,6 +208,11 @@ export class DriverService {
    * a plain OR across all three (independent matching), and a multi-token
    * query like "Juma Bakari" requires each word to land somewhere, which is
    * what typing a full name actually needs.
+   *
+   * Stage DS1 - `includeInactive` defaults to false (today's behaviour).
+   * Plate matching also folds in each token's match against every ACTIVE
+   * ownership plan's vehicle, not just dailyAssignments - see
+   * activePlanPlateIndex.
    */
   async search(
     query: SearchDriversQueryDto,
@@ -218,8 +227,11 @@ export class DriverService {
     }
 
     const tokens = q.split(' ');
+    const { driverIdsByToken: planDriverIdsByToken, plateByDriverId: planPlateByDriverId } =
+      await this.activePlanPlateIndex(tokens);
+
     const where: Prisma.DriverWhereInput = {
-      isActive: true,
+      ...(query.includeInactive ? {} : { isActive: true }),
       AND: tokens.map((token) => ({
         OR: [
           { user: { firstName: { contains: token, mode: 'insensitive' } } },
@@ -232,6 +244,7 @@ export class DriverService {
               },
             },
           },
+          { id: { in: planDriverIdsByToken.get(token) ?? [] } },
         ],
       })),
     };
@@ -248,7 +261,9 @@ export class DriverService {
     const hasMore = candidates.length > limit;
     const page = candidates.slice(0, limit);
 
-    const plateByDriverId = await this.currentPlatesByDriverId(page.map((driver) => driver.id));
+    const assignmentPlateByDriverId = await this.currentPlatesByDriverId(
+      page.map((driver) => driver.id),
+    );
 
     return {
       results: page.map((driver) => ({
@@ -256,10 +271,76 @@ export class DriverService {
         firstName: driver.user.firstName,
         lastName: driver.user.lastName,
         phone: driver.user.phone,
-        registrationNumber: plateByDriverId.get(driver.id) ?? null,
+        isActive: driver.isActive,
+        // Stage DS1 - a driver matched via their plan's plate (no assignment
+        // yet) must not display "no vehicle on file"; that would defeat the
+        // point of having matched them by plate at all. Falls back to the
+        // plan's vehicle only when no assignment plate exists - an
+        // assignment reflects the vehicle actually driven, which should win
+        // when both are on file.
+        registrationNumber:
+          assignmentPlateByDriverId.get(driver.id) ?? planPlateByDriverId.get(driver.id) ?? null,
       })),
       hasMore,
     };
+  }
+
+  /**
+   * Stage DS1 - a driver on a brand-new hire-purchase plan has no
+   * DailyAssignment row until the nightly OwnershipPlanGeneratorService cron
+   * creates the first instalment, so the dailyAssignments `some` clause
+   * above can't find them same-day. OwnershipPlan.driverId/motorcycleId are
+   * plain scalar FKs with no declared Prisma relation to Driver/Motorcycle
+   * (same convention as guarantorId - confirmed against schema.prisma), so
+   * this can't be expressed as a nested `some` inside driver.findMany()'s
+   * own where clause.
+   *
+   * Two fixed-count queries regardless of driver/plan/token count - the
+   * same batching discipline as currentPlatesByDriverId below - fetch every
+   * ACTIVE plan's (driverId, motorcycleId), resolve those vehicles' plates
+   * in one follow-up query, then match tokens against plates in memory.
+   * Returns both the per-token match (for the where-clause) and a plain
+   * driverId->plate map (so a plan-only match can still display its plate -
+   * see the registrationNumber fallback in search() above).
+   */
+  private async activePlanPlateIndex(
+    tokens: string[],
+  ): Promise<{ driverIdsByToken: Map<string, string[]>; plateByDriverId: Map<string, string> }> {
+    const activePlans = await this.prisma.client.ownershipPlan.findMany({
+      where: { status: OwnershipPlanStatus.ACTIVE },
+      select: { driverId: true, motorcycleId: true },
+    });
+
+    const driverIdsByToken = new Map<string, string[]>(tokens.map((token) => [token, []]));
+    if (activePlans.length === 0) {
+      return { driverIdsByToken, plateByDriverId: new Map() };
+    }
+
+    const motorcycles = await this.prisma.client.motorcycle.findMany({
+      where: { id: { in: activePlans.map((plan) => plan.motorcycleId) } },
+      select: { id: true, registrationNumber: true },
+    });
+    const plateByMotorcycleId = new Map(motorcycles.map((m) => [m.id, m.registrationNumber]));
+
+    const planPlates = activePlans
+      .map((plan) => ({
+        driverId: plan.driverId,
+        plate: plateByMotorcycleId.get(plan.motorcycleId),
+      }))
+      .filter((entry): entry is { driverId: string; plate: string } => entry.plate !== undefined);
+
+    for (const token of tokens) {
+      const lowerToken = token.toLowerCase();
+      driverIdsByToken.set(
+        token,
+        planPlates
+          .filter((entry) => entry.plate.toLowerCase().includes(lowerToken))
+          .map((entry) => entry.driverId),
+      );
+    }
+
+    const plateByDriverId = new Map(planPlates.map((entry) => [entry.driverId, entry.plate]));
+    return { driverIdsByToken, plateByDriverId };
   }
 
   /**

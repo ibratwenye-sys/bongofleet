@@ -138,6 +138,7 @@ export interface DriverSearchResult {
   lastName: string;
   phone: string;
   registrationNumber: string | null;
+  isActive: boolean;
 }
 
 export interface DriverSearchResponse {
