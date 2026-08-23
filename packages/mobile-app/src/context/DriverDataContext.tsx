@@ -14,7 +14,7 @@ import { apiFetch, ApiError, NetworkError } from '../api';
 import { clearTokens, getQueue } from '../storage';
 import { enqueuePayment, flushQueue } from '../queue';
 import { formatTZS, todayKey } from '../format';
-import type { Assignment, AssignmentDetail, Me, Payment } from '../types';
+import type { Assignment, AssignmentDetail, Me, OwnershipPlan, Payment } from '../types';
 
 /**
  * Stage DM1. Moved out of the old monolithic HomeScreen.tsx unchanged, not
@@ -51,6 +51,14 @@ interface DriverData {
   me: Me | null;
   assignment: AssignmentDetail | null;
   noAssignment: boolean;
+  /** Stage G2 - the plan behind assignment.ownershipPlanId, fetched
+   *  alongside it and null for a daily-rental driver. Lives here, not as a
+   *  screen-local fetch (contrast Mkataba wangu, which does fetch its own
+   *  copy): recordPayment already calls load() after every payment, and a
+   *  plan card whose whole point is showing the driver's up-to-date
+   *  days-behind/ahead position must not go stale between Lipa and Leo the
+   *  way a screen-local fetch would. */
+  plan: OwnershipPlan | null;
   payments: Payment[];
   queueCount: number;
   offline: boolean;
@@ -92,6 +100,7 @@ export function DriverDataProvider({
   const [me, setMe] = useState<Me | null>(null);
   const [assignment, setAssignment] = useState<AssignmentDetail | null>(null);
   const [noAssignment, setNoAssignment] = useState(false);
+  const [plan, setPlan] = useState<OwnershipPlan | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [offline, setOffline] = useState(false);
@@ -125,9 +134,15 @@ export function DriverDataProvider({
         const detail = await apiFetch<AssignmentDetail>(`/assignments/${assignments[0].id}`);
         setAssignment(detail);
         setNoAssignment(false);
+        setPlan(
+          detail.ownershipPlanId
+            ? await apiFetch<OwnershipPlan>(`/ownership-plans/${detail.ownershipPlanId}`)
+            : null,
+        );
       } else {
         setAssignment(null);
         setNoAssignment(true);
+        setPlan(null);
       }
     } catch (err) {
       if (err instanceof NetworkError) {
@@ -297,6 +312,7 @@ export function DriverDataProvider({
       me,
       assignment,
       noAssignment,
+      plan,
       payments,
       queueCount,
       offline,
@@ -315,6 +331,7 @@ export function DriverDataProvider({
       me,
       assignment,
       noAssignment,
+      plan,
       payments,
       queueCount,
       offline,

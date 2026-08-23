@@ -23,6 +23,7 @@ type Props = BottomTabScreenProps<RiderTabParamList, 'Lipa'>;
 export function LipaScreen({ navigation }: Props) {
   const {
     assignment,
+    plan,
     payments,
     submitting,
     uploadingId,
@@ -79,6 +80,7 @@ export function LipaScreen({ navigation }: Props) {
                   value={amount}
                   onChangeText={setAmount}
                 />
+                {plan && <Text style={styles.hint}>Pay more to get ahead.</Text>}
                 <TextInput
                   style={styles.input}
                   placeholder="Method (optional, e.g. M-Pesa, Cash)"
@@ -172,6 +174,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   formLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  hint: { fontSize: 12, color: '#6b7280', marginTop: -6, marginBottom: 10 },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',

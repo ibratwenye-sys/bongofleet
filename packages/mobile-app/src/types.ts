@@ -99,6 +99,9 @@ export interface OwnershipPlan {
   daysLeft: number;
   derivedEndDate: string;
   projectedCompletion: string;
+  /** Stage G2 (driver app) - the date the driver's current credit runs out;
+   *  only meaningful, and only non-null, when daysAhead > 0. */
+  nextDueDate: string | null;
 }
 
 /** One row of GET /ownership-plans/:id/ledger. */

@@ -102,6 +102,16 @@ export interface DerivedPlanFigures {
    *  this function's. */
   derivedEndDate: string;
   projectedCompletion: string;
+  /** Stage G2 (driver app) - the date the driver's current credit runs out,
+   *  for the home-screen card's "you are N days ahead - nothing due until
+   *  X" line. The same active-weekday advance as projectedCompletion above
+   *  (advanceActiveWeekdays), walked daysAhead steps from today rather than
+   *  daysToCompletion steps - both read the plan's own activeWeekdays, so a
+   *  driver ahead of schedule sees the same day-counting convention here as
+   *  everywhere else on the plan. Null whenever daysAhead is 0 (behind or
+   *  exactly square): there is nothing to advance to, and the UI has its
+   *  own wording for both of those cases that carries no date. */
+  nextDueDate: string | null;
 }
 
 function dateOnly(date: Date): Date {
@@ -389,6 +399,11 @@ export function derivePlanFigures(
     input.activeWeekdays,
   );
 
+  const nextDueDate =
+    daysAhead > 0
+      ? isoDate(advanceActiveWeekdays(todayOnly, daysAhead, input.activeWeekdays))
+      : null;
+
   return {
     amountDue: input.amountDue.toFixed(2),
     amountPaid: input.amountPaid.toFixed(2),
@@ -403,5 +418,6 @@ export function derivePlanFigures(
     daysLeft,
     derivedEndDate,
     projectedCompletion: isoDate(projectedCompletion),
+    nextDueDate,
   };
 }

@@ -87,6 +87,33 @@ describe('derivePlanFigures', () => {
     expect(result.daysAhead).toBe(0);
   });
 
+  it('3 days ahead (36,000 surplus at 12,000/day) -> nextDueDate is 3 active weekdays from today', () => {
+    // TODAY is Saturday 2026-08-01; all 7 weekdays active here, so 3 active
+    // weekdays out is a flat +3 calendar days -> Tuesday 2026-08-04.
+    const result = derivePlanFigures(
+      basePosition({ amountDue: new Prisma.Decimal(0), amountPaid: new Prisma.Decimal(36000) }),
+      TODAY,
+    );
+    expect(result.daysAhead).toBe(3);
+    expect(result.nextDueDate).toBe('2026-08-04');
+  });
+
+  it('daysAhead 0 (square or behind) -> nextDueDate is null, not a stale/zero date', () => {
+    const square = derivePlanFigures(
+      basePosition({ amountDue: new Prisma.Decimal(24000), amountPaid: new Prisma.Decimal(24000) }),
+      TODAY,
+    );
+    expect(square.daysAhead).toBe(0);
+    expect(square.nextDueDate).toBeNull();
+
+    const behind = derivePlanFigures(
+      basePosition({ amountDue: new Prisma.Decimal(12000), amountPaid: new Prisma.Decimal(0) }),
+      TODAY,
+    );
+    expect(behind.daysAhead).toBe(0);
+    expect(behind.nextDueDate).toBeNull();
+  });
+
   it('activeWeekdays excluding Sunday: daysLeft skips Sundays (6, not a flat 7)', () => {
     // 2026-08-01 is a Saturday; 2026-08-08 (also a Saturday) is 7 calendar
     // days later but only 6 of those are Mon-Sat (2026-08-02 is a Sunday).

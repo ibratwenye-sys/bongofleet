@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -10,17 +11,135 @@ import {
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useDriverData } from '../context/DriverDataContext';
 import { StatusBanners } from '../components/StatusBanners';
-import { formatTZS, todayKey } from '../format';
+import { openPlanContract } from '../contract';
+import { ApiError, NetworkError } from '../api';
+import { formatDateHuman, formatTZS, todayKey } from '../format';
+import type { OwnershipPlan } from '../types';
 import type { RiderTabParamList } from '../navigation/RiderTabNavigator';
 
 type Props = BottomTabScreenProps<RiderTabParamList, 'Leo'>;
+
+/**
+ * Stage G2 (DESIGN_HIRE_PURCHASE.md §8 "Driver app"). "Today's instalment"
+ * deliberately reuses the SAME target/paidToday Leo already computes for
+ * every driver (assignment.targetAmount, not plan.dailyAmount) - the
+ * generator caps a plan day's target at whatever remains of totalOwed
+ * (ownership-plan-generator.service.ts), so the final instalment of a plan
+ * is smaller than dailyAmount and dailyAmount would be the wrong number on
+ * that day. daysBehind/daysAhead/netPosition/nextDueDate are read as the
+ * backend returns them, never recomputed here - that day-counting
+ * arithmetic has a documented history of being easy to get wrong.
+ */
+function PlanCard({
+  plan,
+  target,
+  paidToday,
+}: {
+  plan: OwnershipPlan;
+  target: number;
+  paidToday: number;
+}) {
+  const [contractLoading, setContractLoading] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
+
+  const remaining = Math.max(0, target - paidToday);
+  const totalPrice = parseFloat(plan.totalPrice);
+  const amountPaid = parseFloat(plan.amountPaid);
+  const progress = totalPrice > 0 ? Math.min(1, Math.max(0, amountPaid / totalPrice)) : 0;
+  const endDate = plan.contractEndDate ?? plan.derivedEndDate;
+
+  async function handleViewContract() {
+    setContractError(null);
+    setContractLoading(true);
+    try {
+      await openPlanContract(plan.id);
+    } catch (err) {
+      if (err instanceof NetworkError) {
+        setContractError('Cannot reach the server. Check your connection.');
+      } else if (err instanceof ApiError) {
+        setContractError(err.message);
+      } else {
+        setContractError('Could not open the contract. Please try again.');
+      }
+    } finally {
+      setContractLoading(false);
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Mkataba wangu</Text>
+
+      <View style={styles.row}>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Today's instalment</Text>
+          <Text style={styles.statValue}>{formatTZS(target)}</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Paid</Text>
+          <Text style={[styles.statValue, { color: '#15803d' }]}>{formatTZS(paidToday)}</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Remaining</Text>
+          <Text
+            style={[styles.statValue, remaining > 0 ? { color: '#b91c1c' } : { color: '#15803d' }]}
+          >
+            {formatTZS(remaining)}
+          </Text>
+        </View>
+      </View>
+
+      {plan.daysBehind > 0 ? (
+        <Text style={styles.positionBehind}>
+          You are {plan.daysBehind} day{plan.daysBehind === 1 ? '' : 's'} behind —{' '}
+          {formatTZS(Math.abs(parseFloat(plan.netPosition)))} owed
+        </Text>
+      ) : plan.daysAhead > 0 ? (
+        <Text style={styles.positionAhead}>
+          You are {plan.daysAhead} day{plan.daysAhead === 1 ? '' : 's'} ahead — nothing due until{' '}
+          {plan.nextDueDate ? formatDateHuman(plan.nextDueDate) : 'further notice'}
+        </Text>
+      ) : null}
+
+      <View style={styles.progressSection}>
+        <Text style={styles.contractLine}>
+          Started {formatDateHuman(plan.startDate)} · ends {formatDateHuman(endDate)} ·{' '}
+          {plan.daysLeft} days left
+        </Text>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+        </View>
+        <Text style={styles.progressLabel}>
+          {formatTZS(plan.amountPaid)} of {formatTZS(plan.totalPrice)} paid
+        </Text>
+      </View>
+
+      {contractError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{contractError}</Text>
+        </View>
+      )}
+      <TouchableOpacity
+        style={styles.contractButton}
+        onPress={() => void handleViewContract()}
+        disabled={contractLoading}
+      >
+        {contractLoading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>View contract</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 /** Stage DM1 - the balance-display half of the old monolithic HomeScreen,
  *  reusing the same today's-assignment lookup (via DriverDataContext) as-is.
  *  The payment form itself now lives on Lipa, reached from the Pay button
  *  below. */
 export function LeoScreen({ navigation }: Props) {
-  const { me, assignment, noAssignment, payments, loading, refreshing, refresh, logout } =
+  const { me, assignment, noAssignment, plan, payments, loading, refreshing, refresh, logout } =
     useDriverData();
 
   if (loading) {
@@ -56,6 +175,8 @@ export function LeoScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
       >
+        {plan && <PlanCard plan={plan} target={target} paidToday={paidToday} />}
+
         {assignment ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Today's assignment</Text>
@@ -160,4 +281,47 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   empty: { color: '#6b7280', fontSize: 14 },
+  positionBehind: {
+    color: '#b91c1c',
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  positionAhead: {
+    color: '#15803d',
+    backgroundColor: '#dcfce7',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  // The design calls this the single most prominent thing on the card -
+  // biggest text, most vertical room of anything here.
+  progressSection: { marginBottom: 16 },
+  contractLine: { fontSize: 13, color: '#374151', marginBottom: 8 },
+  progressTrack: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', backgroundColor: '#111827', borderRadius: 5 },
+  progressLabel: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 8 },
+  contractButton: {
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  errorBanner: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorText: { color: '#991b1b', textAlign: 'center', fontSize: 13 },
 });
