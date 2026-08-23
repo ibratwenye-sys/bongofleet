@@ -218,6 +218,62 @@ describe('Assignment (e2e)', () => {
     expect(listRes.body[0].driverId).toBe(driverA.id);
   });
 
+  // Stage DM2 - the Pikipiki screen calls GET /assignments/:id directly (the
+  // rider's own most-recent assignment id, taken from the list above), so
+  // this is the single-fetch counterpart to the list test above: the list
+  // narrowing a RIDER's results is not proof the single-id lookup does too -
+  // getAssignment() has its own, separate ownDriverId check.
+  it("a RIDER's GET /assignments/:id 404s on another driver's assignment, same tenant", async () => {
+    const { accessToken, tenantId } = await signupOwner(app);
+    const {
+      driver: driverA,
+      motorcycle: motorcycleA,
+      driverEmail,
+      password,
+    } = await seedDriverAndMotorcycle(prisma, tenantId);
+    const { driver: driverB, motorcycle: motorcycleB } = await seedDriverAndMotorcycle(
+      prisma,
+      tenantId,
+    );
+
+    const ownAssignment = await request(app.getHttpServer())
+      .post('/assignments')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        motorcycleId: motorcycleA.id,
+        driverId: driverA.id,
+        assignedDate: '2026-07-01',
+        targetAmount: 50000,
+      })
+      .expect(201);
+
+    const otherAssignment = await request(app.getHttpServer())
+      .post('/assignments')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        motorcycleId: motorcycleB.id,
+        driverId: driverB.id,
+        assignedDate: '2026-07-01',
+        targetAmount: 50000,
+      })
+      .expect(201);
+
+    const driverLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: driverEmail, password })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get(`/assignments/${ownAssignment.body.id}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get(`/assignments/${otherAssignment.body.id}`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .expect(404);
+  });
+
   it('gets a clean 403 when a RIDER attempts to create an assignment', async () => {
     const { tenantId } = await signupOwner(app);
     const { driverEmail, password } = await seedDriverAndMotorcycle(prisma, tenantId);

@@ -149,6 +149,49 @@ describe('Payment (e2e)', () => {
       .expect(403);
   });
 
+  // Stage DM2 - Malipo yangu calls GET /payments as-is and trusts the server
+  // to narrow it to the caller's own driverId (PaymentService.listPayments).
+  // The rejected-cross-driver-POST test above proves writes are guarded;
+  // this is the read side, not previously covered on its own.
+  it("a RIDER's GET /payments only returns their own, never another driver's in the same tenant", async () => {
+    const { accessToken: ownerToken, tenantId } = await signupOwner(app);
+    const {
+      driver: driverA,
+      assignment: assignmentA,
+      driverEmail,
+      password,
+    } = await seedDriverAssignment(prisma, tenantId, { driverEmail: 'driver-a@acme-fleet.test' });
+    const { driver: driverB, assignment: assignmentB } = await seedDriverAssignment(
+      prisma,
+      tenantId,
+      { driverEmail: 'driver-b@acme-fleet.test' },
+    );
+
+    await request(app.getHttpServer())
+      .post('/payments')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ dailyAssignmentId: assignmentA.id, driverId: driverA.id, amount: 1000 })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/payments')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ dailyAssignmentId: assignmentB.id, driverId: driverB.id, amount: 2000 })
+      .expect(201);
+
+    const driverLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: driverEmail, password })
+      .expect(200);
+
+    const listRes = await request(app.getHttpServer())
+      .get('/payments')
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .expect(200);
+
+    expect(listRes.body).toHaveLength(1);
+    expect(listRes.body[0].driverId).toBe(driverA.id);
+  });
+
   it('rejects an amount exceeding 150% of the target amount', async () => {
     const { accessToken, tenantId } = await signupOwner(app);
     const { driver, assignment } = await seedDriverAssignment(prisma, tenantId, {

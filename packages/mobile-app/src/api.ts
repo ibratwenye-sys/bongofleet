@@ -120,11 +120,17 @@ function refreshTokens(): Promise<boolean> {
   return refreshInFlight;
 }
 
-export async function apiFetch<T>(
+/**
+ * The 401-refresh-retry dance, shared by apiFetch and apiFetchBlob below -
+ * everything except how the final body gets parsed. Returns the raw,
+ * already-ok Response so each caller reads it its own way (.json() vs
+ * .blob()).
+ */
+async function resolveResponse(
   path: string,
-  options: RequestInit = {},
-  isRetry = false,
-): Promise<T> {
+  options: RequestInit,
+  isRetry: boolean,
+): Promise<Response> {
   const res = await rawFetch(path, options);
 
   if (res.status === 401 && !isRetry) {
@@ -137,7 +143,7 @@ export async function apiFetch<T>(
       throw new NetworkError();
     }
     if (refreshed) {
-      return apiFetch<T>(path, options, true);
+      return resolveResponse(path, options, true);
     }
     await clearTokens();
     onSessionExpired?.();
@@ -152,8 +158,20 @@ export async function apiFetch<T>(
     throw new ApiError(res.status, message);
   }
 
+  return res;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await resolveResponse(path, options, false);
   if (res.status === 204) {
     return undefined as T;
   }
   return (await res.json()) as T;
+}
+
+/** Same auth/retry handling as apiFetch, but for a binary response (the
+ *  ownership-plan contract PDF) rather than JSON. */
+export async function apiFetchBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const res = await resolveResponse(path, options, false);
+  return res.blob();
 }

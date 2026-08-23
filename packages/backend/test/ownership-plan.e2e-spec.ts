@@ -173,6 +173,42 @@ describe('OwnershipPlan (e2e)', () => {
       .expect(404);
   });
 
+  // Stage DM2 - Mkataba wangu calls .../ledger, not just .../:id. get() and
+  // ledger() have their own, separate assertCanView() calls (same
+  // predicate, two call sites) - proving one 404s a cross-driver RIDER says
+  // nothing about the other, so this needs its own test.
+  it("a RIDER's GET /ownership-plans/:id/ledger 404s on another driver's plan, same tenant", async () => {
+    const { accessToken } = await signupOwner(app);
+    const { driverId, driverEmail, motorcycleId } = await createDriverAndVehicle(accessToken, 'C1');
+    const { driverEmail: otherEmail } = await createDriverAndVehicle(accessToken, 'C2');
+
+    const planRes = await request(app.getHttpServer())
+      .post('/ownership-plans')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(planBody(driverId, motorcycleId))
+      .expect(201);
+
+    const driverLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: driverEmail, password: 'driverpass123' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get(`/ownership-plans/${planRes.body.id}/ledger`)
+      .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
+      .expect(200);
+
+    const otherLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: otherEmail, password: 'driverpass123' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get(`/ownership-plans/${planRes.body.id}/ledger`)
+      .set('Authorization', `Bearer ${otherLogin.body.accessToken}`)
+      .expect(404);
+  });
+
   // These are schema-level column defaults (Stage F2 Part 1), so they can
   // only be verified against a real database, not the mocked-Prisma unit
   // suite this repo otherwise uses - the spec listed them as "unit" tests,
