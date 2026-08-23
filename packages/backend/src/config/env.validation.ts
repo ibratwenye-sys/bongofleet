@@ -7,6 +7,13 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required().min(1),
   REDIS_URL: Joi.string().required().min(1),
 
+  // --- Postgres connection pool (pg.PoolConfig, via @prisma/adapter-pg) ---
+  // 10/30s are starting points, not numbers verified against this app's real
+  // Postgres instance under load - tune both once there's a production
+  // traffic pattern to size them against, don't treat them as already correct.
+  DATABASE_POOL_MAX: Joi.number().integer().min(1).default(10),
+  DATABASE_POOL_IDLE_TIMEOUT_MS: Joi.number().integer().min(0).default(30_000),
+
   JWT_ACCESS_SECRET: Joi.string().required().min(1),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
   JWT_REFRESH_SECRET: Joi.string().required().min(1),
