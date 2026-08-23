@@ -12,6 +12,7 @@ import { PaymentsPage } from './pages/PaymentsPage';
 import { DriverDetailPage } from './pages/DriverDetailPage';
 import { MotorcycleDetailPage } from './pages/MotorcycleDetailPage';
 import { ExpensesPage } from './pages/ExpensesPage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { OwnershipPage } from './pages/OwnershipPage';
@@ -46,6 +47,7 @@ function App() {
               <Route path="/transport" element={<TransportPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
+              <Route path="/approvals" element={<ApprovalsPage />} />
               <Route path="/maintenance" element={<MaintenancePage />} />
               <Route path="/reports" element={<ReportsPage />} />
             </Route>

@@ -520,4 +520,74 @@ describe('Expenses (e2e)', () => {
         .expect(400);
     });
   });
+
+  // Stage H3. Note while writing this: the task described this as mirroring
+  // "the same shape of e2e test payment's receipt download already has" -
+  // checked, and payment.e2e-spec.ts has no receipt test of any kind today
+  // (upload or download), so there was nothing to mirror. The four scenarios
+  // below come directly from the task's own explicit list instead.
+  describe('Stage H3 - GET /expenses/:id/receipt', () => {
+    it("OWNER/MANAGER can view any tenant receipt, a RIDER can view their own, a RIDER gets 404 (not 403) on someone else's, and a 404 when none was uploaded", async () => {
+      const ownerToken = await signupOwner(app, 'owner-h3a@fleet.test', 'Fleet H3A');
+      const a = await setupRider(app, ownerToken, 'H3A1');
+      const b = await setupRider(app, ownerToken, 'H3A2');
+      await assignDay(app, ownerToken, a.driverId, a.motorcycleId, '2026-08-17');
+      await assignDay(app, ownerToken, b.driverId, b.motorcycleId, '2026-08-17');
+      const riderTokenA = await loginRider(app, a.driverEmail);
+      const riderTokenB = await loginRider(app, b.driverEmail);
+
+      const withReceipt = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderTokenA}`)
+        .send({ category: 'Fuel', amount: 1000, incurredAt: '2026-08-17' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/expenses/${withReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${riderTokenA}`)
+        .attach('file', TINY_PNG, 'receipt.png')
+        .expect(201);
+
+      const noReceipt = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderTokenA}`)
+        .send({ category: 'Repairs', amount: 500, incurredAt: '2026-08-17' })
+        .expect(201);
+
+      const tenantId = await currentTenantId(app, ownerToken);
+      const manager = await seedManager(prisma, tenantId, 'H3A');
+      const managerLogin = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: manager.email, password: manager.password })
+        .expect(200);
+
+      // OWNER and MANAGER can both view any tenant receipt.
+      const ownerView = await request(app.getHttpServer())
+        .get(`/expenses/${withReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(ownerView.headers['content-type']).toContain('image/png');
+      await request(app.getHttpServer())
+        .get(`/expenses/${withReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${managerLogin.body.accessToken}`)
+        .expect(200);
+
+      // A RIDER can view their own.
+      await request(app.getHttpServer())
+        .get(`/expenses/${withReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${riderTokenA}`)
+        .expect(200);
+
+      // A RIDER gets 404 (not 403) on someone else's.
+      await request(app.getHttpServer())
+        .get(`/expenses/${withReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${riderTokenB}`)
+        .expect(404);
+
+      // A 404 when no receipt was ever uploaded.
+      await request(app.getHttpServer())
+        .get(`/expenses/${noReceipt.body.id}/receipt`)
+        .set('Authorization', `Bearer ${riderTokenA}`)
+        .expect(404);
+    });
+  });
 });

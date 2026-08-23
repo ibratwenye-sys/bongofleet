@@ -345,4 +345,35 @@ export class ExpenseService {
       throw error;
     }
   }
+
+  /**
+   * Stage H3 - mirrors PaymentService.getReceiptFile exactly. Unlike
+   * uploadReceipt, this route is reachable by all three roles
+   * (OWNER/MANAGER/RIDER) - a RIDER sees only their own expense (not-found,
+   * not forbidden, on someone else's), an OWNER/MANAGER sees any expense in
+   * the tenant. No assertOwnerOrManager call here, same as payment's - the
+   * RIDER branch below is the only role-conditional check this method has.
+   */
+  async getReceiptFile(id: string, actor: AuthenticatedUser) {
+    const expense = await this.prisma.client.expense.findUnique({ where: { id } });
+    if (!expense) {
+      throw new NotFoundException('Expense not found');
+    }
+    if (actor.role === UserRole.RIDER) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (expense.submittedByRiderId !== ownDriverId) {
+        throw new NotFoundException('Expense not found');
+      }
+    }
+    if (!expense.receiptStorageKey) {
+      throw new NotFoundException('No receipt uploaded for this expense');
+    }
+    const absolutePath = path.join(this.uploadsDir, expense.receiptStorageKey);
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      throw new NotFoundException('Receipt file not found');
+    }
+    return { expense, absolutePath };
+  }
 }

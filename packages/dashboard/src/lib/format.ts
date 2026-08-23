@@ -26,3 +26,11 @@ export function startOfThisMonth(): string {
 export function today(): string {
   return toDateInput(new Date());
 }
+
+/** Stage H3 - date + time, for a "submitted at" column where the whole
+ *  point is knowing exactly when something landed in a queue (not just
+ *  which calendar day, which every other timestamp on this dashboard shows
+ *  via a plain .slice(0, 10)). */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}

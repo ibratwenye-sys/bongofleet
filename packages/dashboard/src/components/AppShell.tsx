@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 import { useIdleTimer } from '../lib/useIdleTimer';
+import { apiFetch } from '../lib/api';
 import { IdleLogoutModal } from './IdleLogoutModal';
 
 const NAV_LINKS = [
@@ -13,9 +14,27 @@ const NAV_LINKS = [
   { to: '/transport', label: 'Transport' },
   { to: '/payments', label: 'Payments' },
   { to: '/expenses', label: 'Expenses' },
+  { to: '/approvals', label: 'Approvals' },
   { to: '/maintenance', label: 'Maintenance' },
   { to: '/reports', label: 'Reports' },
 ];
+
+// Stage H3 - "don't let pending money go unnoticed," not a live ticker, so a
+// minute is plenty. Fetched here rather than read off ApprovalsPage's own
+// state: this badge has to show correctly on every page, including ones
+// ApprovalsPage never mounts, and approving/rejecting something there
+// should not need to reach back up into AppShell to stay in sync - the next
+// poll (or a fresh page load) catches it.
+const PENDING_COUNT_POLL_MS = 60_000;
+
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-semibold text-white">
+      {count}
+    </span>
+  );
+}
 
 /**
  * Stage H0e - this header was the single reason every page scrolled sideways
@@ -41,6 +60,26 @@ export function AppShell() {
   const location = useLocation();
   const [idleWarning, setIdleWarning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPendingCount() {
+      try {
+        const res = await apiFetch<{ count: number }>('/expenses/pending-count');
+        if (!cancelled) setPendingCount(res.count);
+      } catch {
+        // Not critical - leave the badge showing whatever it last knew
+        // rather than surfacing an error for a background poll.
+      }
+    }
+    void loadPendingCount();
+    const interval = setInterval(() => void loadPendingCount(), PENDING_COUNT_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   async function handleLogout() {
     await logout();
@@ -90,12 +129,13 @@ export function AppShell() {
                 to={link.to}
                 end={link.end}
                 className={({ isActive }) =>
-                  `rounded px-3 py-1.5 text-sm font-medium ${
+                  `flex items-center rounded px-3 py-1.5 text-sm font-medium ${
                     isActive ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`
                 }
               >
                 {link.label}
+                {link.to === '/approvals' && <NavBadge count={pendingCount} />}
               </NavLink>
             ))}
           </nav>
@@ -151,6 +191,7 @@ export function AppShell() {
                 }
               >
                 {link.label}
+                {link.to === '/approvals' && <NavBadge count={pendingCount} />}
               </NavLink>
             ))}
 

@@ -221,7 +221,11 @@ export function ExpensesPage() {
 
   async function load() {
     setError(null);
-    const params = new URLSearchParams({ from, to });
+    // Stage H3 - this ledger is meant to be settled: PENDING/REJECTED rows
+    // belong on the Approvals queue, not here. Without this filter every
+    // pending submission since H2 shipped silently showed up here too and
+    // got summed into "Total shown."
+    const params = new URLSearchParams({ from, to, status: 'APPROVED' });
     if (motorcycleFilter !== 'ALL') {
       params.set('motorcycleId', motorcycleFilter);
     }

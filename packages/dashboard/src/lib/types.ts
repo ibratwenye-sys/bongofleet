@@ -236,6 +236,8 @@ export interface UpdateGuarantorPayload {
 
 // --- Expenses & analytics (money fields are Prisma Decimals -> strings) ---
 
+export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
 export interface Expense {
   id: string;
   motorcycleId: string | null;
@@ -244,6 +246,23 @@ export interface Expense {
   incurredAt: string;
   description: string | null;
   createdAt: string;
+  // Stage H1/H2 - the approval trail. status defaults APPROVED for every
+  // dashboard-created row (the OWNER/MANAGER creating it IS the approver);
+  // only a rider submission (H2) is ever PENDING. submittedByUserId/
+  // submittedByRiderId/dailyAssignmentId are null on a dashboard-created
+  // row, set on a rider submission.
+  status: ExpenseStatus;
+  submittedByUserId: string | null;
+  submittedByRiderId: string | null;
+  dailyAssignmentId: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  rejectionReason: string | null;
+  receiptStorageKey: string | null;
+  receiptFileName: string | null;
+  receiptMimeType: string | null;
+  receiptSizeBytes: number | null;
+  receiptUploadedAt: string | null;
 }
 
 export interface CreateExpensePayload {
