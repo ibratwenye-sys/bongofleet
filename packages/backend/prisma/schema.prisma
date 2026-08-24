@@ -938,3 +938,40 @@ model PasswordResetAudit {
   @@index([userId, createdAt])
   @@map("password_reset_audits")
 }
+
+/// Stage SUB1 (DESIGN_SUBSCRIPTION.md §5b). BongoFleet's OWN platform pricing
+/// for what it charges a tenant to run its fleet through this product - not
+/// tenant-scoped data, deliberately no tenantId, unlike everything else in
+/// this file. Excluded from the tenant-scoping Prisma extension for exactly
+/// that reason (see tenant-scoping.extension.ts's EXCLUDED_MODELS) - it has
+/// no tenantId column for that extension's implicit `where` to attach to.
+///
+/// Shaped as a tiered table from day one, even though v1 seeds exactly one
+/// row, because §5b's documented future direction is a 4-row table
+/// (0/11/31/51 bikes -> 10k/9k/8k/7k per bike) and that must be an INSERT
+/// against this shape, not a schema change. There is no platform-admin role
+/// in this codebase (UserRole is OWNER/MANAGER/RIDER/MECHANIC only) - so for
+/// now, changing or adding a row here is a migration, not a dashboard
+/// action. See resolvePricingTier (subscription-pricing.ts) for how a row is
+/// chosen for a given bike count.
+model SubscriptionPricingTier {
+  id String @id @default(cuid())
+
+  /// The lowest active-bike count this tier applies to. 0 = the base tier -
+  /// resolvePricingTier requires exactly one row with minBikeCount 0 to
+  /// exist as the floor every bike count resolves against.
+  minBikeCount Int @default(0) @map("min_bike_count")
+
+  pricePerBikePerMonth Decimal @db.Decimal(10, 2) @map("price_per_bike_per_month")
+
+  /// When this tier took effect - lets a future rate change apply only going
+  /// forward without touching history. Nothing reads historical bills
+  /// against this yet (nothing bills at all yet - actual charge collection
+  /// is still blocked on AzamPay, §8 step 4), but the field earns its keep
+  /// the day that ships.
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("subscription_pricing_tiers")
+}

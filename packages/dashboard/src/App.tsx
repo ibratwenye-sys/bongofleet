@@ -17,6 +17,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { OwnershipPage } from './pages/OwnershipPage';
 import { OwnershipPlanDetailPage } from './pages/OwnershipPlanDetailPage';
+import { BillingPage } from './pages/BillingPage';
 
 // Kept for one release so an old bookmark/link to /riders/:id still lands on the
 // same driver's detail page rather than a dead end.
@@ -50,6 +51,7 @@ function App() {
               <Route path="/approvals" element={<ApprovalsPage />} />
               <Route path="/maintenance" element={<MaintenancePage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/settings/billing" element={<BillingPage />} />
             </Route>
           </Route>
         </Routes>

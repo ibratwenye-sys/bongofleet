@@ -1,9 +1,10 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { TenantStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantCacheService } from '../../cache/tenant-cache.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
+import { estimatedMonthlyTotal, resolvePricingTier } from './subscription-pricing';
 
 function assertOwner(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER) {
@@ -21,6 +22,22 @@ export interface TenantSettings {
   name: string;
   physicalAddress: string | null;
   directorName: string | null;
+}
+
+// Stage SUB1 - a separate resource from CACHE_RESOURCE above: GET
+// /tenant/billing is a different endpoint with its own read shape, cached
+// independently (see getBilling below) rather than folded into
+// tenant-settings, which nothing about billing actually depends on.
+const BILLING_CACHE_RESOURCE = 'tenant-billing';
+const BILLING_CACHE_PARAMS = 'default';
+
+export interface TenantBilling {
+  activeBikeCount: number;
+  pricePerBikePerMonth: string;
+  estimatedMonthlyTotal: string;
+  status: TenantStatus;
+  trialEndsAt: string | null;
+  billingExempt: boolean;
 }
 
 /**
@@ -96,5 +113,55 @@ export class TenantService {
     };
     await this.cache.invalidate(actor.tenantId, CACHE_RESOURCE, CACHE_PARAMS);
     return settings;
+  }
+
+  /**
+   * Stage SUB1 (DESIGN_SUBSCRIPTION.md §5b). What the dashboard's billing
+   * page reads. Deliberately does NOT charge or reserve anything - actual
+   * charge collection is still blocked on AzamPay (§8 step 4); this is a
+   * read-only estimate.
+   */
+  async getBilling(actor: AuthenticatedUser): Promise<TenantBilling> {
+    assertOwner(actor);
+
+    const cached = await this.cache.get<TenantBilling>(
+      actor.tenantId,
+      BILLING_CACHE_RESOURCE,
+      BILLING_CACHE_PARAMS,
+    );
+    if (cached) {
+      return cached;
+    }
+
+    const tenant = await this.prisma.client.tenant.findUnique({ where: { id: actor.tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    // Motorcycle is tenant-scoped by the Prisma extension (unlike Tenant and
+    // SubscriptionPricingTier above/below) - this count is implicitly
+    // filtered to actor.tenantId, same as every other Motorcycle query in
+    // this codebase.
+    const activeBikeCount = await this.prisma.client.motorcycle.count({
+      where: { isActive: true },
+    });
+
+    // SubscriptionPricingTier is BongoFleet's own global platform pricing,
+    // excluded from tenant scoping (see its schema.prisma comment) - every
+    // tenant resolves against the same rows.
+    const tiers = await this.prisma.client.subscriptionPricingTier.findMany();
+    const tier = resolvePricingTier(tiers, activeBikeCount, new Date());
+    const total = estimatedMonthlyTotal(tier.pricePerBikePerMonth, activeBikeCount);
+
+    const billing: TenantBilling = {
+      activeBikeCount,
+      pricePerBikePerMonth: tier.pricePerBikePerMonth.toFixed(2),
+      estimatedMonthlyTotal: total.toFixed(2),
+      status: tenant.status,
+      trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
+      billingExempt: tenant.billingExemptAt !== null,
+    };
+    await this.cache.set(actor.tenantId, BILLING_CACHE_RESOURCE, BILLING_CACHE_PARAMS, billing);
+    return billing;
   }
 }

@@ -17,6 +17,12 @@ const NAV_LINKS = [
   { to: '/approvals', label: 'Approvals' },
   { to: '/maintenance', label: 'Maintenance' },
   { to: '/reports', label: 'Reports' },
+  // Stage SUB1 - the first Settings-area page and the first nav link gated
+  // by role: OWNER only, same gate as the backend's GET /tenant/billing
+  // (there is no platform-admin role in this codebase). Filtered below
+  // rather than adding a per-link role field to every other entry, which
+  // has never needed one.
+  { to: '/settings/billing', label: 'Billing', ownerOnly: true },
 ];
 
 // Stage H3 - "don't let pending money go unnoticed," not a live ticker, so a
@@ -61,6 +67,7 @@ export function AppShell() {
   const [idleWarning, setIdleWarning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const visibleNavLinks = NAV_LINKS.filter((link) => !link.ownerOnly || user?.role === 'OWNER');
 
   useEffect(() => {
     let cancelled = false;
@@ -123,7 +130,7 @@ export function AppShell() {
 
           {/* Desktop nav - unchanged, just gated to xl and up. */}
           <nav className="hidden flex-1 gap-4 xl:flex">
-            {NAV_LINKS.map((link) => (
+            {visibleNavLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
@@ -177,7 +184,7 @@ export function AppShell() {
             className="border-t border-gray-200 px-4 pb-3 xl:hidden"
             aria-label="Main"
           >
-            {NAV_LINKS.map((link) => (
+            {visibleNavLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

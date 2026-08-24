@@ -1,7 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { requestContext } from '../../common/context/request-context';
 
-const EXCLUDED_MODELS = new Set(['Tenant']);
+// Stage SUB1 - SubscriptionPricingTier is BongoFleet's own platform pricing,
+// not a tenant-scoped table (see its schema.prisma comment); it has no
+// tenantId column for this extension's implicit `where` to attach to, so it
+// must be excluded the same way Tenant itself is.
+const EXCLUDED_MODELS = new Set(['Tenant', 'SubscriptionPricingTier']);
 
 const SCOPED_OPERATIONS = new Set([
   'findUnique',

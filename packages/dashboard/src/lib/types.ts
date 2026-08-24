@@ -438,6 +438,21 @@ export interface UpdateTenantSettingsPayload {
   directorName?: string;
 }
 
+// --- Tenant billing (Stage SUB1, DESIGN_SUBSCRIPTION.md §5b) ---
+// pricePerBikePerMonth/estimatedMonthlyTotal are Prisma Decimals -> strings,
+// same convention as the rest of this file.
+
+export type TenantStatus = 'PENDING_VERIFICATION' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
+
+export interface TenantBilling {
+  activeBikeCount: number;
+  pricePerBikePerMonth: string;
+  estimatedMonthlyTotal: string;
+  status: TenantStatus;
+  trialEndsAt: string | null;
+  billingExempt: boolean;
+}
+
 // --- Hire-purchase ownership plans (Stage G Part 4) ---
 // money fields are Prisma Decimals -> strings, same convention as the rest
 // of this file. driver/motorcycle here are the OwnershipPlanService's own
