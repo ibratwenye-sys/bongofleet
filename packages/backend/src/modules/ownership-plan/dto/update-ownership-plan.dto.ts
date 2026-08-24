@@ -1,6 +1,7 @@
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -86,4 +87,29 @@ export class UpdateOwnershipPlanDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  // Stage G10 - completion checklist. No dedicated endpoint existed for
+  // these before this stage (registrationCardHandedOverAt/
+  // spareKeyHandedOverAt/nameTransferConfirmedAt sat on the schema unused
+  // since Stage F2 - see the service). Each is a one-way-feeling toggle in
+  // the UI but genuinely two-way here: true stamps the *At field to now,
+  // false clears it back to null, so a mis-click is recoverable without
+  // reaching for Prisma Studio. depositReturned additionally requires the
+  // plan to be HELD_REFUNDABLE - see the service, which is where that
+  // check belongs (a clear BadRequest message fits better there).
+  @IsOptional()
+  @IsBoolean()
+  registrationCardHandedOver?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  spareKeyHandedOver?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  nameTransferConfirmed?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  depositReturned?: boolean;
 }

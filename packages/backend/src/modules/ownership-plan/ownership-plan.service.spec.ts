@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   DayExcusalStatus,
+  DepositHandling,
   DriverType,
   OwnershipPlanStatus,
   PaymentStatus,
@@ -15,6 +16,7 @@ import {
 } from '@prisma/client';
 import { OwnershipPlanService } from './ownership-plan.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PaymentService } from '../payment/payment.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 
 describe('OwnershipPlanService', () => {
@@ -31,11 +33,12 @@ describe('OwnershipPlanService', () => {
         create: jest.Mock;
         update: jest.Mock;
       };
-      dailyAssignment: { findMany: jest.Mock };
+      dailyAssignment: { findMany: jest.Mock; create: jest.Mock };
       dailyPayment: { groupBy: jest.Mock };
       dayExcusal: { findMany: jest.Mock };
     };
   };
+  let paymentService: { createPayment: jest.Mock; updatePaymentStatus: jest.Mock };
 
   const owner: AuthenticatedUser = {
     userId: 'user-owner',
@@ -103,14 +106,20 @@ describe('OwnershipPlanService', () => {
           create: jest.fn(),
           update: jest.fn(),
         },
-        dailyAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+        dailyAssignment: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
         dailyPayment: { groupBy: jest.fn().mockResolvedValue([]) },
         dayExcusal: { findMany: jest.fn().mockResolvedValue([]) },
       },
     };
 
+    paymentService = { createPayment: jest.fn(), updatePaymentStatus: jest.fn() };
+
     const moduleRef = await Test.createTestingModule({
-      providers: [OwnershipPlanService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        OwnershipPlanService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: PaymentService, useValue: paymentService },
+      ],
     }).compile();
 
     service = moduleRef.get(OwnershipPlanService);
@@ -254,6 +263,117 @@ describe('OwnershipPlanService', () => {
 
         expect(prisma.client.guarantor.findUnique).not.toHaveBeenCalled();
       });
+    });
+
+    describe('deposit allocation (Stage G10 / §9e)', () => {
+      const createdPlan = {
+        id: 'plan-1',
+        tenantId: 'tenant-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        dailyAmount: new Prisma.Decimal(12000),
+        instalmentCount: 150, // totalOwed = 1,800,000
+        startDate: new Date('2026-03-03T00:00:00.000Z'),
+        activeWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        depositHandling: DepositHandling.APPLIED,
+      };
+
+      it('APPLIED + downPayment > 0 creates one eager DailyAssignment and allocates the deposit via createPayment, then marks it COMPLETED', async () => {
+        prisma.client.ownershipPlan.create.mockResolvedValue(createdPlan);
+        prisma.client.dailyAssignment.create.mockResolvedValue({ id: 'assignment-1' });
+        paymentService.createPayment.mockResolvedValue({
+          id: 'payment-1',
+          allocations: [{ id: 'payment-1' }],
+          totalAllocated: new Prisma.Decimal(60000),
+        });
+        paymentService.updatePaymentStatus.mockResolvedValue({
+          id: 'payment-1',
+          status: PaymentStatus.COMPLETED,
+        });
+
+        const result = await service.create({ ...dto, downPayment: 60000 }, owner);
+
+        expect(prisma.client.dailyAssignment.create).toHaveBeenCalledTimes(1);
+        const { data } = prisma.client.dailyAssignment.create.mock.calls[0][0];
+        expect(data).toEqual(
+          expect.objectContaining({
+            tenantId: 'tenant-1',
+            driverId: 'driver-1',
+            motorcycleId: 'veh-1',
+            assignedDate: new Date('2026-03-03T00:00:00.000Z'), // startDate itself is active
+            ownershipPlanId: 'plan-1',
+          }),
+        );
+        expect(data.targetAmount.toString()).toBe('12000'); // min(dailyAmount, totalOwed)
+
+        expect(paymentService.createPayment).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dailyAssignmentId: 'assignment-1',
+            driverId: 'driver-1',
+            amount: 60000,
+            confirmLargeAmount: true,
+          }),
+          owner,
+        );
+        // COMPLETED (not left PENDING for a manual Reconcile) is what makes
+        // amountPaid/netPosition reflect this deposit immediately - the same
+        // §7 cascade math derivation.spec.ts and payment.service.spec.ts
+        // already test operates on COMPLETED-only sums.
+        expect(paymentService.updatePaymentStatus).toHaveBeenCalledWith(
+          'payment-1',
+          { status: PaymentStatus.COMPLETED },
+          owner,
+        );
+        expect(result).toBe(createdPlan);
+      });
+
+      it('walks forward to the first ACTIVE weekday when startDate itself is not active', async () => {
+        prisma.client.ownershipPlan.create.mockResolvedValue({
+          ...createdPlan,
+          startDate: new Date('2026-03-03T00:00:00.000Z'), // a Tuesday
+          activeWeekdays: [3], // Wednesday only
+        });
+        prisma.client.dailyAssignment.create.mockResolvedValue({ id: 'assignment-1' });
+        paymentService.createPayment.mockResolvedValue({
+          id: 'payment-1',
+          allocations: [],
+          totalAllocated: new Prisma.Decimal(0),
+        });
+        paymentService.updatePaymentStatus.mockResolvedValue({});
+
+        await service.create({ ...dto, downPayment: 60000 }, owner);
+
+        const { data } = prisma.client.dailyAssignment.create.mock.calls[0][0];
+        expect(data.assignedDate).toEqual(new Date('2026-03-04T00:00:00.000Z')); // the Wednesday
+      });
+
+      it('HELD_REFUNDABLE + downPayment > 0 creates no eager assignment and calls no payment API', async () => {
+        prisma.client.ownershipPlan.create.mockResolvedValue({
+          ...createdPlan,
+          depositHandling: DepositHandling.HELD_REFUNDABLE,
+        });
+
+        await service.create(
+          { ...dto, downPayment: 60000, depositHandling: DepositHandling.HELD_REFUNDABLE },
+          owner,
+        );
+
+        expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+        expect(paymentService.createPayment).not.toHaveBeenCalled();
+        expect(paymentService.updatePaymentStatus).not.toHaveBeenCalled();
+      });
+
+      it.each([DepositHandling.APPLIED, DepositHandling.HELD_REFUNDABLE])(
+        'downPayment = 0 (%s) creates no eager assignment - nothing to allocate',
+        async (depositHandling) => {
+          prisma.client.ownershipPlan.create.mockResolvedValue({ ...createdPlan, depositHandling });
+
+          await service.create({ ...dto, depositHandling }, owner); // dto has no downPayment
+
+          expect(prisma.client.dailyAssignment.create).not.toHaveBeenCalled();
+          expect(paymentService.createPayment).not.toHaveBeenCalled();
+        },
+      );
     });
   });
 
@@ -818,6 +938,7 @@ describe('OwnershipPlanService', () => {
       status: OwnershipPlanStatus.ACTIVE,
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(0),
+      depositHandling: DepositHandling.APPLIED,
     };
 
     beforeEach(() => {
@@ -930,6 +1051,56 @@ describe('OwnershipPlanService', () => {
           service.update('plan-1', { guarantorId: 'guarantor-from-another-tenant' }, owner),
         ).rejects.toBeInstanceOf(NotFoundException);
         expect(prisma.client.ownershipPlan.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('completion checklist (Stage G10)', () => {
+      it('stamps registrationCardHandedOverAt/spareKeyHandedOverAt/nameTransferConfirmedAt to now on true', async () => {
+        const result = await service.update(
+          'plan-1',
+          {
+            registrationCardHandedOver: true,
+            spareKeyHandedOver: true,
+            nameTransferConfirmed: true,
+          },
+          owner,
+        );
+
+        expect(result.registrationCardHandedOverAt).toBeInstanceOf(Date);
+        expect(result.spareKeyHandedOverAt).toBeInstanceOf(Date);
+        expect(result.nameTransferConfirmedAt).toBeInstanceOf(Date);
+      });
+
+      it('clears a checklist item back to null on false', async () => {
+        const result = await service.update('plan-1', { registrationCardHandedOver: false }, owner);
+
+        expect(result.registrationCardHandedOverAt).toBeNull();
+      });
+
+      it('rejects setting depositReturned on an APPLIED plan', async () => {
+        // activePlan defaults to depositHandling: APPLIED.
+        await expect(
+          service.update('plan-1', { depositReturned: true }, owner),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(prisma.client.ownershipPlan.update).not.toHaveBeenCalled();
+      });
+
+      it('accepts setting depositReturned on a HELD_REFUNDABLE plan', async () => {
+        prisma.client.ownershipPlan.findUnique.mockResolvedValue({
+          ...activePlan,
+          depositHandling: DepositHandling.HELD_REFUNDABLE,
+        });
+
+        const result = await service.update('plan-1', { depositReturned: true }, owner);
+
+        expect(result.depositReturnedAt).toBeInstanceOf(Date);
+      });
+
+      it('leaves the checklist untouched when none of its fields are in the payload', async () => {
+        const result = await service.update('plan-1', { notes: 'unrelated' }, owner);
+
+        expect(result).not.toHaveProperty('registrationCardHandedOverAt');
+        expect(result).not.toHaveProperty('depositReturnedAt');
       });
     });
   });

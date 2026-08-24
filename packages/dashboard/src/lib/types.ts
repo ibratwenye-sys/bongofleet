@@ -474,6 +474,15 @@ export interface OwnershipPlan {
   // contract only; independent of instalmentCount/totalOwed.
   totalPrice: string;
   downPayment: string;
+  // Stage G10 (§9e) - how the down payment above is treated. Irrelevant when
+  // downPayment is "0.00". registrationCard/spareKey/nameTransfer have no
+  // gating; depositReturned is settable only when this is HELD_REFUNDABLE -
+  // see CompletionChecklistSection on the detail page.
+  depositHandling: 'APPLIED' | 'HELD_REFUNDABLE';
+  registrationCardHandedOverAt: string | null;
+  spareKeyHandedOverAt: string | null;
+  nameTransferConfirmedAt: string | null;
+  depositReturnedAt: string | null;
   startDate: string;
   contractEndDate: string | null;
   activeWeekdays: number[];
@@ -503,6 +512,10 @@ export interface OwnershipPlan {
   // differ (a renegotiated term) - show both, never silently pick one.
   derivedEndDate: string;
   projectedCompletion: string;
+  // Stage G10 - a THIRD, separate signal from daysBehind/consecutiveMissedDays
+  // (a date condition, not a payment-streak condition) - render it as its
+  // own indicator, never folded into the behind/ahead column or breach flag.
+  pastDeadlineStillOwing: boolean;
 }
 
 export interface CreateOwnershipPlanPayload {
@@ -517,6 +530,9 @@ export interface CreateOwnershipPlanPayload {
   // instalmentCount/totalOwed; never used in the create-plan form's math.
   totalPrice: number;
   downPayment?: number;
+  // Stage G10 (§9e) - defaults to APPLIED server-side when omitted. The form
+  // only offers the choice once a down payment is actually entered.
+  depositHandling?: 'APPLIED' | 'HELD_REFUNDABLE';
   startDate: string;
   contractEndDate?: string;
   activeWeekdays?: number[];
@@ -526,11 +542,18 @@ export interface CreateOwnershipPlanPayload {
   notes?: string;
 }
 
-// Stage G6 Part 4 - just the one field the dashboard actually edits on an
-// existing plan. UpdateOwnershipPlanDto supports more, but nothing else has
-// a dashboard editor yet - not adding payload shape for UI that doesn't exist.
+// Stage G6 Part 4 - contractEndDate was the one field the dashboard edited
+// on an existing plan; Stage G10 adds the completion-checklist toggles
+// (each true stamps the matching *At to now, false clears it - see
+// CompletionChecklistSection). UpdateOwnershipPlanDto supports more, but
+// nothing else has a dashboard editor yet - not adding payload shape for UI
+// that doesn't exist.
 export interface UpdateOwnershipPlanPayload {
   contractEndDate?: string;
+  registrationCardHandedOver?: boolean;
+  spareKeyHandedOver?: boolean;
+  nameTransferConfirmed?: boolean;
+  depositReturned?: boolean;
 }
 
 export interface OwnershipPlanLedgerRow {

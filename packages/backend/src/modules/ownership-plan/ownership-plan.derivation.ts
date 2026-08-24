@@ -112,6 +112,17 @@ export interface DerivedPlanFigures {
    *  exactly square): there is nothing to advance to, and the UI has its
    *  own wording for both of those cases that carries no date. */
   nextDueDate: string | null;
+  /** Stage G10 - true when contractEndDate is set, has passed, AND
+   *  remainingToOwn > 0. Deliberately a THIRD, separate signal from
+   *  daysBehind/consecutiveMissedDays (§4/§5) - a date condition, not a
+   *  payment-streak condition. A driver who is net-ahead overall (daysBehind
+   *  0) can still be past their contract's own end date if it was set short;
+   *  a driver mid-breach-streak but whose contractEndDate is null or still
+   *  in the future is not this. Never fold this into the breach threshold
+   *  or the amber/red severity read - see the dashboard, which renders it
+   *  as its own indicator. False whenever contractEndDate was never typed
+   *  in (null), since there is then no deadline to have passed. */
+  pastDeadlineStillOwing: boolean;
 }
 
 function dateOnly(date: Date): Date {
@@ -404,6 +415,18 @@ export function derivePlanFigures(
       ? isoDate(advanceActiveWeekdays(todayOnly, daysAhead, input.activeWeekdays))
       : null;
 
+  // Stage G10 - contractEndDate only (not derivedEndDate): the deadline
+  // that matters here is the one on the signed paper, not the system's own
+  // projection. A plan with no typed contractEndDate has no deadline to
+  // have passed yet, whatever derivedEndDate says.
+  // greaterThan(0), not isPositive() - decimal.js's isPositive() is really
+  // "not negative" and treats zero as positive, which would flag a plan
+  // paid to exactly zero as "still owing".
+  const pastDeadlineStillOwing =
+    input.contractEndDate !== null &&
+    input.contractEndDate.getTime() < todayOnly.getTime() &&
+    remainingToOwn.greaterThan(0);
+
   return {
     amountDue: input.amountDue.toFixed(2),
     amountPaid: input.amountPaid.toFixed(2),
@@ -419,5 +442,6 @@ export function derivePlanFigures(
     derivedEndDate,
     projectedCompletion: isoDate(projectedCompletion),
     nextDueDate,
+    pastDeadlineStillOwing,
   };
 }

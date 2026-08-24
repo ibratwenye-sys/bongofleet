@@ -76,6 +76,48 @@ type PlanRow = {
   activeWeekdays: number[];
 };
 
+export interface InstalmentRowPlan {
+  id: string;
+  driverId: string;
+  motorcycleId: string;
+  dailyAmount: Prisma.Decimal;
+}
+
+/**
+ * Stage G10 - the exact per-day row shape both this generator's backfill
+ * loop and OwnershipPlanService's eager deposit-day creation need:
+ * targetAmount clamped to whatever remains billable (Stage G7 - a plan's
+ * final instalment is deliberately smaller than dailyAmount), stamped with
+ * a fresh ride reference so reconciliation works on this row exactly as on
+ * any other assignment. Extracted so the two call sites can never drift - a
+ * change to how a plan's instalment row is shaped should only ever need
+ * editing here. Returns targetAmount separately (not just embedded in the
+ * row) because both callers need it as a real Prisma.Decimal afterward -
+ * this generator to decrement its running remainingToBill counter, the
+ * service to know what it just billed - and a CreateManyInput's field type
+ * is a wider union than Decimal.
+ */
+export function buildInstalmentRow(
+  tenantId: string,
+  plan: InstalmentRowPlan,
+  assignedDate: Date,
+  remainingToBill: Prisma.Decimal,
+): { row: Prisma.DailyAssignmentCreateManyInput; targetAmount: Prisma.Decimal } {
+  const targetAmount = Prisma.Decimal.min(plan.dailyAmount, remainingToBill);
+  return {
+    targetAmount,
+    row: {
+      tenantId,
+      driverId: plan.driverId,
+      motorcycleId: plan.motorcycleId,
+      assignedDate,
+      targetAmount,
+      ownershipPlanId: plan.id,
+      reference: generateRideReference(),
+    },
+  };
+}
+
 /**
  * Nightly instalment generator for hire-purchase ownership plans
  * (DESIGN_HIRE_PURCHASE.md §6). Follows missed-payment-notification.service.ts
@@ -401,20 +443,12 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
         // Stage G7 - totalOwed is now always an exact multiple of dailyAmount
         // (dailyAmount * instalmentCount), so remainingToBill is always either
         // 0 (the loop already broke above) or >= dailyAmount here - this can
-        // never actually pick remainingToBill. Kept as a defensive min()
-        // rather than a bare assignment: it costs nothing and remains
-        // correct even against a pre-migration plan whose already-billed
-        // history doesn't line up exactly.
-        const targetAmount = Prisma.Decimal.min(plan.dailyAmount, remainingToBill);
-        toCreate.push({
-          tenantId,
-          driverId: plan.driverId,
-          motorcycleId: plan.motorcycleId,
-          assignedDate: cursor,
-          targetAmount,
-          ownershipPlanId: plan.id,
-          reference: generateRideReference(),
-        });
+        // never actually pick remainingToBill. buildInstalmentRow's min() is
+        // kept as a defensive default rather than a bare assignment: it
+        // costs nothing and remains correct even against a pre-migration
+        // plan whose already-billed history doesn't line up exactly.
+        const { row, targetAmount } = buildInstalmentRow(tenantId, plan, cursor, remainingToBill);
+        toCreate.push(row);
         remainingToBill = remainingToBill.minus(targetAmount);
         // Mark it taken immediately so nothing else in this same run can
         // double-book this driver+date.

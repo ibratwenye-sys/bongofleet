@@ -6,9 +6,10 @@ import { OwnershipPlanContractService } from './ownership-plan-contract.service'
 import { OwnershipPlanExcusalService } from './ownership-plan-excusal.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { DocumentModule } from '../document/document.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
-  imports: [DocumentModule],
+  imports: [DocumentModule, PaymentModule],
   controllers: [OwnershipPlanController],
   providers: [
     OwnershipPlanService,

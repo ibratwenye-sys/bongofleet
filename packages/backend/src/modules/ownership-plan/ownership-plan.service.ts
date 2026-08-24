@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   DayExcusalStatus,
+  DepositHandling,
   OwnershipPlanStatus,
   PaymentStatus,
   Prisma,
@@ -14,12 +15,15 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { PaymentService } from '../payment/payment.service';
 import { describeMismatch, isCompatible } from '../../common/driver-vehicle-compatibility';
 import {
   AssignmentPaidRow,
+  computeRemainingToBill,
   derivePlanFigures,
   DerivedPlanFigures,
 } from './ownership-plan.derivation';
+import { buildInstalmentRow } from './ownership-plan-generator.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 
@@ -51,6 +55,18 @@ function assertNoDuplicateWeekdays(activeWeekdays: number[]): void {
   }
 }
 
+/** Stage G10 - the first active weekday on or after startDate: if startDate
+ *  itself is active, that's the one. Same walk-forward the generator's own
+ *  backfill loop does over activeWeekdays, just bounded to a single step
+ *  here since there is exactly one row to place (the eager deposit day). */
+function firstActiveWeekdayOnOrAfter(startDate: Date, activeWeekdays: number[]): Date {
+  const cursor = dateOnly(startDate);
+  while (!activeWeekdays.includes(cursor.getUTCDay())) {
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return cursor;
+}
+
 /** guarantorId must belong to driverId - same-tenant is automatic (the
  *  tenant-scoping Prisma extension merges actor.tenantId into the query),
  *  so a guarantor from another tenant already looks not-found; this adds
@@ -79,7 +95,10 @@ type PlanRow = {
 
 @Injectable()
 export class OwnershipPlanService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paymentService: PaymentService,
+  ) {}
 
   async create(dto: CreateOwnershipPlanDto, actor: AuthenticatedUser) {
     assertOwner(actor);
@@ -140,8 +159,11 @@ export class OwnershipPlanService {
       throw new ConflictException('This vehicle already has an active ownership plan');
     }
 
+    const depositHandling = dto.depositHandling ?? DepositHandling.APPLIED;
+
+    let plan;
     try {
-      return await this.prisma.client.ownershipPlan.create({
+      plan = await this.prisma.client.ownershipPlan.create({
         data: {
           tenantId: actor.tenantId,
           driverId: dto.driverId,
@@ -151,6 +173,7 @@ export class OwnershipPlanService {
           instalmentCount: dto.instalmentCount,
           totalPrice: dto.totalPrice,
           downPayment: dto.downPayment ?? 0,
+          depositHandling,
           startDate: new Date(dto.startDate),
           contractEndDate: dto.contractEndDate ? new Date(dto.contractEndDate) : undefined,
           activeWeekdays: dto.activeWeekdays,
@@ -167,6 +190,116 @@ export class OwnershipPlanService {
       }
       throw error;
     }
+
+    // Stage G10 (§9e) - APPLIED + a real down payment must be allocated, not
+    // sit as an inert number on the row - see allocateAppliedDeposit. Not
+    // wrapped in the same transaction as the create() above: this whole
+    // sequence (eager assignment + payment cascade) is a best-effort
+    // follow-up, deliberately, not nested inside a Prisma transaction with
+    // the plan row - see allocateAppliedDeposit's own comment for why. A
+    // failure here throws up to the OWNER who just submitted the form
+    // rather than silently leaving the deposit unallocated.
+    const downPayment = new Prisma.Decimal(dto.downPayment ?? 0);
+    if (depositHandling === DepositHandling.APPLIED && downPayment.greaterThan(0)) {
+      await this.allocateAppliedDeposit(plan, downPayment, actor);
+    }
+
+    return plan;
+  }
+
+  /**
+   * Stage G10 (§9e) - APPLIED deposit handling: the down payment must show
+   * up in amountPaid/netPosition immediately (a 60,000 deposit against a
+   * 12,000/day plan should read as ahead by the same §7 math), not sit as an
+   * inert number on the row. A brand-new plan has zero DailyAssignment rows
+   * - those normally come from the nightly generator - so this eagerly
+   * creates the plan's first instalment (buildInstalmentRow, shared with
+   * the generator so the two row shapes can never drift) and allocates the
+   * deposit against it through payment.service.ts's own tested cascade
+   * (createPayment), rather than writing a DailyPayment row directly.
+   *
+   * confirmLargeAmount: true is correct here even though its >90-days'-worth
+   * cap exists to catch a fat-fingered extra zero - this is a configured
+   * deposit amount the owner already typed into the plan form, not a typo
+   * risk.
+   *
+   * The resulting payment is completed immediately rather than left PENDING
+   * for a manual Reconcile (payment.service.ts's normal lifecycle, and
+   * PaymentsPage's "Reconcile" action) - a down payment taken at contract
+   * signing is money already in the owner's hand at that moment, the same
+   * economic event as a completed transaction, not a pending reconciliation
+   * awaiting confirmation.
+   *
+   * Deliberately not nested in create()'s transaction: PaymentService always
+   * runs its own Prisma calls against this.prisma.client, never an injected
+   * tx, and retrofitting transaction-parameter support across its tested
+   * cascade/overpayment-guard logic for this one caller risked disturbing it
+   * more than the (narrow, and never silent) window this leaves - a plan
+   * committed with no eager assignment/deposit allocated yet, recoverable by
+   * hand (record an ordinary payment against a manually-created assignment).
+   */
+  private async allocateAppliedDeposit(
+    plan: {
+      id: string;
+      tenantId: string;
+      driverId: string;
+      motorcycleId: string;
+      dailyAmount: Prisma.Decimal;
+      instalmentCount: number;
+      startDate: Date;
+      activeWeekdays: number[];
+    },
+    downPayment: Prisma.Decimal,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    const assignedDate = firstActiveWeekdayOnOrAfter(plan.startDate, plan.activeWeekdays);
+    // No assignment/payment exists yet for this plan - amountBilled is 0, so
+    // this is exactly totalOwed (§4), the same "remainingToOwn is just
+    // totalOwed at creation time" the generator's own first-day math reduces
+    // to. buildInstalmentRow's min() against dailyAmount only ever matters
+    // for a plan's FINAL day; it costs nothing to route through the same
+    // shared function regardless.
+    const remainingToBill = computeRemainingToBill(
+      plan.dailyAmount,
+      plan.instalmentCount,
+      new Prisma.Decimal(0),
+    );
+    const { row } = buildInstalmentRow(plan.tenantId, plan, assignedDate, remainingToBill);
+
+    let assignment;
+    try {
+      assignment = await this.prisma.client.dailyAssignment.create({ data: row });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // Either the (astronomically rare) ride-reference collision, or a
+        // real one: a manual assignment already exists for this driver on
+        // the plan's first active day. Either way, surface it rather than
+        // crash on a raw Prisma error - the plan row already exists, so the
+        // owner needs a clear next step, not a stack trace.
+        throw new BadRequestException(
+          `Could not allocate the deposit - this driver already has an assignment on ` +
+            `${assignedDate.toISOString().slice(0, 10)}, this plan's first active day. The ` +
+            'plan was created; resolve that conflict, or record the deposit as a manual ' +
+            'payment once it is clear.',
+        );
+      }
+      throw error;
+    }
+
+    const payment = await this.paymentService.createPayment(
+      {
+        dailyAssignmentId: assignment.id,
+        driverId: plan.driverId,
+        amount: downPayment.toNumber(),
+        confirmLargeAmount: true,
+      },
+      actor,
+    );
+    await this.paymentService.updatePaymentStatus(
+      payment.id,
+      { status: PaymentStatus.COMPLETED },
+      actor,
+    );
   }
 
   async list(actor: AuthenticatedUser) {
@@ -304,6 +437,27 @@ export class OwnershipPlanService {
       data.breachAfterConsecutiveMissedDays = dto.breachAfterConsecutiveMissedDays;
     }
     if (dto.notes !== undefined) data.notes = dto.notes;
+
+    // Stage G10 - completion checklist. Each is a genuine toggle: true
+    // stamps *At to now, false clears it back to null (see the DTO comment).
+    if (dto.registrationCardHandedOver !== undefined) {
+      data.registrationCardHandedOverAt = dto.registrationCardHandedOver ? new Date() : null;
+    }
+    if (dto.spareKeyHandedOver !== undefined) {
+      data.spareKeyHandedOverAt = dto.spareKeyHandedOver ? new Date() : null;
+    }
+    if (dto.nameTransferConfirmed !== undefined) {
+      data.nameTransferConfirmedAt = dto.nameTransferConfirmed ? new Date() : null;
+    }
+    if (dto.depositReturned !== undefined) {
+      if (existing.depositHandling !== DepositHandling.HELD_REFUNDABLE) {
+        throw new BadRequestException(
+          'depositReturned can only be set on a HELD_REFUNDABLE plan - an APPLIED deposit was ' +
+            'already credited to the schedule, so there is nothing to return',
+        );
+      }
+      data.depositReturnedAt = dto.depositReturned ? new Date() : null;
+    }
 
     if (dto.status !== undefined && dto.status !== existing.status) {
       if (existing.status !== OwnershipPlanStatus.ACTIVE) {

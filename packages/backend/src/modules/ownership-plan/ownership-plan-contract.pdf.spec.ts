@@ -1,4 +1,4 @@
-import { Prisma, PaymentAccountKind } from '@prisma/client';
+import { Prisma, PaymentAccountKind, DepositHandling } from '@prisma/client';
 import {
   buildContractContent,
   contractTextPairs,
@@ -39,6 +39,7 @@ function fullContext(overrides: Partial<ContractContext> = {}): ContractContext 
       agreementDate: new Date('2026-03-01T00:00:00.000Z'),
       totalPrice: new Prisma.Decimal(1_800_000),
       downPayment: new Prisma.Decimal(200_000),
+      depositHandling: DepositHandling.APPLIED,
       dailyAmount: new Prisma.Decimal(12_000),
       instalmentCount: 150, // totalOwed = 12,000 x 150 = 1,800,000
       startDate: new Date('2026-03-03T00:00:00.000Z'),
@@ -118,6 +119,7 @@ describe('buildContractContent / contractTextPairs', () => {
         agreementDate: new Date('2026-03-01T00:00:00.000Z'),
         totalPrice: new Prisma.Decimal(1_800_000),
         downPayment: new Prisma.Decimal(200_000),
+        depositHandling: DepositHandling.APPLIED,
         dailyAmount: new Prisma.Decimal(12_000),
         instalmentCount: 150,
         startDate: new Date('2026-03-03T00:00:00.000Z'),
@@ -282,6 +284,48 @@ describe('buildContractContent / contractTextPairs', () => {
 
       expect(text).not.toContain('Jumla ya marejesho yote');
       expect(text).not.toContain('The total of all remittances');
+    });
+  });
+
+  describe('Stage G10 (§9e) - deposit recital', () => {
+    it('prints nothing about a deposit when downPayment is 0', () => {
+      const ctx = fullContext({
+        plan: { ...fullContext().plan, downPayment: new Prisma.Decimal(0) },
+      });
+      const text = allText(ctx);
+
+      expect(text).not.toMatch(/deposit/i);
+      expect(text).not.toContain('malipo ya awali');
+    });
+
+    it('APPLIED: states the amount and that it is already credited toward the schedule', () => {
+      const ctx = fullContext({
+        plan: {
+          ...fullContext().plan,
+          downPayment: new Prisma.Decimal(200_000),
+          depositHandling: DepositHandling.APPLIED,
+        },
+      });
+      const text = allText(ctx);
+
+      expect(text).toContain('already credited toward the schedule');
+      expect(text).toContain('200,000/=');
+      expect(text).not.toContain('refundable');
+    });
+
+    it('HELD_REFUNDABLE: states the amount and that it is held by the owner, refundable on completion', () => {
+      const ctx = fullContext({
+        plan: {
+          ...fullContext().plan,
+          downPayment: new Prisma.Decimal(200_000),
+          depositHandling: DepositHandling.HELD_REFUNDABLE,
+        },
+      });
+      const text = allText(ctx);
+
+      expect(text).toContain('held by the Owner and refundable on completion of this Contract');
+      expect(text).toContain('200,000/=');
+      expect(text).not.toContain('already credited');
     });
   });
 });

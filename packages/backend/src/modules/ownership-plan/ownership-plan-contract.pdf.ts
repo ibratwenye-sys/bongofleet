@@ -4,7 +4,7 @@
 // esModuleInterop).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
-import { Prisma, PaymentAccountKind } from '@prisma/client';
+import { Prisma, PaymentAccountKind, DepositHandling } from '@prisma/client';
 import { formatShillings } from '@bongofleet/shared-lib';
 import { toSwahiliWords } from './swahili-numbers';
 
@@ -74,6 +74,10 @@ export interface ContractContext {
      *  dailyAmount * instalmentCount. */
     totalPrice: Prisma.Decimal;
     downPayment: Prisma.Decimal;
+    /** Stage G10 (§9e) - gates the deposit recital below: APPLIED prints as
+     *  already credited toward the schedule, HELD_REFUNDABLE as returned on
+     *  completion. Irrelevant (and unread) when downPayment is 0. */
+    depositHandling: DepositHandling;
     dailyAmount: Prisma.Decimal;
     /** The agreed number of payment days - totalOwed = dailyAmount *
      *  instalmentCount, exactly, always. See ownership-plan.derivation.ts. */
@@ -192,6 +196,35 @@ export function ordinal(n: number): string {
  *  OwnershipPlan.createdAt is never null. */
 function longDateEnOrdinal(date: Date): string {
   return `the ${ordinal(date.getUTCDate())} day of ${MONTH_LABELS_EN[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/**
+ * Stage G10 (§9e) - the deposit recital, gated on downPayment > 0 exactly
+ * like the fine sentence in Clause 2 below (absent entirely rather than
+ * printing "0" when there is no deposit). Placed in the recital ("KWA KUWA")
+ * block, next to the vehicle's own declared-value sentence - there is no
+ * existing "accounts recital" in that block to sit alongside (the payment
+ * destination phrase lives only in Clause 1, among the numbered terms); this
+ * follows the block's own null-sentence-drop convention instead. The
+ * Swahili here is an unreviewed functional translation, same caveat as the
+ * rest of this file - Ibrahim to review before this ships to a real driver.
+ */
+function depositRecitalLine(plan: ContractContext['plan']): { sw: string; en: string } | null {
+  if (!plan.downPayment.greaterThan(0)) {
+    return null;
+  }
+  const amount = moneyWithWords(plan.downPayment);
+  const amountEn = money(plan.downPayment);
+  if (plan.depositHandling === DepositHandling.HELD_REFUNDABLE) {
+    return {
+      sw: `Dereva amelipa malipo ya awali (deposit) ya shilingi za kitanzania ${amount}, ambayo yatashikiliwa na Mmiliki na kurejeshwa baada ya Mkataba huu kukamilika.`,
+      en: `The Driver has paid an initial deposit of Tanzanian shillings ${amountEn}, held by the Owner and refundable on completion of this Contract.`,
+    };
+  }
+  return {
+    sw: `Dereva amelipa malipo ya awali (deposit) ya shilingi za kitanzania ${amount}, ambayo tayari yamehesabiwa katika ratiba ya malipo iliyotajwa hapo juu.`,
+    en: `The Driver has paid an initial deposit of Tanzanian shillings ${amountEn}, already credited toward the schedule set out above.`,
+  };
 }
 
 function paymentAccountLine(account: ContractContext['paymentAccounts'][number]): {
@@ -330,6 +363,10 @@ export function buildContractContent(ctx: ContractContext): ContractItem[] {
       `WHEREAS THE OWNER is the lawful Owner of a ${notOnFile(ctx.vehicle.make)} registered under number ${ctx.vehicle.registrationNumber}, with chassis number ${notOnFile(ctx.vehicle.chassisNumber)}, model ${notOnFile(ctx.vehicle.model)}, colour ${notOnFile(ctx.vehicle.colour)}, with a value of Tanzanian shillings ${money(ctx.plan.totalPrice)}`,
     ),
   );
+  const depositRecital = depositRecitalLine(ctx.plan);
+  if (depositRecital) {
+    items.push(text('body', depositRecital.sw, depositRecital.en));
+  }
   items.push(
     text(
       'body',

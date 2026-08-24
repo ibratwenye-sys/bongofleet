@@ -643,6 +643,14 @@ enum OwnershipPlanStatus {
   @@map("ownership_plan_status")
 }
 
+/// Stage G10 (§9e) - how a plan's down payment is treated on creation.
+enum DepositHandling {
+  APPLIED // down payment applied to the schedule like any payment
+  HELD_REFUNDABLE // owner keeps it separately; returned at completion
+
+  @@map("deposit_handling")
+}
+
 /// A rent-to-own contract: the driver pays dailyAmount against a
 /// DailyAssignment generated for them each active weekday (see the nightly
 /// generator, a later stage) until totalPrice - downPayment is paid off.
@@ -710,6 +718,16 @@ model OwnershipPlan {
   registrationCardHandedOverAt DateTime? @map("registration_card_handed_over_at")
   spareKeyHandedOverAt         DateTime? @map("spare_key_handed_over_at")
   nameTransferConfirmedAt      DateTime? @map("name_transfer_confirmed_at")
+
+  // Stage G10 (§9e) - how the down payment is treated. APPLIED (default)
+  // credits it toward the schedule like any other payment - see
+  // OwnershipPlanService.create()'s eager first-instalment allocation.
+  // HELD_REFUNDABLE means the owner keeps it separately, untouched by
+  // totalOwed/amountPaid/remainingToOwn, returned at completion -
+  // depositReturnedAt is that checklist item, alongside the three above,
+  // and (like them) is never read by the contract renderer or derivation.ts.
+  depositHandling   DepositHandling @default(APPLIED) @map("deposit_handling")
+  depositReturnedAt DateTime?       @map("deposit_returned_at")
 
   status      OwnershipPlanStatus @default(ACTIVE)
   completedAt DateTime?           @map("completed_at")

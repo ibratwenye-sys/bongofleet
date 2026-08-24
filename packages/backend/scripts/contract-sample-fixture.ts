@@ -23,7 +23,7 @@
  * independent figures now (Stage G7), and this sample makes that visible on
  * the rendered page rather than leaving it to coincide by accident.
  */
-import { Prisma, PaymentAccountKind } from '@prisma/client';
+import { Prisma, PaymentAccountKind, DepositHandling } from '@prisma/client';
 import { ContractContext } from '../src/modules/ownership-plan/ownership-plan-contract.pdf';
 
 export const FULL_SAMPLE_CONTEXT: ContractContext = {
@@ -51,6 +51,10 @@ export const FULL_SAMPLE_CONTEXT: ContractContext = {
     agreementDate: new Date('2026-03-03T00:00:00.000Z'),
     totalPrice: new Prisma.Decimal(1_800_000),
     downPayment: new Prisma.Decimal(200_000),
+    // Stage G10 - APPLIED, the schema default and the common case; the
+    // HELD_REFUNDABLE wording is covered by ownership-plan-contract.pdf.spec.ts
+    // directly rather than by a second full review fixture here.
+    depositHandling: DepositHandling.APPLIED,
     dailyAmount: new Prisma.Decimal(12_000),
     instalmentCount: 100,
     startDate: new Date('2026-03-03T00:00:00.000Z'),
@@ -112,6 +116,7 @@ export const SPARSE_SAMPLE_CONTEXT: ContractContext = {
     agreementDate: new Date('2026-08-01T00:00:00.000Z'),
     totalPrice: new Prisma.Decimal(1_800_000),
     downPayment: new Prisma.Decimal(0),
+    depositHandling: DepositHandling.APPLIED, // irrelevant - no deposit to recite
     dailyAmount: new Prisma.Decimal(12_000),
     instalmentCount: 150,
     startDate: new Date('2026-08-03T00:00:00.000Z'),
@@ -150,6 +155,7 @@ export const LARGE_SAMPLE_CONTEXT: ContractContext = {
     // exactly - dailyAmount x instalmentCount, nothing else.
     totalPrice: new Prisma.Decimal(5_160_000),
     downPayment: new Prisma.Decimal(0),
+    depositHandling: DepositHandling.APPLIED, // irrelevant - no deposit to recite
     dailyAmount: new Prisma.Decimal(12_000),
     instalmentCount: 430,
     startDate: new Date('2026-03-03T00:00:00.000Z'),

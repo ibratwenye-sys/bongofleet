@@ -513,4 +513,68 @@ describe('derivePlanFigures', () => {
       expect(result.recentExcusalCount).toBe(5);
     });
   });
+
+  describe('pastDeadlineStillOwing (Stage G10)', () => {
+    it('is false when contractEndDate was never typed in (null), however much is still owed', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: null,
+          amountDue: new Prisma.Decimal(1_800_000),
+          amountPaid: new Prisma.Decimal(0),
+        }),
+        TODAY,
+      );
+      expect(result.pastDeadlineStillOwing).toBe(false);
+    });
+
+    it('is true once contractEndDate has passed and remainingToOwn is still positive', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: day(-1),
+          amountDue: new Prisma.Decimal(1_800_000),
+          amountPaid: new Prisma.Decimal(0),
+        }),
+        TODAY,
+      );
+      expect(result.pastDeadlineStillOwing).toBe(true);
+    });
+
+    it('is false once contractEndDate has passed but the plan is fully paid (remainingToOwn <= 0)', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: day(-1),
+          amountDue: new Prisma.Decimal(1_800_000),
+          amountPaid: new Prisma.Decimal(1_800_000),
+        }),
+        TODAY,
+      );
+      expect(result.pastDeadlineStillOwing).toBe(false);
+    });
+
+    it('is false while contractEndDate is still in the future, however far behind the driver is', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: day(1),
+          amountDue: new Prisma.Decimal(1_800_000),
+          amountPaid: new Prisma.Decimal(0),
+        }),
+        TODAY,
+      );
+      expect(result.pastDeadlineStillOwing).toBe(false);
+    });
+
+    it('is independent of consecutiveMissedDays - true even for a driver with no current missed streak', () => {
+      const result = derivePlanFigures(
+        basePosition({
+          contractEndDate: day(-30),
+          amountDue: new Prisma.Decimal(1_800_000),
+          amountPaid: new Prisma.Decimal(0),
+          assignmentPayments: [paidRow(-1, 12000), paidRow(-2, 12000)], // paid in full, no streak
+        }),
+        TODAY,
+      );
+      expect(result.consecutiveMissedDays).toBe(0);
+      expect(result.pastDeadlineStillOwing).toBe(true);
+    });
+  });
 });

@@ -68,6 +68,12 @@ function missedStreakLabel(consecutiveMissedDays: number): string {
   return `${consecutiveMissedDays} day${consecutiveMissedDays === 1 ? '' : 's'} missed in a row`;
 }
 
+/** Stage G10 - a THIRD signal, deliberately separate from positionSeverity's
+ *  amber/red (daysBehind vs graceDays; consecutiveMissedDays vs breach) -
+ *  a date condition, not a payment-streak condition. Purple, not reusing
+ *  amber/red, so it never reads as "the same thing as being behind". */
+const PAST_DEADLINE_BADGE_STYLES = 'bg-purple-100 text-purple-800';
+
 /** Stage G5 Part 3 - a count, not a flag and not a limit: there is no
  *  threshold this turns red at. The point is only to make "excused twelve
  *  days this quarter" visible instead of invisible one day at a time, so an
@@ -115,6 +121,9 @@ interface CreateFormState {
   guarantorId: string;
   totalPrice: string;
   downPayment: string;
+  // Stage G10 (§9e) - only offered (and only sent) once downPayment is
+  // actually entered; default APPLIED matches the server's own default.
+  depositHandling: 'APPLIED' | 'HELD_REFUNDABLE';
   dailyAmount: string;
   termMode: TermMode;
   days: string;
@@ -170,6 +179,7 @@ function CreatePlanFormModal({
     guarantorId: '',
     totalPrice: '',
     downPayment: '',
+    depositHandling: 'APPLIED',
     dailyAmount: '',
     termMode: 'days',
     days: '',
@@ -306,6 +316,7 @@ function CreatePlanFormModal({
         instalmentCount: resolvedDays,
         totalPrice,
         downPayment: form.downPayment ? downPayment : undefined,
+        depositHandling: form.downPayment ? form.depositHandling : undefined,
         startDate: form.startDate,
         contractEndDate: form.contractEndDate || undefined,
         activeWeekdays: form.activeWeekdays,
@@ -447,6 +458,30 @@ function CreatePlanFormModal({
                 onChange={(e) => setForm({ ...form, downPayment: e.target.value })}
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               />
+              {/* Stage G10 (§9e) - only shown once a down payment is actually
+                  entered; there is nothing to choose between otherwise. */}
+              {form.downPayment && Number(form.downPayment) > 0 && (
+                <div className="mt-2 flex gap-3 text-sm">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="depositHandling"
+                      checked={form.depositHandling === 'APPLIED'}
+                      onChange={() => setForm({ ...form, depositHandling: 'APPLIED' })}
+                    />
+                    Applied to schedule
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="depositHandling"
+                      checked={form.depositHandling === 'HELD_REFUNDABLE'}
+                      onChange={() => setForm({ ...form, depositHandling: 'HELD_REFUNDABLE' })}
+                    />
+                    Held, refundable
+                  </label>
+                </div>
+              )}
             </div>
           </div>
 
@@ -780,7 +815,16 @@ export function OwnershipPage() {
                         ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}`
                         : '—'}
                     </span>
-                    <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
+                    <div className="flex items-center gap-1">
+                      {plan.pastDeadlineStillOwing && (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${PAST_DEADLINE_BADGE_STYLES}`}
+                        >
+                          Past deadline
+                        </span>
+                      )}
+                      <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
+                    </div>
                   </div>
                   <p className={`mt-1 text-sm ${SEVERITY_TEXT_STYLES[severity]}`}>
                     {positionLabel(plan.daysBehind, plan.daysAhead)}
@@ -816,19 +860,20 @@ export function OwnershipPage() {
               <th className="px-4 py-2 text-left font-medium text-gray-500">
                 Projected completion
               </th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">Deadline</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {plans === null ? (
               <tr>
-                <td colSpan={13} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={14} className="px-4 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : plans.length === 0 ? (
               <tr>
-                <td colSpan={13} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={14} className="px-4 py-6 text-center text-gray-500">
                   No ownership plans yet.
                 </td>
               </tr>
@@ -879,6 +924,15 @@ export function OwnershipPage() {
                     </td>
                     <td className="px-4 py-2 text-right text-gray-600">{plan.daysLeft}</td>
                     <td className="px-4 py-2 text-gray-600">{plan.projectedCompletion}</td>
+                    <td className="px-4 py-2">
+                      {plan.pastDeadlineStillOwing && (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${PAST_DEADLINE_BADGE_STYLES}`}
+                        >
+                          Past deadline, still owing
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2">
                       <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
                     </td>

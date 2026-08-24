@@ -604,6 +604,90 @@ function ContractEndDateEditor({
   );
 }
 
+/**
+ * Stage G10 - registrationCardHandedOverAt/spareKeyHandedOverAt/
+ * nameTransferConfirmedAt had sat on the schema unused since Stage F2 -
+ * this is the first UI (and the first API path, on UpdateOwnershipPlanDto)
+ * either has ever reached. depositReturned is a fourth item, shown only for
+ * a HELD_REFUNDABLE plan - there is nothing to return on an APPLIED one,
+ * and the service 400s an attempt to set it there.
+ *
+ * Each item is a genuine two-way toggle, not a one-shot "mark done" button:
+ * checking sends true (stamps *At to now), unchecking sends false (clears
+ * it back to null) - a mis-click is recoverable without reaching for
+ * Prisma Studio.
+ */
+function CompletionChecklistSection({
+  plan,
+  onUpdated,
+}: {
+  plan: OwnershipPlan;
+  onUpdated: (plan: OwnershipPlan) => void;
+}) {
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(field: keyof UpdateOwnershipPlanPayload, checked: boolean) {
+    setSaving(field);
+    setError(null);
+    try {
+      const payload: UpdateOwnershipPlanPayload = { [field]: checked };
+      const updated = await apiFetch<OwnershipPlan>(`/ownership-plans/${plan.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      onUpdated(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update the checklist.');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const items: Array<{ key: keyof UpdateOwnershipPlanPayload; label: string; at: string | null }> =
+    [
+      {
+        key: 'registrationCardHandedOver',
+        label: 'Registration card handed over',
+        at: plan.registrationCardHandedOverAt,
+      },
+      {
+        key: 'spareKeyHandedOver',
+        label: 'Spare key handed over',
+        at: plan.spareKeyHandedOverAt,
+      },
+      {
+        key: 'nameTransferConfirmed',
+        label: 'Name transfer confirmed',
+        at: plan.nameTransferConfirmedAt,
+      },
+    ];
+  if (plan.depositHandling === 'HELD_REFUNDABLE') {
+    items.push({ key: 'depositReturned', label: 'Deposit returned', at: plan.depositReturnedAt });
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-2 text-sm font-semibold text-gray-700">Completion checklist</h2>
+      <div className="space-y-2 rounded border border-gray-200 bg-white p-4">
+        {items.map((item) => (
+          <label key={item.key} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={item.at !== null}
+              disabled={saving === item.key}
+              onChange={(e) => void toggle(item.key, e.target.checked)}
+            />
+            <span className="text-gray-900">{item.label}</span>
+            {item.at && <span className="text-xs text-gray-500">— {item.at.slice(0, 10)}</span>}
+          </label>
+        ))}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    </section>
+  );
+}
+
 export function OwnershipPlanDetailPage() {
   const { planId } = useParams<{ planId: string }>();
   const [plan, setPlan] = useState<OwnershipPlan | null>(null);
@@ -635,6 +719,14 @@ export function OwnershipPlanDetailPage() {
         {formatTZS(plan.totalPrice)} · {formatTZS(plan.downPayment)} down · started{' '}
         {plan.startDate.slice(0, 10)} · <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
       </p>
+      {/* Stage G10 - a THIRD signal, separate from the behind/ahead figures
+          below and the breach threshold OwnershipPage's severity colouring
+          watches - a date condition, not a payment-streak condition. */}
+      {plan.pastDeadlineStillOwing && (
+        <p className="mb-4 text-sm font-medium text-purple-700">
+          Past the contract's end date, still owing {formatTZS(plan.remainingToOwn)}.
+        </p>
+      )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded border border-gray-200 bg-white p-3">
@@ -656,6 +748,7 @@ export function OwnershipPlanDetailPage() {
       </div>
 
       <ContractSection planId={planId} hasContractEndDate={plan.contractEndDate !== null} />
+      <CompletionChecklistSection plan={plan} onUpdated={setPlan} />
       <LedgerSection planId={planId} />
     </div>
   );

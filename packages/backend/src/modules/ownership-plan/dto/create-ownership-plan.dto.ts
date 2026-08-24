@@ -2,6 +2,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsDateString,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -13,6 +14,7 @@ import {
   Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { DepositHandling } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -53,6 +55,13 @@ export class CreateOwnershipPlanDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   downPayment?: number;
+
+  /** Stage G10 (§9e) - defaults to APPLIED (matches the schema default) when
+   *  omitted. Ignored entirely when downPayment is 0/omitted - there is
+   *  nothing to apply or hold. */
+  @IsOptional()
+  @IsEnum(DepositHandling)
+  depositHandling?: DepositHandling;
 
   @IsDateString()
   startDate: string;

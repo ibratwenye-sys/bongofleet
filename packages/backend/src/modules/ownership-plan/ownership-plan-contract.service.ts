@@ -104,6 +104,7 @@ export class OwnershipPlanContractService {
         agreementDate: plan.createdAt,
         totalPrice: plan.totalPrice,
         downPayment: plan.downPayment,
+        depositHandling: plan.depositHandling,
         dailyAmount: plan.dailyAmount,
         instalmentCount: plan.instalmentCount,
         startDate: plan.startDate,

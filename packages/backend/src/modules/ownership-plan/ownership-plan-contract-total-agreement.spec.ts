@@ -19,7 +19,7 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { OwnershipPlanStatus, Prisma, PaymentAccountKind } from '@prisma/client';
+import { OwnershipPlanStatus, Prisma, PaymentAccountKind, DepositHandling } from '@prisma/client';
 import { OwnershipPlanGeneratorService } from './ownership-plan-generator.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { contractTextPairs, ContractContext } from './ownership-plan-contract.pdf';
@@ -272,6 +272,7 @@ describe('Contract total repayment sentence agrees with the Stage E daily-charge
         // sentence never reads them.
         totalPrice: new Prisma.Decimal(999_999),
         downPayment: new Prisma.Decimal(1_234),
+        depositHandling: DepositHandling.APPLIED,
         dailyAmount: new Prisma.Decimal(dailyAmount),
         instalmentCount,
         startDate: utc(2026, 8, 3),
