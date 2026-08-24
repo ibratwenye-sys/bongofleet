@@ -27,6 +27,7 @@ import { TransportModule } from './modules/transport/transport.module';
 import { OwnershipPlanModule } from './modules/ownership-plan/ownership-plan.module';
 import { PaymentAccountModule } from './modules/payment-account/payment-account.module';
 import { TenantModule } from './modules/tenant/tenant.module';
+import { GpsModule } from './modules/gps/gps.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -67,6 +68,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     OwnershipPlanModule,
     PaymentAccountModule,
     TenantModule,
+    GpsModule,
   ],
   controllers: [AppController],
   providers: [

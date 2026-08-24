@@ -221,3 +221,22 @@ export interface PendingReceiptUpload {
   photoMimeType: string;
   photoName: string;
 }
+
+/**
+ * Stage I1 (DESIGN_GPS_TRACKING.md §4). One buffered GPS fix, matching
+ * PhoneFixDto server-side field for field - this is exactly what travels in
+ * a POST /gps/phone batch. No clientId/queuedAt: unlike QueuedPayment/
+ * QueuedExpense, a fix is never individually retried or reported on by
+ * itself (gpsQueue.ts flushes the whole buffer as one batch, and the
+ * server's per-fix accept/discard split is by date, not by client-side
+ * identity), so there is nothing here that needs one.
+ */
+export interface QueuedGpsFix {
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+  speedKmh?: number;
+  heading?: number;
+  accuracyMeters?: number;
+  batteryPercent?: number;
+}

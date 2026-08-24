@@ -7,14 +7,23 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as ImagePicker from 'expo-image-picker';
 import { apiFetch, ApiError, NetworkError } from '../api';
 import { clearTokens, getQueue } from '../storage';
 import { enqueuePayment, flushQueue } from '../queue';
+import { enqueueGpsFix, flushGpsQueue } from '../gpsQueue';
+import { startGpsTracking, stopGpsTracking } from '../gpsTracking';
 import { formatTZS, todayKey } from '../format';
-import type { Assignment, AssignmentDetail, Me, OwnershipPlan, Payment } from '../types';
+import type {
+  Assignment,
+  AssignmentDetail,
+  Me,
+  OwnershipPlan,
+  Payment,
+  QueuedGpsFix,
+} from '../types';
 
 /**
  * Stage DM1. Moved out of the old monolithic HomeScreen.tsx unchanged, not
@@ -61,6 +70,15 @@ interface DriverData {
   plan: OwnershipPlan | null;
   payments: Payment[];
   queueCount: number;
+  /** Stage I1 - true only while actually watching position: foregrounded,
+   *  an assignment exists today, AND permission was granted. The consent
+   *  row (StatusBanners) reads this, not just "was permission ever
+   *  granted" - tracking stops the instant any one of those conditions
+   *  stops holding, and this reflects that in real time. */
+  gpsEnabled: boolean;
+  /** Stage I1 - last time a GPS fix was actually accepted by the server
+   *  (not just queued locally) - what the consent row's "last sent" reads. */
+  gpsLastSentAt: string | null;
   offline: boolean;
   loading: boolean;
   refreshing: boolean;
@@ -110,6 +128,8 @@ export function DriverDataProvider({
   const [plan, setPlan] = useState<OwnershipPlan | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [queueCount, setQueueCount] = useState(0);
+  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [gpsLastSentAt, setGpsLastSentAt] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -178,6 +198,13 @@ export function DriverDataProvider({
       );
     }
     await refreshQueueCount();
+    // Stage I1 - GPS fixes flush alongside payments on the same reconnect/
+    // manual-sync trigger, not on a separate schedule; see the lifecycle
+    // effect below for how fixes actually get queued in the first place.
+    const gpsResult = await flushGpsQueue();
+    if (gpsResult && gpsResult.sent > 0) {
+      setGpsLastSentAt(new Date().toISOString());
+    }
   }, [load, refreshQueueCount, showBanner]);
 
   useEffect(() => {
@@ -194,6 +221,46 @@ export function DriverDataProvider({
     // Intentionally run once on mount - load/trySync are stable enough here.
     // eslint-disable-next-line
   }, []);
+
+  const handleGpsFix = useCallback(async (fix: QueuedGpsFix) => {
+    await enqueueGpsFix(fix);
+    const result = await flushGpsQueue();
+    if (result && result.sent > 0) {
+      setGpsLastSentAt(new Date().toISOString());
+    }
+  }, []);
+
+  // Stage I1 (§4) - tracking runs only while: the app is foregrounded, AND
+  // the driver has today's DailyAssignment. `hasAssignmentToday` (a plain
+  // boolean, not the assignment object itself) is the effect's dependency
+  // on purpose - `assignment` gets a fresh object reference on every load()/
+  // refresh() even when nothing about it changed, which would otherwise
+  // restart tracking (and re-check permission) on every pull-to-refresh.
+  // startGpsTracking/stopGpsTracking are both idempotent, so re-running this
+  // on an AppState change is harmless even when nothing actually needs to
+  // change.
+  const hasAssignmentToday = assignment !== null;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function sync() {
+      if (hasAssignmentToday && AppState.currentState === 'active') {
+        const status = await startGpsTracking((fix) => void handleGpsFix(fix));
+        if (!cancelled) setGpsEnabled(status === 'granted');
+      } else {
+        stopGpsTracking();
+        if (!cancelled) setGpsEnabled(false);
+      }
+    }
+
+    void sync();
+    const subscription = AppState.addEventListener('change', () => void sync());
+    return () => {
+      cancelled = true;
+      subscription.remove();
+      stopGpsTracking();
+    };
+  }, [hasAssignmentToday, handleGpsFix]);
 
   useEffect(() => {
     if (!banner) return;
@@ -322,6 +389,8 @@ export function DriverDataProvider({
       plan,
       payments,
       queueCount,
+      gpsEnabled,
+      gpsLastSentAt,
       offline,
       loading,
       refreshing,
@@ -342,6 +411,8 @@ export function DriverDataProvider({
       plan,
       payments,
       queueCount,
+      gpsEnabled,
+      gpsLastSentAt,
       offline,
       loading,
       refreshing,

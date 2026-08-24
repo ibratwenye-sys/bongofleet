@@ -40,3 +40,15 @@ export function formatDateHuman(iso: string): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
   return `${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
+
+/** Stage I1 - "last sent HH:MM" for the GPS consent row (StatusBanners).
+ *  Manual computation, not toLocaleTimeString - same reasoning
+ *  formatDateHuman already follows (consistent across web/native without
+ *  depending on locale/ICU data being present). Local device time, not
+ *  UTC - the rider reads this against their own phone's clock. */
+export function formatTimeHuman(iso: string): string {
+  const d = new Date(iso);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}

@@ -70,6 +70,32 @@ enum MotorcycleStatus {
   @@map("motorcycle_status")
 }
 
+/// Stage I1 (DESIGN_GPS_TRACKING.md §2). Where a GpsLocation fix came from.
+/// DEVICE and MANUAL exist now so GpsLocation's shape is settled in one
+/// migration - only PHONE is actually written until the box-ingestion stage.
+enum GpsSource {
+  PHONE
+  DEVICE
+  MANUAL
+
+  @@map("gps_source")
+}
+
+/// Stage I1 - which of the two reporting paths a vehicle uses. DEVICE/BOTH
+/// are unused until POST /gps/device (a later stage, depends on confirming
+/// Traccar Cloud's webhook payload shape first) - added now, alongside
+/// Motorcycle.gpsDeviceSecretHash below, so that stage needs no second
+/// migration. PHONE is the default: every vehicle is phone-tracked (via its
+/// assigned rider's phone) until an owner fits a box.
+enum TrackingMode {
+  NONE
+  PHONE
+  DEVICE
+  BOTH
+
+  @@map("tracking_mode")
+}
+
 enum DocumentOwnerType {
   RIDER
   MOTORCYCLE
@@ -154,6 +180,15 @@ model Tenant {
   /// or dates say. Ibrahim's own fleet is set exempt in this migration - his
   /// own product must never lock him out of it or bill him.
   billingExemptAt DateTime? @map("billing_exempt_at")
+
+  /// Stage I1 (DESIGN_GPS_TRACKING.md §4/§10). Working-hours window for GPS
+  /// reporting - nullable, BOTH unset by default. NOT enforced anywhere yet:
+  /// §10's working-hours question is still genuinely undecided, not just
+  /// unbuilt. POST /gps/phone must accept every fix regardless of hour while
+  /// these are null, which is every tenant right now. Added now purely so
+  /// the schema doesn't need a second migration once that decision lands.
+  trackingStartHour Int? @map("tracking_start_hour")
+  trackingEndHour   Int? @map("tracking_end_hour")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -344,6 +379,13 @@ model Motorcycle {
   chassisNumber      String?          @map("chassis_number")
   colour             String?
   gpsDeviceId        String?          @map("gps_device_id")
+  // Stage I1 - PHONE default: every vehicle is tracked via its assigned
+  // rider's phone (POST /gps/phone) until an owner sets up a box.
+  // gpsDeviceSecretHash is unused until the box-ingestion stage (POST
+  // /gps/device) - never a plaintext secret, same convention as
+  // User.passwordHash.
+  trackingMode        TrackingMode     @default(PHONE) @map("tracking_mode")
+  gpsDeviceSecretHash String?          @map("gps_device_secret_hash")
   status             MotorcycleStatus @default(ACTIVE)
   currentMileage     Int              @default(0) @map("current_mileage")
   isActive           Boolean          @default(true) @map("is_active")
@@ -468,16 +510,27 @@ model GpsLocation {
   tenant       Tenant     @relation(fields: [tenantId], references: [id])
   motorcycleId String     @map("motorcycle_id")
   motorcycle   Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
-  latitude     Float
-  longitude    Float
-  speedKmh     Float?     @map("speed_kmh")
-  heading      Float?
-  recordedAt   DateTime   @map("recorded_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  // Stage I1 (§2/§4). Which reporting path this fix came from - only PHONE
+  // is written until box ingestion. driverId is the rider whose phone
+  // reported it (resolved server-side from their own DailyAssignment - see
+  // GpsService - never taken from the request body); null for DEVICE/MANUAL,
+  // which have no phone in the loop. Plain scalar, not a Prisma relation -
+  // same convention as OwnershipPlan.driverId (no FK needed for a fix log).
+  source         GpsSource @default(PHONE) @map("source")
+  driverId       String?   @map("rider_id")
+  latitude       Float
+  longitude      Float
+  speedKmh       Float?    @map("speed_kmh")
+  heading        Float?
+  accuracyMeters Float?    @map("accuracy_meters")
+  batteryPercent Int?      @map("battery_percent")
+  recordedAt     DateTime  @map("recorded_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@index([motorcycleId, recordedAt])
   @@index([tenantId, recordedAt])
+  @@index([tenantId, motorcycleId, source, recordedAt])
   @@map("gps_locations")
 }
 

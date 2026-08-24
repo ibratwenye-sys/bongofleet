@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { PendingReceiptUpload, QueuedExpense, QueuedPayment, TokenResponse } from './types';
+import type {
+  PendingReceiptUpload,
+  QueuedExpense,
+  QueuedGpsFix,
+  QueuedPayment,
+  TokenResponse,
+} from './types';
 
 const ACCESS_KEY = 'bf.accessToken';
 const REFRESH_KEY = 'bf.refreshToken';
@@ -10,6 +16,8 @@ const QUEUE_KEY = 'bf.paymentQueue';
 // together for no benefit.
 const EXPENSE_QUEUE_KEY = 'bf.expenseQueue';
 const PENDING_RECEIPTS_KEY = 'bf.expensePendingReceipts';
+// Stage I1 - same reasoning again: gpsQueue.ts is its own module, own key.
+const GPS_QUEUE_KEY = 'bf.gpsQueue';
 
 export async function saveTokens(tokens: TokenResponse): Promise<void> {
   await AsyncStorage.multiSet([
@@ -73,4 +81,19 @@ export async function getPendingReceipts(): Promise<PendingReceiptUpload[]> {
 
 export async function setPendingReceipts(list: PendingReceiptUpload[]): Promise<void> {
   await AsyncStorage.setItem(PENDING_RECEIPTS_KEY, JSON.stringify(list));
+}
+
+export async function getGpsQueue(): Promise<QueuedGpsFix[]> {
+  const raw = await AsyncStorage.getItem(GPS_QUEUE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as QueuedGpsFix[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setGpsQueue(queue: QueuedGpsFix[]): Promise<void> {
+  await AsyncStorage.setItem(GPS_QUEUE_KEY, JSON.stringify(queue));
 }

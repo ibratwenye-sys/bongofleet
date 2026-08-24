@@ -21,6 +21,14 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BongoFleet uses your location only while the app is open and you have an assignment for today, so your fleet owner can see your route. It is never recorded off duty or in the background."
+        }
+      ]
+    ],
     "extra": {
       "apiUrl": "http://192.168.1.100:3000"
     }

@@ -141,8 +141,13 @@ const DAR_ES_SALAAM_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
  * three hours of every local day, a naive UTC dateOnly() would still report
  * yesterday's date. Only ever apply this to an instant, never to an
  * assignedDate that is already a bare calendar date.
+ *
+ * Stage I1 - exported (was module-private) so GpsService can resolve which
+ * DailyAssignment a phone fix's recordedAt belongs to using the exact same
+ * day-boundary logic as everywhere else in this codebase, rather than a
+ * second implementation of the same three-hour-offset arithmetic.
  */
-function dateOnlyInDarEsSalaam(instant: Date): Date {
+export function dateOnlyInDarEsSalaam(instant: Date): Date {
   return dateOnly(new Date(instant.getTime() + DAR_ES_SALAAM_UTC_OFFSET_MS));
 }
 
