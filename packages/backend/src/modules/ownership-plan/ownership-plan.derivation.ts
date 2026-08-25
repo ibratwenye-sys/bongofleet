@@ -131,7 +131,12 @@ function dateOnly(date: Date): Date {
 
 // East Africa Time is a fixed UTC+3 with no DST, matching the cron jobs'
 // own timezone (Africa/Dar_es_Salaam).
-const DAR_ES_SALAAM_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+//
+// Stage I3 - exported so gps/dar-es-salaam-day-range.ts can compute the
+// INVERSE conversion (a calendar-date string -> its UTC instant range) with
+// the exact same constant, rather than a second hardcoded `3 * 60 * 60 *
+// 1000` that could silently drift from this one.
+export const DAR_ES_SALAAM_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 /**
  * Stage G3 Part 2 - the calendar date `instant` falls on in Africa/Dar_es_Salaam,

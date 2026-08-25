@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GpsSource, UserRole } from '@prisma/client';
 import { GpsService } from './gps.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -11,7 +11,8 @@ describe('GpsService', () => {
     client: {
       driver: { findUnique: jest.Mock };
       dailyAssignment: { findMany: jest.Mock };
-      gpsLocation: { createMany: jest.Mock };
+      motorcycle: { findMany: jest.Mock; findUnique: jest.Mock };
+      gpsLocation: { createMany: jest.Mock; findMany: jest.Mock };
     };
   };
 
@@ -25,12 +26,19 @@ describe('GpsService', () => {
     jti: 'jti-rider',
   };
 
+  const owner: AuthenticatedUser = { ...rider, userId: 'user-owner', role: UserRole.OWNER };
+  const manager: AuthenticatedUser = { ...rider, userId: 'user-manager', role: UserRole.MANAGER };
+
   beforeEach(async () => {
     prisma = {
       client: {
         driver: { findUnique: jest.fn().mockResolvedValue({ id: 'driver-1' }) },
         dailyAssignment: { findMany: jest.fn().mockResolvedValue([]) },
-        gpsLocation: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        motorcycle: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
+        gpsLocation: {
+          createMany: jest.fn().mockResolvedValue({ count: 0 }),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
       },
     };
 
@@ -186,5 +194,159 @@ describe('GpsService', () => {
         batteryPercent: 64,
       }),
     );
+  });
+
+  describe('getFleetPositions (Stage I3, §7)', () => {
+    it('rejects RIDER with Forbidden, and issues no query', async () => {
+      await expect(service.getFleetPositions(rider)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.client.motorcycle.findMany).not.toHaveBeenCalled();
+    });
+
+    it('issues exactly one motorcycle query for the whole fleet, not one per vehicle', async () => {
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        {
+          id: 'moto-1',
+          registrationNumber: 'KDA-001A',
+          vehicleType: 'MOTORBIKE',
+          gpsLocations: [],
+        },
+        { id: 'moto-2', registrationNumber: 'KDA-002A', vehicleType: 'CAR', gpsLocations: [] },
+      ]);
+
+      await service.getFleetPositions(owner);
+
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.client.motorcycle.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } }),
+      );
+    });
+
+    it('resolves a live vehicle from its nested gpsLocations via resolveCurrentPosition', async () => {
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        {
+          id: 'moto-1',
+          registrationNumber: 'KDA-001A',
+          vehicleType: 'MOTORBIKE',
+          gpsLocations: [
+            {
+              source: GpsSource.PHONE,
+              latitude: -6.79,
+              longitude: 39.2,
+              recordedAt: new Date(Date.now() - 60_000),
+            },
+          ],
+        },
+      ]);
+
+      const [result] = await service.getFleetPositions(manager);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          motorcycleId: 'moto-1',
+          registrationNumber: 'KDA-001A',
+          vehicleType: 'MOTORBIKE',
+          offline: false,
+          latitude: -6.79,
+          longitude: 39.2,
+          source: 'PHONE',
+        }),
+      );
+    });
+
+    it('an active vehicle with no GPS history at all still appears, offline with lastRecordedAt: null', async () => {
+      prisma.client.motorcycle.findMany.mockResolvedValue([
+        { id: 'moto-1', registrationNumber: 'KDA-NEW', vehicleType: 'TRUCK', gpsLocations: [] },
+      ]);
+
+      const [result] = await service.getFleetPositions(owner);
+
+      expect(result).toEqual({
+        motorcycleId: 'moto-1',
+        registrationNumber: 'KDA-NEW',
+        vehicleType: 'TRUCK',
+        offline: true,
+        lastRecordedAt: null,
+      });
+    });
+  });
+
+  describe('getVehiclePath (Stage I3, §7)', () => {
+    it('rejects RIDER with Forbidden, and issues no query', async () => {
+      await expect(service.getVehiclePath('moto-1', '2026-08-20', rider)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.client.motorcycle.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('404s when the motorcycle does not exist (or belongs to another tenant)', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getVehiclePath('moto-missing', '2026-08-20', owner),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.client.gpsLocation.findMany).not.toHaveBeenCalled();
+    });
+
+    it('queries the exact Africa/Dar_es_Salaam day range for the given date, ordered oldest first', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ id: 'moto-1' });
+      prisma.client.gpsLocation.findMany.mockResolvedValue([]);
+
+      await service.getVehiclePath('moto-1', '2026-08-20', owner);
+
+      expect(prisma.client.gpsLocation.findMany).toHaveBeenCalledWith({
+        where: {
+          motorcycleId: 'moto-1',
+          recordedAt: {
+            gte: new Date('2026-08-19T21:00:00.000Z'),
+            lt: new Date('2026-08-20T21:00:00.000Z'),
+          },
+        },
+        orderBy: { recordedAt: 'asc' },
+        select: { recordedAt: true, latitude: true, longitude: true, speedKmh: true },
+      });
+    });
+
+    it('maps rows to plain path points, speedKmh null when absent', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ id: 'moto-1' });
+      prisma.client.gpsLocation.findMany.mockResolvedValue([
+        {
+          recordedAt: new Date('2026-08-20T09:00:00.000Z'),
+          latitude: -6.79,
+          longitude: 39.2,
+          speedKmh: 24.5,
+        },
+        {
+          recordedAt: new Date('2026-08-20T09:01:00.000Z'),
+          latitude: -6.8,
+          longitude: 39.21,
+          speedKmh: null,
+        },
+      ]);
+
+      const result = await service.getVehiclePath('moto-1', '2026-08-20', manager);
+
+      expect(result).toEqual([
+        {
+          recordedAt: '2026-08-20T09:00:00.000Z',
+          latitude: -6.79,
+          longitude: 39.2,
+          speedKmh: 24.5,
+        },
+        {
+          recordedAt: '2026-08-20T09:01:00.000Z',
+          latitude: -6.8,
+          longitude: 39.21,
+          speedKmh: null,
+        },
+      ]);
+    });
+
+    it('rejects a malformed date with BadRequest', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue({ id: 'moto-1' });
+
+      await expect(service.getVehiclePath('moto-1', 'not-a-date', owner)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
   });
 });

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Marker } from 'react-leaflet';
 import { apiFetch, ApiError } from '../lib/api';
 import type { PublicVehiclePosition } from '../lib/types';
+import { VehicleMap } from '../components/VehicleMap';
+import { vehicleDivIcon } from '../lib/gps-status';
 
 // Stage I2 (§8) - relative "how long ago" phrasing for a stranger with no
 // login, who has no reason to know what an ISO timestamp means. Local to
@@ -49,14 +52,30 @@ function VehicleCard({ position }: { position: PublicVehiclePosition }) {
         </p>
       ) : (
         <>
-          <p className="mb-2 text-sm text-gray-500">As of {timeAgo(position.recordedAt)}.</p>
+          <p className="mb-2 text-sm text-gray-500">
+            As of {timeAgo(position.recordedAt)} · {position.latitude.toFixed(5)},{' '}
+            {position.longitude.toFixed(5)}
+          </p>
+          {/* Stage I3 (§8's map addendum) - the current dot only, no path:
+              §10 open question 4 (today's path on the PUBLIC link) is still
+              genuinely unresolved, unlike the authenticated live map. */}
+          <VehicleMap
+            center={[position.latitude, position.longitude]}
+            zoom={15}
+            heightClassName="h-64"
+          >
+            <Marker
+              position={[position.latitude, position.longitude]}
+              icon={vehicleDivIcon('live', position.source)}
+            />
+          </VehicleMap>
           <a
             href={googleMapsUrl(position.latitude, position.longitude)}
             target="_blank"
             rel="noreferrer"
-            className="text-sm font-medium text-blue-700 hover:underline"
+            className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline"
           >
-            {position.latitude.toFixed(5)}, {position.longitude.toFixed(5)} - view on Google Maps
+            Open in Google Maps ↗
           </a>
         </>
       )}

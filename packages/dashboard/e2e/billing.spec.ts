@@ -6,31 +6,22 @@ import { AUTH_STATE_FILE } from './auth-state';
  * dashboard. Same session-chaining convention as smoke.spec.ts: every test
  * starts already signed in as the seeded demo owner, and hands the rotated
  * refresh token to the next test via afterEach.
+ *
+ * Deliberately ONE test, not two - Stage I3 folded these together once the
+ * combined suite's REFRESH_THROTTLE budget (20/minute, shared by every real
+ * page boot across the whole run) started landing exactly on the ceiling
+ * with the map specs' own boots added; one fewer boot here restores margin.
+ * Same reasoning as tracking-links.spec.ts's and tracking-map.spec.ts's own
+ * consolidations - see tracking-map.spec.ts's top comment for the measured
+ * evidence (a `throttle:...:refresh:blocked` Redis key).
  */
 test.afterEach(async ({ page }) => {
   await page.context().storageState({ path: AUTH_STATE_FILE });
 });
 
-test('Billing page loads, shows the seeded rate, and never implies a charge is coming', async ({
+test('Billing page loads from the nav, shows the seeded rate, and never implies a charge is coming', async ({
   page,
 }) => {
-  await page.goto('/settings/billing');
-  await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
-
-  await expect(page.getByText('Active bikes')).toBeVisible();
-  await expect(page.getByText('Price per bike / month')).toBeVisible();
-  await expect(page.getByText('Estimated monthly total')).toBeVisible();
-
-  // Stage SUB1 migration seeds exactly one tier at TZS 10,000/bike/month -
-  // formatTZS renders it with zero decimal places and a currency symbol.
-  await expect(page.getByText(/TZS.*10,000/)).toBeVisible();
-
-  // The honest disclosure line - must always be present, regardless of
-  // status/trial state (see BillingPage.tsx's StatusBanner comment).
-  await expect(page.getByText(/Payment collection isn't connected yet/)).toBeVisible();
-});
-
-test('Billing is reachable from the nav for the OWNER demo account', async ({ page }) => {
   await page.goto('/');
 
   // Stage I2 - AppShell.tsx's desktop/drawer breakpoint moved to 2xl
@@ -45,4 +36,16 @@ test('Billing is reachable from the nav for the OWNER demo account', async ({ pa
   await menu.click();
   await page.getByRole('link', { name: 'Billing' }).click();
   await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
+
+  await expect(page.getByText('Active bikes')).toBeVisible();
+  await expect(page.getByText('Price per bike / month')).toBeVisible();
+  await expect(page.getByText('Estimated monthly total')).toBeVisible();
+
+  // Stage SUB1 migration seeds exactly one tier at TZS 10,000/bike/month -
+  // formatTZS renders it with zero decimal places and a currency symbol.
+  await expect(page.getByText(/TZS.*10,000/)).toBeVisible();
+
+  // The honest disclosure line - must always be present, regardless of
+  // status/trial state (see BillingPage.tsx's StatusBanner comment).
+  await expect(page.getByText(/Payment collection isn't connected yet/)).toBeVisible();
 });

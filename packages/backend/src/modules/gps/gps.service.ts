@@ -1,9 +1,15 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { GpsSource, Prisma } from '@prisma/client';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { GpsSource, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { dateOnlyInDarEsSalaam } from '../ownership-plan/ownership-plan.derivation';
 import { RecordPhoneFixesDto } from './dto/record-phone-fixes.dto';
+import {
+  CURRENT_POSITION_FIX_LOOKBACK,
+  resolveCurrentPosition,
+  type GpsFixCandidate,
+} from './current-position';
+import { darEsSalaamDayRangeUtc } from './dar-es-salaam-day-range';
 
 export interface RecordPhoneFixesResult {
   accepted: number;
@@ -13,6 +19,36 @@ export interface RecordPhoneFixesResult {
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
+
+function assertOwnerOrManager(actor: AuthenticatedUser): void {
+  if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
+    throw new ForbiddenException('Only OWNER or MANAGER may view fleet tracking data');
+  }
+}
+
+/**
+ * Stage I3 (§7). What the live-map page's markers read. Authenticated and
+ * tenant-internal (unlike Stage I2's public whitelist DTO), so it carries
+ * more than a stranger would ever see - motorcycleId and vehicleType, for
+ * the map to key markers and filter by category client-side.
+ */
+export type FleetVehiclePosition = {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: string;
+} & (
+  | { offline: false; latitude: number; longitude: number; recordedAt: string; source: GpsSource }
+  | { offline: true; lastRecordedAt: string | null }
+);
+
+export interface VehiclePathPoint {
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+  speedKmh: number | null;
+}
+
+const FIX_SELECT = { source: true, latitude: true, longitude: true, recordedAt: true } as const;
 
 @Injectable()
 export class GpsService {
@@ -97,5 +133,96 @@ export class GpsService {
     }
 
     return { accepted: rows.length, discarded };
+  }
+
+  /**
+   * Stage I3 (§7) - the live-map page's markers. One query for every ACTIVE
+   * motorcycle in the tenant, each with its own most-recent
+   * CURRENT_POSITION_FIX_LOOKBACK fixes nested inline (Prisma's filtered
+   * to-many relation fetch - one logical query, not one per vehicle, same
+   * technique Stage I2's public whole-fleet lookup already uses), then
+   * resolveCurrentPosition per vehicle in memory. A vehicle with zero GPS
+   * history ever still appears, offline with lastRecordedAt: null -
+   * unlike Stage I2's public endpoint, an owner managing their OWN fleet
+   * wants to see every active vehicle, not just the ones that have ever
+   * reported.
+   */
+  async getFleetPositions(actor: AuthenticatedUser): Promise<FleetVehiclePosition[]> {
+    assertOwnerOrManager(actor);
+
+    const motorcycles = await this.prisma.client.motorcycle.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        registrationNumber: true,
+        vehicleType: true,
+        gpsLocations: {
+          orderBy: { recordedAt: 'desc' },
+          take: CURRENT_POSITION_FIX_LOOKBACK,
+          select: FIX_SELECT,
+        },
+      },
+    });
+
+    const now = new Date();
+    return motorcycles.map((m): FleetVehiclePosition => {
+      const resolved = resolveCurrentPosition(m.gpsLocations as GpsFixCandidate[], now);
+      const base = {
+        motorcycleId: m.id,
+        registrationNumber: m.registrationNumber,
+        vehicleType: m.vehicleType,
+      };
+      if (resolved.offline) {
+        return {
+          ...base,
+          offline: true,
+          lastRecordedAt: resolved.lastRecordedAt?.toISOString() ?? null,
+        };
+      }
+      return {
+        ...base,
+        offline: false,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+        recordedAt: resolved.recordedAt.toISOString(),
+        source: resolved.source,
+      };
+    });
+  }
+
+  /**
+   * Stage I3 (§7) - the date-picker replay for one vehicle. Ordered oldest
+   * -> newest (a path is drawn in the order it was driven, unlike
+   * getFleetPositions' newest-first lookback), scoped to one Africa/Dar_es_
+   * Salaam calendar day via darEsSalaamDayRangeUtc - the exact inverse of
+   * the day-boundary logic recordPhoneFixes above already uses.
+   */
+  async getVehiclePath(
+    motorcycleId: string,
+    dateOnlyString: string,
+    actor: AuthenticatedUser,
+  ): Promise<VehiclePathPoint[]> {
+    assertOwnerOrManager(actor);
+
+    const motorcycle = await this.prisma.client.motorcycle.findUnique({
+      where: { id: motorcycleId },
+    });
+    if (!motorcycle) {
+      throw new NotFoundException('Vehicle not found');
+    }
+
+    const { start, end } = darEsSalaamDayRangeUtc(dateOnlyString);
+    const fixes = await this.prisma.client.gpsLocation.findMany({
+      where: { motorcycleId, recordedAt: { gte: start, lt: end } },
+      orderBy: { recordedAt: 'asc' },
+      select: { recordedAt: true, latitude: true, longitude: true, speedKmh: true },
+    });
+
+    return fixes.map((f) => ({
+      recordedAt: f.recordedAt.toISOString(),
+      latitude: f.latitude,
+      longitude: f.longitude,
+      speedKmh: f.speedKmh,
+    }));
   }
 }

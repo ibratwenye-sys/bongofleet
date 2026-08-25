@@ -22,13 +22,20 @@ const NAV_LINKS: Array<{ to: string; label: string; end?: boolean; roles?: UserR
   // by role: OWNER only, same gate as the backend's GET /tenant/billing
   // (there is no platform-admin role in this codebase).
   { to: '/settings/billing', label: 'Billing', roles: ['OWNER'] },
+  // Stage I3 - the live GPS map (§7). OWNER or MANAGER, same gate as the
+  // backend's GET /gps/fleet-positions. "Map" rather than "Tracking" -
+  // "Tracking" was already taken by the link-management item below before
+  // this stage, and reusing it for two different destinations would point
+  // the same word at two different pages. Kept to one word for the same
+  // width reason as every label here (see this file's header comment).
+  { to: '/settings/tracking-map', label: 'Map', roles: ['OWNER', 'MANAGER'] },
   // Stage I2 - OWNER or MANAGER, same gate as the backend's
-  // TrackingLinkController (an operational action, unlike billing). One
-  // word, like every other label here - the desktop row's width is
-  // hand-fitted to exactly 1280px (see this file's own header comment on
-  // that), and a two-word label was measured to push it past that at this
-  // stage, reopening the sideways-scroll bug Stage H0e fixed.
-  { to: '/settings/tracking-links', label: 'Tracking', roles: ['OWNER', 'MANAGER'] },
+  // TrackingLinkController (an operational action, unlike billing).
+  // Renamed from "Tracking" to "Links" in Stage I3, once the live map
+  // above needed that word for itself - this page is specifically about
+  // creating/sharing/revoking the public links, which "Links" names more
+  // precisely anyway.
+  { to: '/settings/tracking-links', label: 'Links', roles: ['OWNER', 'MANAGER'] },
 ];
 
 // Stage H3 - "don't let pending money go unnoticed," not a live ticker, so a

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,10 +8,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GpsService } from './gps.service';
 import { RecordPhoneFixesDto } from './dto/record-phone-fixes.dto';
+import { VehiclePathQueryDto } from './dto/vehicle-path-query.dto';
 
-// Stage I1 - phone reporting only (§4). POST /gps/device (box ingestion,
-// §5) is a separate later stage; the live map, health/tamper alerts and
-// public tracking links (§6-8) read GpsLocation but write nothing here.
+// Stage I1 - phone reporting (§4). Stage I3 adds the two read routes below
+// for the live-map page (§7) - POST /gps/device (box ingestion, §5) is
+// still a separate later stage.
 @ApiTags('gps')
 @ApiBearerAuth()
 @Controller('gps')
@@ -23,5 +24,21 @@ export class GpsController {
   @Roles(UserRole.RIDER)
   recordPhoneFixes(@Body() dto: RecordPhoneFixesDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.gpsService.recordPhoneFixes(dto, actor);
+  }
+
+  @Get('fleet-positions')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  getFleetPositions(@CurrentUser() actor: AuthenticatedUser) {
+    return this.gpsService.getFleetPositions(actor);
+  }
+
+  @Get('vehicles/:motorcycleId/path')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  getVehiclePath(
+    @Param('motorcycleId') motorcycleId: string,
+    @Query() query: VehiclePathQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.gpsService.getVehiclePath(motorcycleId, query.date, actor);
   }
 }

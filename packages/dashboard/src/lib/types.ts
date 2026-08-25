@@ -649,3 +649,31 @@ export type PublicVehiclePosition =
       offline: true;
       lastKnownAt: string | null;
     };
+
+// --- Live fleet map (Stage I3, DESIGN_GPS_TRACKING.md §7) ---
+// Mirrors GpsService's FleetVehiclePosition/VehiclePathPoint (backend
+// gps.service.ts) field for field. Authenticated/internal, unlike
+// PublicVehiclePosition above - carries motorcycleId/vehicleType too, for
+// the map to key markers and filter by category client-side.
+
+export type FleetVehiclePosition = {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: VehicleType;
+} & (
+  | {
+      offline: false;
+      latitude: number;
+      longitude: number;
+      recordedAt: string;
+      source: 'PHONE' | 'DEVICE' | 'MANUAL';
+    }
+  | { offline: true; lastRecordedAt: string | null }
+);
+
+export interface VehiclePathPoint {
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+  speedKmh: number | null;
+}

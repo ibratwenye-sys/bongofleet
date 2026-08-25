@@ -22,6 +22,18 @@ import { AUTH_STATE_FILE } from './auth-state';
  * dev DB (this suite never truncates it - see VISUAL_CHECK.md) never
  * collide with a row an earlier run left behind, which would otherwise make
  * the `tr` locator below match more than one row.
+ *
+ * Every `browser.newContext()` below passes `storageState: undefined`
+ * EXPLICITLY - Stage I3 found the hard way that omitting it does NOT yield
+ * a blank profile, it silently inherits the "chromium" project's own
+ * configured default (`storageState: AUTH_STATE_FILE`). A context built to
+ * simulate a logged-out visitor was loading the real owner's session,
+ * silently refreshing (and so rotating/spending) it, in a context nothing
+ * ever saves back to disk - corrupting the shared session for every later
+ * test using the real `page` fixture. It stayed invisible here only because
+ * this file happens to sort after smoke.spec.ts alphabetically, so nothing
+ * downstream of it depended on the session surviving. See
+ * public-tracking-map.spec.ts's own note on this for the full story.
  */
 const RUN_TAG = Date.now();
 
@@ -60,18 +72,28 @@ test('a tracking link can be created, opened publicly (logged out), copied, and 
   // this must work for an actual customer, not just the owner who made the
   // link. Uses `browser` (not the shared `page`), so it costs no extra
   // REFRESH_THROTTLE budget (see this file's own top comment).
-  const publicContext = await browser.newContext();
+  const publicContext = await browser.newContext({ storageState: undefined });
   const publicPage = await publicContext.newPage();
   await publicPage.goto(copiedUrl);
   await expect(
     publicPage.getByRole('heading', { name: 'BongoFleet vehicle tracking' }),
   ).toBeVisible();
-  // The seeded demo tenant has no GPS history at all (Stage I1's ingestion
-  // is rider-app-only; the seed script never posts a fix) - a whole-fleet
-  // link there genuinely has nothing to show, and that honest empty state
-  // is itself the thing worth asserting on, not a specific live/offline
-  // fixture this environment doesn't have.
-  await expect(publicPage.getByText('No vehicles to show.')).toBeVisible({ timeout: 10_000 });
+  // Not asserting "No vehicles to show." specifically: true when this
+  // suite was written (Stage I1's ingestion is rider-app-only, the seed
+  // script never posts a fix), but Stage I3's own tracking-map.spec.ts /
+  // public-tracking-map.spec.ts now seed real GPS-reporting vehicles onto
+  // this same demo tenant on every run, so "empty" is no longer a safe
+  // assumption - and exactly which vehicles are live/stale/absent at this
+  // point depends on file-execution order and timing this test has no
+  // business depending on. What's actually worth asserting, regardless of
+  // fleet contents: this valid link does NOT land on the "invalid, expired,
+  // or revoked" error state a bad token would - the "Loading…" text must
+  // also be gone, or a fleet that loaded zero rows and one that's still
+  // fetching would both silently satisfy a bare "no error" check.
+  await expect(publicPage.getByText('Loading…')).not.toBeVisible({ timeout: 10_000 });
+  await expect(
+    publicPage.getByText('This tracking link is invalid, expired, or has been revoked.'),
+  ).not.toBeVisible();
   await publicContext.close();
 
   await row.getByRole('button', { name: 'Revoke' }).click();
@@ -86,7 +108,7 @@ test('a tracking link can be created, opened publicly (logged out), copied, and 
   await expect(row.getByRole('button', { name: 'Revoke' })).toHaveCount(0);
 
   // And the now-revoked link's public URL immediately stops working too.
-  const revokedContext = await browser.newContext();
+  const revokedContext = await browser.newContext({ storageState: undefined });
   const revokedPage = await revokedContext.newPage();
   await revokedPage.goto(copiedUrl);
   await expect(
@@ -98,7 +120,7 @@ test('a tracking link can be created, opened publicly (logged out), copied, and 
 test('the public /track page renders without a session and rejects a bogus token', async ({
   browser,
 }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ storageState: undefined });
   const page = await context.newPage();
 
   await page.goto('/track/this-token-does-not-exist');
