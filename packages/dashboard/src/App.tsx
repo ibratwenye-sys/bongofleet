@@ -20,6 +20,7 @@ import { OwnershipPage } from './pages/OwnershipPage';
 import { OwnershipPlanDetailPage } from './pages/OwnershipPlanDetailPage';
 import { BillingPage } from './pages/BillingPage';
 import { TrackingLinksPage } from './pages/TrackingLinksPage';
+import { BulkImportPage } from './pages/BulkImportPage';
 
 // Stage I3 - leaflet/react-leaflet added ~160kB (gzipped) to the single
 // bundle every other page also pays for on first load. These are the only
@@ -73,6 +74,7 @@ function App() {
                 <Route path="/maintenance" element={<MaintenancePage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings/billing" element={<BillingPage />} />
+                <Route path="/settings/bulk-import" element={<BulkImportPage />} />
                 <Route path="/settings/tracking-map" element={<TrackingMapPage />} />
                 <Route path="/settings/tracking-links" element={<TrackingLinksPage />} />
               </Route>

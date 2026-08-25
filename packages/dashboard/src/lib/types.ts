@@ -677,3 +677,44 @@ export interface VehiclePathPoint {
   longitude: number;
   speedKmh: number | null;
 }
+
+// Stage BI1 - bulk import from Excel (Settings area, OWNER-only).
+export type BulkImportSheet = 'vehicles' | 'drivers' | 'assignments' | 'ownershipPlans';
+
+export type BulkImportRowStatus = 'new' | 'update' | 'reference' | 'error';
+
+export interface BulkImportRowMessage {
+  text: string;
+  severity: 'error' | 'warning';
+}
+
+export interface BulkImportRowResult {
+  row: number;
+  status: BulkImportRowStatus;
+  values: Record<string, string | number | null>;
+  messages: BulkImportRowMessage[];
+}
+
+export interface BulkImportSheetResult {
+  sheet: BulkImportSheet;
+  rows: BulkImportRowResult[];
+}
+
+export interface BulkImportPreviewResult {
+  sheets: BulkImportSheetResult[];
+  canCommit: boolean;
+}
+
+export interface BulkImportCommitCounts {
+  vehiclesCreated: number;
+  vehiclesUpdated: number;
+  driversCreated: number;
+  driversUpdated: number;
+  ownershipPlansCreated: number;
+  ownershipPlansUpdated: number;
+}
+
+export interface BulkImportCommitResult {
+  preview: BulkImportPreviewResult;
+  counts: BulkImportCommitCounts;
+}

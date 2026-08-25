@@ -156,6 +156,23 @@ export function dateOnlyInDarEsSalaam(instant: Date): Date {
   return dateOnly(new Date(instant.getTime() + DAR_ES_SALAAM_UTC_OFFSET_MS));
 }
 
+/**
+ * Stage BI1 - startDate used to do two jobs (see OwnershipPlan.
+ * billingStartDate's own schema comment): the true historical date printed
+ * on the contract, and the anchor every schedule-projection calculation
+ * walks forward from. This is the second job's read, and the ONLY correct
+ * one for it - contract printing (ownership-plan-contract.service.ts) must
+ * keep reading plan.startDate directly, never through this. billingStartDate
+ * is null for every ordinary plan, where this is a no-op; the bulk importer
+ * is the only writer that ever sets it.
+ */
+export function resolveScheduleStartDate(plan: {
+  startDate: Date;
+  billingStartDate: Date | null;
+}): Date {
+  return plan.billingStartDate ?? plan.startDate;
+}
+
 function isActiveWeekday(date: Date, activeWeekdays: number[]): boolean {
   return activeWeekdays.includes(date.getUTCDay());
 }

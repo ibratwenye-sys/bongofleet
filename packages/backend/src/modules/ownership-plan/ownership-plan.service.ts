@@ -22,6 +22,7 @@ import {
   computeRemainingToBill,
   derivePlanFigures,
   DerivedPlanFigures,
+  resolveScheduleStartDate,
 } from './ownership-plan.derivation';
 import { buildInstalmentRow } from './ownership-plan-generator.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
@@ -90,6 +91,8 @@ type PlanRow = {
   instalmentCount: number;
   contractEndDate: Date | null;
   startDate: Date;
+  // Stage BI1 - see the field's own comment on the schema.
+  billingStartDate: Date | null;
   activeWeekdays: number[];
 };
 
@@ -592,7 +595,7 @@ export class OwnershipPlanService {
             amountPaid: amountPaidByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             amountBilled: amountBilledByPlan.get(plan.id) ?? new Prisma.Decimal(0),
             contractEndDate: plan.contractEndDate,
-            startDate: plan.startDate,
+            startDate: resolveScheduleStartDate(plan),
             activeWeekdays: plan.activeWeekdays,
             assignmentPayments: assignmentPaymentsByPlan.get(plan.id) ?? [],
             excusedDates: excusedDatesByPlan.get(plan.id) ?? [],

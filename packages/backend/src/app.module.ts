@@ -29,6 +29,7 @@ import { PaymentAccountModule } from './modules/payment-account/payment-account.
 import { TenantModule } from './modules/tenant/tenant.module';
 import { GpsModule } from './modules/gps/gps.module';
 import { TrackingLinkModule } from './modules/tracking-link/tracking-link.module';
+import { BulkImportModule } from './modules/bulk-import/bulk-import.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -71,6 +72,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     TenantModule,
     GpsModule,
     TrackingLinkModule,
+    BulkImportModule,
   ],
   controllers: [AppController],
   providers: [

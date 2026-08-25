@@ -6,6 +6,7 @@ import {
   computeRemainingUnreserved,
   derivePlanFigures,
   PlanPosition,
+  resolveScheduleStartDate,
 } from './ownership-plan.derivation';
 
 // Stage G3 Part 2: computeConsecutiveMissedDays interprets `today` in
@@ -576,5 +577,52 @@ describe('derivePlanFigures', () => {
       expect(result.consecutiveMissedDays).toBe(0);
       expect(result.pastDeadlineStillOwing).toBe(true);
     });
+  });
+});
+
+// Stage BI1 - the startDate-does-two-jobs fix. billingStartDate is null for
+// every ordinary plan (resolveScheduleStartDate is then a no-op, reading
+// startDate exactly as before); the bulk importer is the only writer that
+// ever sets it, and only schedule-projection call sites read through this
+// function - contract printing (ownership-plan-contract.service.ts) keeps
+// reading plan.startDate directly and is untouched by this fix.
+describe('resolveScheduleStartDate', () => {
+  it('an ordinary plan (billingStartDate null) resolves to its own startDate', () => {
+    const startDate = day(-240);
+    expect(resolveScheduleStartDate({ startDate, billingStartDate: null })).toBe(startDate);
+  });
+
+  it('an imported plan resolves to billingStartDate, not the true historical startDate', () => {
+    const startDate = day(-240); // the true contract date - printed on the contract, never this
+    const billingStartDate = day(-1);
+    expect(resolveScheduleStartDate({ startDate, billingStartDate })).toBe(billingStartDate);
+  });
+
+  it('derivePlanFigures anchors derivedEndDate/daysLeft/projectedCompletion on the resolved date, not the historical one', () => {
+    const historicalStartDate = day(-240); // 8 months ago
+    const billingStartDate = day(-1); // digital billing "just" began
+
+    const stale = derivePlanFigures(
+      basePosition({ startDate: historicalStartDate, instalmentCount: 150 }),
+      TODAY,
+    );
+    const fixed = derivePlanFigures(
+      basePosition({
+        startDate: resolveScheduleStartDate({
+          startDate: historicalStartDate,
+          billingStartDate,
+        }),
+        instalmentCount: 150,
+      }),
+      TODAY,
+    );
+
+    // Unfixed (reading the true historical startDate for projection): the
+    // derived end date already fell in the past, months ago.
+    expect(new Date(stale.derivedEndDate).getTime()).toBeLessThan(TODAY.getTime());
+    // Fixed (reading billingStartDate): the derived end date is still ahead
+    // of today - exactly the confusing "already elapsed" bug the fix exists
+    // to prevent (see the field's own schema comment).
+    expect(new Date(fixed.derivedEndDate).getTime()).toBeGreaterThan(TODAY.getTime());
   });
 });

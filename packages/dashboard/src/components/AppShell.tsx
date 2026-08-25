@@ -36,6 +36,11 @@ const NAV_LINKS: Array<{ to: string; label: string; end?: boolean; roles?: UserR
   // creating/sharing/revoking the public links, which "Links" names more
   // precisely anyway.
   { to: '/settings/tracking-links', label: 'Links', roles: ['OWNER', 'MANAGER'] },
+  // Stage BI1 - OWNER only, tighter than every other Settings-area item
+  // above except Billing: this changes dozens of records in one shot, a
+  // bigger blast radius than the OWNER+MANAGER document-upload precedent.
+  // Same gate as the backend's BulkImportController.
+  { to: '/settings/bulk-import', label: 'Import', roles: ['OWNER'] },
 ];
 
 // Stage H3 - "don't let pending money go unnoticed," not a live ticker, so a

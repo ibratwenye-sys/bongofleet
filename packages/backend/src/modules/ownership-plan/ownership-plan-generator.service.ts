@@ -7,7 +7,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { requestContext } from '../../common/context/request-context';
 import { generateRideReference } from '../../common/reference.util';
-import { computeRemainingToBill, computeRemainingToOwn } from './ownership-plan.derivation';
+import {
+  computeRemainingToBill,
+  computeRemainingToOwn,
+  resolveScheduleStartDate,
+} from './ownership-plan.derivation';
 
 export const OWNERSHIP_PLAN_GENERATOR_CRON_JOB = 'ownership-plan-generator';
 
@@ -73,6 +77,9 @@ type PlanRow = {
   dailyAmount: Prisma.Decimal;
   instalmentCount: number;
   startDate: Date;
+  // Stage BI1 - see the field's own comment on the schema. null for every
+  // plan except an imported one.
+  billingStartDate: Date | null;
   activeWeekdays: number[];
 };
 
@@ -265,6 +272,7 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
         dailyAmount: true,
         instalmentCount: true,
         startDate: true,
+        billingStartDate: true,
         activeWeekdays: true,
       },
     });
@@ -376,9 +384,16 @@ export class OwnershipPlanGeneratorService implements OnModuleInit {
       }
 
       const lastAssignedDate = lastAssignedDateByPlan.get(plan.id);
+      // Stage BI1 - resolveScheduleStartDate: an imported plan with a
+      // nonzero opening balance already has one assignment (the synthetic
+      // brought-forward row dated billingStartDate - 1), so lastAssignedDate
+      // is set and this fallback never runs for it. A zero-opening-balance
+      // import has no assignments at all yet, and it's exactly that case
+      // this fallback must get right - falling back to the true historical
+      // startDate here would try to backfill from months in the past.
       const naturalStart = lastAssignedDate
         ? addDays(lastAssignedDate, 1)
-        : dateOnly(plan.startDate);
+        : dateOnly(resolveScheduleStartDate(plan));
 
       if (naturalStart.getTime() < windowStart.getTime()) {
         const missedActiveWeekdays = countActiveWeekdaysInRange(

@@ -751,6 +751,19 @@ model OwnershipPlan {
   downPayment     Decimal @default(0) @map("down_payment") @db.Decimal(12, 2)
 
   startDate       DateTime  @map("start_date") @db.Date // contract begins
+  // Stage BI1 - startDate used to do two jobs: the true historical date
+  // printed on the contract (ownership-plan-contract.pdf.ts/.service.ts -
+  // leave those reading startDate, never this) AND the anchor every
+  // schedule-projection read (derivedEndDate/daysLeft/projectedCompletion/
+  // nextDueDate in ownership-plan.derivation.ts, and the generator's own
+  // backfill-start fallback) walked forward from. Fine for an ordinary plan,
+  // where the two dates are the same day - wrong for an imported plan, whose
+  // real startDate can be months in the past: the projection math would walk
+  // forward from that historical date and show an already-elapsed derived
+  // end date. Nullable, null for every ordinary plan (?? startDate is then a
+  // no-op); the bulk importer is the only writer that ever sets it, to the
+  // date digital billing actually begins.
+  billingStartDate DateTime? @map("billing_start_date") @db.Date
   contractEndDate DateTime? @map("contract_end_date") @db.Date // agreed end, see §5
   // All seven days, matching "siku ... mfululizo" (consecutive calendar days,
   // no weekend exclusion) in the real contract - Mon-Sat-only was a wrong
