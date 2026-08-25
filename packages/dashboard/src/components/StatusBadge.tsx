@@ -20,6 +20,12 @@ export const INACTIVE_STYLES: Record<string, string> = {
   INACTIVE: 'bg-gray-200 text-gray-500',
 };
 
+export const TRACKING_LINK_STATUS_STYLES: Record<string, string> = {
+  ACTIVE: 'bg-green-100 text-green-800',
+  EXPIRED: 'bg-gray-100 text-gray-600',
+  REVOKED: 'bg-red-100 text-red-700',
+};
+
 export function StatusBadge({
   status,
   styles,

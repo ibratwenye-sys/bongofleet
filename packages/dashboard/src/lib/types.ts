@@ -604,3 +604,48 @@ export interface CreateDayExcusalPayload {
   excusedDate: string;
   reason: string;
 }
+
+// --- Tracking links (Stage I2, DESIGN_GPS_TRACKING.md §8) ---
+
+export type TrackingLinkStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+export interface TrackingLink {
+  id: string;
+  motorcycleId: string | null;
+  token: string;
+  label: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdByUserId: string;
+  viewCount: number;
+  lastViewedAt: string | null;
+  createdAt: string;
+  status: TrackingLinkStatus;
+}
+
+export interface CreateTrackingLinkPayload {
+  motorcycleId?: string;
+  label: string;
+  /** Omitted -> backend defaults to 7 days out. Explicit null -> never expires. */
+  expiresAt?: string | null;
+}
+
+// --- Public tracking view (Stage I2 §8) - the exact whitelist GET
+// /public/track/:token returns, no auth, no tenant/rider data of any kind.
+// Mirrors PublicVehiclePosition on the backend (tracking-link-public.
+// service.ts) field for field.
+
+export type PublicVehiclePosition =
+  | {
+      registrationNumber: string;
+      offline: false;
+      latitude: number;
+      longitude: number;
+      recordedAt: string;
+      source: 'PHONE' | 'DEVICE' | 'MANUAL';
+    }
+  | {
+      registrationNumber: string;
+      offline: true;
+      lastKnownAt: string | null;
+    };

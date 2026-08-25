@@ -18,6 +18,8 @@ import { MaintenancePage } from './pages/MaintenancePage';
 import { OwnershipPage } from './pages/OwnershipPage';
 import { OwnershipPlanDetailPage } from './pages/OwnershipPlanDetailPage';
 import { BillingPage } from './pages/BillingPage';
+import { TrackingLinksPage } from './pages/TrackingLinksPage';
+import { PublicTrackingPage } from './pages/PublicTrackingPage';
 
 // Kept for one release so an old bookmark/link to /riders/:id still lands on the
 // same driver's detail page rather than a dead end.
@@ -32,6 +34,9 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Stage I2 (§8) - public, unauthenticated, outside the login-gated
+              layout entirely, same precedent as /login above. */}
+          <Route path="/track/:token" element={<PublicTrackingPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
@@ -52,6 +57,7 @@ function App() {
               <Route path="/maintenance" element={<MaintenancePage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings/billing" element={<BillingPage />} />
+              <Route path="/settings/tracking-links" element={<TrackingLinksPage />} />
             </Route>
           </Route>
         </Routes>

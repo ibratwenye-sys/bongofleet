@@ -32,10 +32,17 @@ test('Billing page loads, shows the seeded rate, and never implies a charge is c
 
 test('Billing is reachable from the nav for the OWNER demo account', async ({ page }) => {
   await page.goto('/');
+
+  // Stage I2 - AppShell.tsx's desktop/drawer breakpoint moved to 2xl
+  // (1536px), so this test's default 1280px viewport is drawer-only now;
+  // an unconditional wait-then-click on the menu button, same pattern
+  // smoke.spec.ts's own responsive tests use, rather than a one-shot
+  // `isVisible()` racing React's hydration (that used to work only because
+  // the desktop nav was ALSO reachable at this viewport before the
+  // breakpoint moved - the fallback papered over the race, it didn't fix it).
   const menu = page.getByRole('button', { name: 'Open menu' });
-  if (await menu.isVisible()) {
-    await menu.click();
-  }
+  await expect(menu).toBeVisible();
+  await menu.click();
   await page.getByRole('link', { name: 'Billing' }).click();
   await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
 });

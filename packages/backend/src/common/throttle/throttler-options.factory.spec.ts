@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ThrottlerOptions } from '@nestjs/throttler';
 import { AuthController } from '../../modules/auth/auth.controller';
+import { TrackingLinkPublicController } from '../../modules/tracking-link/tracking-link-public.controller';
 import { buildThrottlerOptions } from './throttler-options.factory';
 import {
   GLOBAL_THROTTLE,
@@ -14,6 +15,7 @@ import {
   PASSWORD_RESET_IDENTIFIER_THROTTLE,
   PASSWORD_RESET_IP_THROTTLE,
   PASSWORD_RESET_CONFIRM_IP_THROTTLE,
+  PUBLIC_TRACK_IP_THROTTLE,
 } from './throttle.constants';
 
 function fakeConfig(values: Record<string, string>): ConfigService {
@@ -41,7 +43,7 @@ describe('buildThrottlerOptions (Stage H0)', () => {
   const options = buildThrottlerOptions(storage, config, jwt) as { throttlers: ThrottlerOptions[] };
   const throttlers = options.throttlers;
 
-  it("produces exactly the nine named throttlers, with the constants' own limits/ttls", () => {
+  it("produces exactly the ten named throttlers, with the constants' own limits/ttls", () => {
     expect(throttlers.map((t) => t.name).sort()).toEqual(
       [
         'default',
@@ -53,6 +55,7 @@ describe('buildThrottlerOptions (Stage H0)', () => {
         'password-reset-identifier',
         'password-reset-ip',
         'password-reset-confirm-ip',
+        'public-track-ip',
       ].sort(),
     );
     expect(throttlerNamed(throttlers, 'default')).toMatchObject(GLOBAL_THROTTLE);
@@ -72,6 +75,7 @@ describe('buildThrottlerOptions (Stage H0)', () => {
     expect(throttlerNamed(throttlers, 'password-reset-confirm-ip')).toMatchObject(
       PASSWORD_RESET_CONFIRM_IP_THROTTLE,
     );
+    expect(throttlerNamed(throttlers, 'public-track-ip')).toMatchObject(PUBLIC_TRACK_IP_THROTTLE);
   });
 
   it('signup-ip is at least as strict as login-ip (Stage H0b Part 2)', () => {
@@ -140,5 +144,18 @@ describe('buildThrottlerOptions (Stage H0)', () => {
     const context = contextFor(() => {});
     expect(await loginIpT.getTracker!(req, context)).toBe('ip:10.0.0.1');
     expect(await signupIpT.getTracker!(req, context)).toBe('ip:10.0.0.1');
+  });
+
+  it('public-track-ip only runs on its own route, resolves through trackByIp, skipping everything else', async () => {
+    const t = throttlerNamed(throttlers, 'public-track-ip');
+    expect(t.skipIf).toBeDefined();
+    expect(t.skipIf!(contextFor(TrackingLinkPublicController.prototype.getByToken))).toBe(false);
+    expect(t.skipIf!(contextFor(AuthController.prototype.login))).toBe(true);
+
+    const tracker = await t.getTracker!(
+      { ip: '10.0.0.1' },
+      contextFor(TrackingLinkPublicController.prototype.getByToken),
+    );
+    expect(tracker).toBe('ip:10.0.0.1');
   });
 });

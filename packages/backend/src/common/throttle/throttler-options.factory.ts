@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 import { AuthController } from '../../modules/auth/auth.controller';
+import { TrackingLinkPublicController } from '../../modules/tracking-link/tracking-link-public.controller';
 import {
   GLOBAL_THROTTLE,
   LOGIN_IDENTIFIER_THROTTLE,
@@ -13,6 +14,7 @@ import {
   PASSWORD_RESET_IDENTIFIER_THROTTLE,
   PASSWORD_RESET_IP_THROTTLE,
   PASSWORD_RESET_CONFIRM_IP_THROTTLE,
+  PUBLIC_TRACK_IP_THROTTLE,
 } from './throttle.constants';
 import {
   trackByIp,
@@ -56,6 +58,7 @@ export function buildThrottlerOptions(
   const isRefresh = isHandler(AuthController.prototype.refresh);
   const isResetRequest = isHandler(AuthController.prototype.requestPasswordReset);
   const isResetConfirm = isHandler(AuthController.prototype.confirmPasswordReset);
+  const isPublicTrack = isHandler(TrackingLinkPublicController.prototype.getByToken);
 
   return {
     storage,
@@ -116,6 +119,15 @@ export function buildThrottlerOptions(
         ...REFRESH_THROTTLE,
         getTracker: (req) => trackRefreshByUser(req, jwt, refreshSecret),
         skipIf: (context) => !isRefresh(context),
+      },
+      // Stage I2 - the only throttler here with no identifier component at
+      // all: there is no login, no user, nothing but an IP to key on (see
+      // PUBLIC_TRACK_IP_THROTTLE's own comment for why that's sufficient).
+      {
+        name: 'public-track-ip',
+        ...PUBLIC_TRACK_IP_THROTTLE,
+        getTracker: (req) => trackByIp(req),
+        skipIf: (context) => !isPublicTrack(context),
       },
     ],
   };

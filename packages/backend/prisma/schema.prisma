@@ -209,6 +209,7 @@ model Tenant {
   transportJobs        TransportJob[]
   paymentAccounts      PaymentAccount[]
   dayExcusals          DayExcusal[]
+  trackingLinks        TrackingLink[]
 
   @@map("tenants")
 }
@@ -398,6 +399,7 @@ model Motorcycle {
   maintenanceLogs  MaintenanceLog[]
   expenses         Expense[]
   transportJobs    TransportJob[]
+  trackingLinks    TrackingLink[]
 
   @@unique([tenantId, registrationNumber])
   @@unique([tenantId, gpsDeviceId])
@@ -974,4 +976,65 @@ model SubscriptionPricingTier {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("subscription_pricing_tiers")
+}
+
+/// Stage I2 (DESIGN_GPS_TRACKING.md §8) - a "no login required" shareable
+/// link: an owner checking one vehicle from a phone, or handing a customer
+/// a link to watch a truck carrying their cargo. Tenant-scoped (has
+/// tenantId, unlike SubscriptionPricingTier above) even though the public
+/// lookup (TrackingLinkPublicController) resolves it with NO request
+/// context at all - that controller wraps its Prisma calls in
+/// requestContext.runUnscoped() and filters by tenantId explicitly itself,
+/// the same technique this codebase's test utilities use outside a request.
+///
+/// motorcycleId null means "whole fleet" - onDelete: Restrict on the
+/// relation (like every other Motorcycle reference in this file) so a link
+/// can never end up pointing at a vanished vehicle; the referenced
+/// motorcycle must be deactivated (isActive: false), never hard-deleted,
+/// while a link still names it.
+model TrackingLink {
+  id           String      @id @default(cuid())
+  tenantId     String      @map("tenant_id")
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  motorcycleId String?     @map("motorcycle_id")
+  motorcycle   Motorcycle? @relation(fields: [motorcycleId], references: [id], onDelete: Restrict)
+
+  /// crypto.randomBytes(32).toString('base64url') - see tracking-token.util.ts.
+  /// 32+ bytes of CSPRNG output is the actual security boundary on the public
+  /// endpoint (there is no auth on it at all); PUBLIC_TRACK_IP_THROTTLE is
+  /// abuse hygiene on top of that, not a substitute for it.
+  token String @unique
+
+  /// What the OWNER/MANAGER who created this link called it, e.g. "Truck
+  /// T203 - Mombasa delivery". Shown nowhere on the public view itself
+  /// (§8's whitelist excludes it), only in the dashboard's own list.
+  label String
+
+  /// Nullable, but never actually null on a freshly created link - the
+  /// service defaults this to now() + 7 days server-side when the caller
+  /// omits it (§8: "should default to an expiry date rather than never").
+  /// Only reachable by passing expiresAt: null EXPLICITLY in the create
+  /// request - the one deliberate way to make a link that never expires.
+  expiresAt DateTime? @map("expires_at")
+
+  /// Null = still live. Set once, never cleared - revoking is one-way; a
+  /// mistakenly revoked link is recreated, not un-revoked. PATCH
+  /// .../revoke is idempotent BECAUSE of that: calling it again on an
+  /// already-revoked link just returns the existing revokedAt, never a
+  /// second write or an error.
+  revokedAt DateTime? @map("revoked_at")
+
+  createdByUserId String @map("created_by_user_id")
+
+  /// Incremented on every successful public GET, regardless of whether the
+  /// caller is the owner refreshing their own link or a customer - this is
+  /// a raw hit counter, not a unique-visitor count.
+  viewCount    Int       @default(0) @map("view_count")
+  lastViewedAt DateTime? @map("last_viewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("tracking_links")
 }

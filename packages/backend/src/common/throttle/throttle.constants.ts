@@ -71,3 +71,10 @@ export const PASSWORD_RESET_IP_THROTTLE = { limit: 15, ttl: 60 * 60_000 };
  *  host from grinding attempts against many different accounts' codes at
  *  once. */
 export const PASSWORD_RESET_CONFIRM_IP_THROTTLE = { limit: 30, ttl: 60 * 60_000 };
+
+/** Public tracking-link views, from ONE IP, across any token. Loose enough
+ *  for an owner or customer genuinely refreshing a delivery in progress
+ *  every few seconds; the token itself (32+ bytes CSPRNG) makes guessing
+ *  infeasible regardless - this is abuse hygiene, not the actual security
+ *  boundary. */
+export const PUBLIC_TRACK_IP_THROTTLE = { limit: 30, ttl: 60_000 };

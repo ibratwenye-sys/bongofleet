@@ -3,9 +3,10 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../lib/auth-context';
 import { useIdleTimer } from '../lib/useIdleTimer';
 import { apiFetch } from '../lib/api';
+import type { UserRole } from '../lib/types';
 import { IdleLogoutModal } from './IdleLogoutModal';
 
-const NAV_LINKS = [
+const NAV_LINKS: Array<{ to: string; label: string; end?: boolean; roles?: UserRole[] }> = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/fleet', label: 'Fleet' },
   { to: '/drivers', label: 'Drivers' },
@@ -19,10 +20,15 @@ const NAV_LINKS = [
   { to: '/reports', label: 'Reports' },
   // Stage SUB1 - the first Settings-area page and the first nav link gated
   // by role: OWNER only, same gate as the backend's GET /tenant/billing
-  // (there is no platform-admin role in this codebase). Filtered below
-  // rather than adding a per-link role field to every other entry, which
-  // has never needed one.
-  { to: '/settings/billing', label: 'Billing', ownerOnly: true },
+  // (there is no platform-admin role in this codebase).
+  { to: '/settings/billing', label: 'Billing', roles: ['OWNER'] },
+  // Stage I2 - OWNER or MANAGER, same gate as the backend's
+  // TrackingLinkController (an operational action, unlike billing). One
+  // word, like every other label here - the desktop row's width is
+  // hand-fitted to exactly 1280px (see this file's own header comment on
+  // that), and a two-word label was measured to push it past that at this
+  // stage, reopening the sideways-scroll bug Stage H0e fixed.
+  { to: '/settings/tracking-links', label: 'Tracking', roles: ['OWNER', 'MANAGER'] },
 ];
 
 // Stage H3 - "don't let pending money go unnoticed," not a live ticker, so a
@@ -52,13 +58,19 @@ function NavBadge({ count }: { count: number }) {
  * overflow-x-auto never mattered, because the overflow was the document's,
  * not theirs.
  *
- * The switch is at `xl` (1280px), not at a phone-sized breakpoint, because
- * 1272px is where this row actually fits - a 1280px laptop clears it by
- * eight pixels and everything narrower does not. Gating it at `md` would
- * have left an 820px tablet with the same 1272px header and the same
- * sideways scroll, just with a hamburger it never showed. Below xl the row
- * is replaced by a menu button and a drawer; at or above it, nothing
- * changes.
+ * The switch was originally at `xl` (1280px) with the row hand-fitted to
+ * clear it by eight pixels - see the git history on this comment for that
+ * math. Stage SUB1 and Stage I2 each added a nav item (Billing, Tracking),
+ * and the row's measured width at 1280px is now ~1532px: comfortably past
+ * `xl`, and re-tuning to fit exactly at 1280 again (as gap-4/px-3 did
+ * before) isn't realistic with 13 items without shrinking text past
+ * legibility. Moved to `2xl` (1536px) instead, with the row's own gap and
+ * per-link padding trimmed a little (gap-3, px-2.5) for real margin under
+ * that, rather than repeating the same zero-headroom fit that broke again
+ * this soon. The real cost: a 1280-1535px laptop, which used to get the
+ * full desktop row, now gets the phone/tablet drawer instead - not broken,
+ * just less roomy, and worth revisiting if this list keeps growing (a
+ * "Settings" sub-menu would scale better than more flat top-level items).
  */
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -67,7 +79,9 @@ export function AppShell() {
   const [idleWarning, setIdleWarning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const visibleNavLinks = NAV_LINKS.filter((link) => !link.ownerOnly || user?.role === 'OWNER');
+  const visibleNavLinks = NAV_LINKS.filter(
+    (link) => !link.roles || (user != null && link.roles.includes(user.role)),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -128,15 +142,15 @@ export function AppShell() {
             BongoFleet
           </Link>
 
-          {/* Desktop nav - unchanged, just gated to xl and up. */}
-          <nav className="hidden flex-1 gap-4 xl:flex">
+          {/* Desktop nav - gated to 2xl and up (see this file's header comment). */}
+          <nav className="hidden flex-1 gap-3 2xl:flex">
             {visibleNavLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
                 end={link.end}
                 className={({ isActive }) =>
-                  `flex items-center rounded px-3 py-1.5 text-sm font-medium ${
+                  `flex items-center rounded px-2.5 py-1.5 text-sm font-medium ${
                     isActive ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`
                 }
@@ -147,7 +161,7 @@ export function AppShell() {
             ))}
           </nav>
 
-          <div className="hidden items-center gap-4 xl:flex">
+          <div className="hidden items-center gap-4 2xl:flex">
             {user && (
               <span className="text-sm text-gray-600">
                 {user.firstName} {user.lastName}
@@ -170,7 +184,7 @@ export function AppShell() {
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            className="flex h-11 w-11 items-center justify-center rounded border border-gray-300 text-gray-700 xl:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded border border-gray-300 text-gray-700 2xl:hidden"
           >
             <span aria-hidden="true" className="text-xl leading-none">
               {menuOpen ? '✕' : '☰'}
@@ -181,7 +195,7 @@ export function AppShell() {
         {menuOpen && (
           <nav
             id="mobile-nav"
-            className="border-t border-gray-200 px-4 pb-3 xl:hidden"
+            className="border-t border-gray-200 px-4 pb-3 2xl:hidden"
             aria-label="Main"
           >
             {visibleNavLinks.map((link) => (
