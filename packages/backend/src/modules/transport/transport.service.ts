@@ -136,6 +136,7 @@ export class TransportService {
             cargo: dto.cargo,
             revenue: dto.revenue,
             scheduledDate: new Date(dto.scheduledDate),
+            expectedDistanceKm: dto.expectedDistanceKm,
             ...categoryOverride,
           },
         });
@@ -301,6 +302,7 @@ export class TransportService {
     if (dto.cargo !== undefined) data.cargo = dto.cargo;
     if (dto.revenue !== undefined) data.revenue = dto.revenue;
     if (dto.scheduledDate !== undefined) data.scheduledDate = new Date(dto.scheduledDate);
+    if (dto.expectedDistanceKm !== undefined) data.expectedDistanceKm = dto.expectedDistanceKm;
 
     if (dto.status !== undefined && dto.status !== existing.status) {
       data.status = dto.status;

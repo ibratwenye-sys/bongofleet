@@ -72,6 +72,7 @@ export class MotorcycleService {
           gpsDeviceId: dto.gpsDeviceId,
           chassisNumber: dto.chassisNumber,
           colour: dto.colour,
+          operatingArea: dto.operatingArea,
           status: dto.status,
         },
       });
@@ -174,6 +175,7 @@ export class MotorcycleService {
           gpsDeviceId: dto.gpsDeviceId,
           chassisNumber: dto.chassisNumber,
           colour: dto.colour,
+          operatingArea: dto.operatingArea,
           status: dto.status,
         },
       });

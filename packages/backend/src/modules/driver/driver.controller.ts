@@ -19,6 +19,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { DriverService } from './driver.service';
+import { DriverScoreboardService } from './driver-scoreboard';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { ListDriversQueryDto } from './dto/list-drivers-query.dto';
@@ -37,6 +38,7 @@ import { PasswordResetService } from '../auth/password-reset.service';
 export class DriverController {
   constructor(
     private readonly driverService: DriverService,
+    private readonly driverScoreboardService: DriverScoreboardService,
     private readonly passwordResetService: PasswordResetService,
   ) {}
 
@@ -48,6 +50,14 @@ export class DriverController {
   @Get()
   list(@Query() query: ListDriversQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.driverService.list(query, actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as "search"'s own
+  // comment: Nest matches routes in declaration order, and "scoreboard"
+  // would otherwise be swallowed as an :id value.
+  @Get('scoreboard')
+  scoreboard(@CurrentUser() actor: AuthenticatedUser) {
+    return this.driverScoreboardService.getScoreboard(actor);
   }
 
   // Must stay ahead of `:id` below - Nest matches routes in declaration

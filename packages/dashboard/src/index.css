@@ -74,7 +74,12 @@
   --spacing-rail: 340px;
 }
 
+:root {
+  color-scheme: dark;
+}
+
 :root[data-theme="light"] {
+  color-scheme: light;
   --color-bg: #f7f8fa;
   --color-panel: #ffffff;
   --color-panel-2: #f7f8fa;
@@ -116,4 +121,26 @@
   --color-row-warn: #fef9f0;
   --color-row-crit: #fdf6f6;
   --color-row-sel: #f6fafe;
+}
+
+/*
+ * Floor default for every native form control, regardless of whether the
+ * page around it has been reskinned to the theme system yet. Tailwind v4's
+ * utilities live inside a CSS cascade layer, and unlayered CSS always beats
+ * layered CSS regardless of specificity - so this has to sit in @layer
+ * base (ahead of the utilities layer @import "tailwindcss" registers) or
+ * it would win over every text-txt/bg-panel utility instead of losing to
+ * it. Layered + low-specificity is what makes it a floor: this only fills
+ * in the gap for controls that set no color of their own, which
+ * color-scheme's UA default chrome would otherwise mismatch against (e.g.
+ * white text from color-scheme: dark landing on a hardcoded white card
+ * that predates this theme, like LoginPage's).
+ */
+@layer base {
+  input,
+  select,
+  textarea {
+    color: var(--color-txt);
+    background-color: var(--color-panel);
+  }
 }

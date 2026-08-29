@@ -19,6 +19,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { MotorcycleService } from './motorcycle.service';
+import { FleetSummaryService } from './fleet-summary.service';
 import { CreateMotorcycleDto } from './dto/create-motorcycle.dto';
 import { UpdateMotorcycleDto } from './dto/update-motorcycle.dto';
 import { ListMotorcyclesQueryDto } from './dto/list-motorcycles-query.dto';
@@ -29,7 +30,10 @@ import { ListMotorcyclesQueryDto } from './dto/list-motorcycles-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
 export class MotorcycleController {
-  constructor(private readonly motorcycleService: MotorcycleService) {}
+  constructor(
+    private readonly motorcycleService: MotorcycleService,
+    private readonly fleetSummaryService: FleetSummaryService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateMotorcycleDto, @CurrentUser() actor: AuthenticatedUser) {
@@ -39,6 +43,14 @@ export class MotorcycleController {
   @Get()
   list(@Query() query: ListMotorcyclesQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.motorcycleService.list(query, actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as every other
+  // fixed-segment route in this codebase (see driver.controller.ts's
+  // "search"/"scoreboard").
+  @Get('fleet-summary')
+  fleetSummary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.fleetSummaryService.getSummary(actor);
   }
 
   @Get(':id')

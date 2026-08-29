@@ -397,6 +397,12 @@ model Motorcycle {
   /// these two - not stored anywhere else on this model until now (§Part 1).
   chassisNumber      String?          @map("chassis_number")
   colour             String?
+  // Stage UI2 - free text the owner types by hand per vehicle ("Kariakoo",
+  // "Kinondoni"). No geofencing, no polygon math, no derivation from GPS -
+  // there is no named-area data anywhere else in this schema to compute it
+  // from. The Fleet page's area panel groups vehicles by this field,
+  // honestly labelled as owner-set rather than computed.
+  operatingArea      String?          @map("operating_area")
   gpsDeviceId        String?          @map("gps_device_id")
   // Stage I1 - PHONE default: every vehicle is tracked via its assigned
   // rider's phone (POST /gps/phone) until an owner sets up a box.
@@ -692,6 +698,11 @@ model TransportJob {
   scheduledDate            DateTime           @map("scheduled_date") @db.Date
   pickedUpAt               DateTime?          @map("picked_up_at")
   deliveredAt              DateTime?          @map("delivered_at")
+  // Stage UI2 - optional, set at job creation (revisable up to completion).
+  // When present, the in-transit card computes real progress (km covered
+  // from actual GPS fixes vs. km remaining). When absent, the card shows
+  // only elapsed time and last known position - never a fabricated ETA.
+  expectedDistanceKm       Decimal?           @map("expected_distance_km") @db.Decimal(7, 1)
   /// Set together, only when an OWNER overrides a driver-category/vehicle-type
   /// mismatch at creation. Null on every ordinary (compatible) job.
   categoryOverrideReason   String?            @map("category_override_reason")

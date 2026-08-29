@@ -18,6 +18,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AssignmentService } from './assignment.service';
+import { AssignmentSummaryService } from './assignment-summary.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 
@@ -26,7 +27,10 @@ import { ListAssignmentsQueryDto } from './dto/list-assignments-query.dto';
 @Controller('assignments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AssignmentController {
-  constructor(private readonly assignmentService: AssignmentService) {}
+  constructor(
+    private readonly assignmentService: AssignmentService,
+    private readonly assignmentSummaryService: AssignmentSummaryService,
+  ) {}
 
   @Post()
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -38,6 +42,14 @@ export class AssignmentController {
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
   list(@Query() query: ListAssignmentsQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.assignmentService.listAssignments(query, actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as every other
+  // fixed-segment route in this codebase.
+  @Get('summary')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.assignmentSummaryService.getSummary(actor);
   }
 
   @Get(':id')

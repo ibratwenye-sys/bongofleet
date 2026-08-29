@@ -1,12 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, ApiError } from '../lib/api';
-import type { CreateDriverPayload, Driver, DriverType, UpdateDriverPayload } from '../lib/types';
+import { formatTZS } from '../lib/format';
+import type {
+  CreateDriverPayload,
+  Driver,
+  DriverScore,
+  DriverScoreboardResponse,
+  DriverType,
+  UpdateDriverPayload,
+} from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { INACTIVE_STYLES, StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../lib/auth-context';
 import { PasswordRecoveryLabel } from '../components/PasswordRecovery';
+import { PageChassis } from '../components/chassis/PageChassis';
+import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
+import { Card } from '../components/chassis/Card';
+import type { KpiAccent, KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
 const CATEGORY_LABELS: Record<DriverType, string> = {
@@ -14,6 +26,118 @@ const CATEGORY_LABELS: Record<DriverType, string> = {
   CAR_DRIVER: 'Car driver',
   TRUCK_DRIVER: 'Truck driver',
 };
+const BAND_ACCENT: Record<DriverScore['band'], KpiAccent> = {
+  Excellent: 'good',
+  Good: 'c1',
+  Fair: 'c2',
+  Watch: 'warn',
+  'At risk': 'crit',
+};
+
+function kpisToTiles(data: DriverScoreboardResponse): KpiTile[] {
+  const k = data.kpis;
+  // Stage UI2 (§4) - 5 real tiles, not padded to 6: the mockup's 6th tile
+  // ("Loan ready") is dropped entirely (no lending feature exists here to
+  // back it), and there is no honest 6th number to replace it with - see
+  // KpiRail's own "fewer than six genuine numbers" convention.
+  return [
+    { label: 'Drivers', value: String(k.totalDrivers), accentColor: 'c1' },
+    { label: 'Excellent, 85+', value: String(k.excellent), accentColor: 'good' },
+    { label: 'Good, 70–84', value: String(k.good), accentColor: 'c1' },
+    { label: 'Watch, 40–54', value: String(k.watch), accentColor: 'warn' },
+    { label: 'At risk, under 40', value: String(k.atRisk), accentColor: 'crit' },
+  ];
+}
+
+function Sparkline({ points }: { points: DriverScore['sixMonthOnTimeRate'] }) {
+  const known = points.filter((p) => p.rate !== null);
+  if (known.length < 2) return <span className="text-xs text-txt-3">Not enough history</span>;
+  const w = 80;
+  const h = 24;
+  const step = w / (points.length - 1);
+  const coords = points.map((p, i) => {
+    const y = p.rate === null ? null : h - p.rate * h;
+    return { x: i * step, y };
+  });
+  const last = known[known.length - 1].rate ?? 0;
+  const color = last >= 0.85 ? 'var(--good)' : last >= 0.55 ? 'var(--warn)' : 'var(--crit)';
+  const pathPoints = coords
+    .filter((c): c is { x: number; y: number } => c.y !== null)
+    .map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`)
+    .join(' ');
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
+      <polyline
+        points={pathPoints}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function Scorecard({ score }: { score: DriverScore }) {
+  const rows = [
+    {
+      label: 'Payment reliability',
+      max: 50,
+      points: score.components.reliability.points,
+      detail: `${score.components.reliability.onTimeDays} of ${score.components.reliability.expectedDays} assignments paid on or before the day`,
+    },
+    {
+      label: 'Honouring the contract',
+      max: 20,
+      points: score.components.contract.points,
+      detail: !score.components.contract.hasPlan
+        ? 'No ownership plan - nothing to breach'
+        : score.components.contract.defaulted
+          ? 'Plan defaulted'
+          : `${score.components.contract.consecutiveMissedDays ?? 0} of ${score.components.contract.breachAfterConsecutiveMissedDays ?? '—'} missed days before breach`,
+    },
+    {
+      label: 'Vehicle care',
+      max: 20,
+      points: score.components.care.points,
+      detail: !score.components.care.hasAssignmentToday
+        ? 'No assignment today'
+        : score.components.care.dueKind === 'OVERDUE'
+          ? 'Current vehicle is overdue for service'
+          : score.components.care.dueKind === 'DUE_SOON'
+            ? 'Current vehicle is due for service soon'
+            : 'Current vehicle is up to date',
+    },
+  ];
+  return (
+    <Card
+      title={`${score.firstName} ${score.lastName} — scorecard`}
+      subtitle={`${score.display} / 100 · ${score.band}`}
+    >
+      <div className="space-y-3 px-4 pb-4">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-txt-2">{row.label}</span>
+              <span className="text-txt-3">{row.max} pts</span>
+              <span className="font-medium text-txt">{row.points}</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
+              <div
+                className="h-full bg-c1"
+                style={{ width: `${Math.min(100, (row.points / row.max) * 100)}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-txt-2">{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---- Create / edit driver modal (unchanged CRUD) ----
 
 interface FormState {
   firstName: string;
@@ -123,41 +247,34 @@ function DriverFormModal({
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">First name</label>
+            <label className="mb-1 block text-sm font-medium text-txt">First name</label>
             <input
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Last name</label>
+            <label className="mb-1 block text-sm font-medium text-txt">Last name</label>
             <input
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Phone</label>
           <input
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          {/* Stage H0f Part 2 - this field used to be labelled "Email" and nothing
-              more, which invited an owner to type anything that would satisfy
-              a required box. It cannot be made optional: the rider signs in
-              with it, so an account without one cannot log in at all. Since
-              it must be collected, say what it is FOR, so the person filling
-              it in knows that inventing a value costs the rider his only way
-              back into the app. */}
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-txt">
             Email{' '}
             {!isEdit && <span className="font-normal text-gray-500">(the driver&apos;s own)</span>}
           </label>
@@ -171,7 +288,7 @@ function DriverFormModal({
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
               />
               <p className="mt-1 text-xs text-gray-500">
                 He signs in with this address, and it is where his password reset code is sent. Use
@@ -183,20 +300,20 @@ function DriverFormModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">License number</label>
+          <label className="mb-1 block text-sm font-medium text-txt">License number</label>
           <input
             value={form.licenseNumber}
             onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Category</label>
           <select
             value={form.driverType}
             onChange={(e) => setForm({ ...form, driverType: e.target.value as DriverType })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           >
             {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
@@ -208,12 +325,12 @@ function DriverFormModal({
 
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Initial password</label>
+            <label className="mb-1 block text-sm font-medium text-txt">Initial password</label>
             <input
               type="password"
               value={form.initialPassword}
               onChange={(e) => setForm({ ...form, initialPassword: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
             <p className="mt-1 text-xs text-gray-500">
               This is the driver's first login password — share it with them directly. At least 8
@@ -224,23 +341,23 @@ function DriverFormModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-txt">
               National ID (optional)
             </label>
             <input
               value={form.nationalId}
               onChange={(e) => setForm({ ...form, nationalId: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-txt">
               Emergency contact (optional)
             </label>
             <input
               value={form.emergencyContact}
               onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
         </div>
@@ -268,18 +385,6 @@ function DriverFormModal({
   );
 }
 
-/**
- * Stage H0f - the owner's half of the reset story. Until this stage there was
- * no way to change a rider's password after creation at all, so a rider who
- * forgot the one his owner typed for him needed database access to get back
- * in. With refresh tokens lasting seven days, that was every rider who spent
- * a week off the app.
- *
- * Deliberately blunt: the owner types a new password and tells the rider what
- * it is. No temporary-password ceremony, no forced change on next login -
- * those are worth building only once it is clear this is used enough to need
- * them.
- */
 function ResetPasswordModal({
   driver,
   onClose,
@@ -297,8 +402,6 @@ function ResetPasswordModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Matched to the backend's own floor (ResetDriverPasswordDto) so the
-    // error arrives before the round trip rather than after it.
     if (newPassword.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
@@ -310,10 +413,6 @@ function ResetPasswordModal({
         method: 'PATCH',
         body: JSON.stringify({ newPassword }),
       });
-      // Say plainly that he has been signed out everywhere. An owner doing
-      // this because a phone was lost wants to know it worked; one doing it
-      // because the rider forgot his password needs to know the rider must
-      // log in again on his own handset too.
       const revoked =
         result.sessionsRevoked > 0
           ? ` ${name} has been signed out on ${result.sessionsRevoked} device${
@@ -336,13 +435,7 @@ function ResetPasswordModal({
           directly - he will need it to log in again.
         </p>
         <div>
-          {/* htmlFor/id, unlike the other forms on this page: it costs two
-              attributes, makes the label click into the field, and is what
-              lets a screen reader (or a test) name this input at all. */}
-          <label
-            htmlFor="reset-new-password"
-            className="mb-1 block text-sm font-medium text-gray-700"
-          >
+          <label htmlFor="reset-new-password" className="mb-1 block text-sm font-medium text-txt">
             New password
           </label>
           <input
@@ -350,7 +443,7 @@ function ResetPasswordModal({
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">At least 8 characters.</p>
         </div>
@@ -379,33 +472,43 @@ function ResetPasswordModal({
 }
 
 export function DriversPage() {
-  const [drivers, setDrivers] = useState<Driver[] | null>(null);
+  const [data, setData] = useState<DriverScoreboardResponse | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<DriverType | 'ALL'>('ALL');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  // Manage-drivers fallback: the scored table above excludes drivers with
+  // no assignment history yet (see driver-score.ts), so it cannot be the
+  // only way to reach Edit/Deactivate/Reset password - see FleetPage's
+  // identical reasoning for deactivated vehicles.
+  const [allDrivers, setAllDrivers] = useState<Driver[] | null>(null);
+  const [manageSearch, setManageSearch] = useState('');
+  const [manageShowDeactivated, setManageShowDeactivated] = useState(false);
   const [formTarget, setFormTarget] = useState<'new' | Driver | null>(null);
   const [deactivating, setDeactivating] = useState<Driver | null>(null);
   const [reactivating, setReactivating] = useState<Driver | null>(null);
   const [resettingPassword, setResettingPassword] = useState<Driver | null>(null);
-  const [showDeactivated, setShowDeactivated] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const { user } = useAuth();
 
   async function load() {
     try {
-      const data = await apiFetch<Driver[]>(
-        `/drivers${showDeactivated ? '?includeInactive=true' : ''}`,
-      );
-      setDrivers(data);
-    } catch {
-      setError('Could not load drivers. Please try again.');
+      const [scoreboard, drivers] = await Promise.all([
+        apiFetch<DriverScoreboardResponse>('/drivers/scoreboard'),
+        apiFetch<Driver[]>(`/drivers${manageShowDeactivated ? '?includeInactive=true' : ''}`),
+      ]);
+      setData(scoreboard);
+      setAllDrivers(drivers);
+      setError(null);
+      setSelectedId((current) => current ?? scoreboard.drivers[0]?.driverId ?? null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load the driver scoreboard.');
     }
   }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDeactivated]);
+  }, [manageShowDeactivated]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -413,17 +516,15 @@ export function DriversPage() {
     return () => clearTimeout(timer);
   }, [successMessage]);
 
-  const filtered = useMemo(() => {
-    if (!drivers) return [];
-    const term = search.trim().toLowerCase();
-    return drivers.filter((d) => {
-      const matchesCategory = categoryFilter === 'ALL' || d.driverType === categoryFilter;
+  const filteredManageDrivers = useMemo(() => {
+    if (!allDrivers) return [];
+    const term = manageSearch.trim().toLowerCase();
+    if (!term) return allDrivers;
+    return allDrivers.filter((d) => {
       const name = `${d.user.firstName} ${d.user.lastName}`.toLowerCase();
-      const matchesSearch =
-        !term || name.includes(term) || d.licenseNumber.toLowerCase().includes(term);
-      return matchesCategory && matchesSearch;
+      return name.includes(term) || d.licenseNumber.toLowerCase().includes(term);
     });
-  }, [drivers, search, categoryFilter]);
+  }, [allDrivers, manageSearch]);
 
   function handleSaved(message: string) {
     setFormTarget(null);
@@ -457,204 +558,303 @@ export function DriversPage() {
     }
   }
 
+  if (error && !data) {
+    return <p className="text-sm text-crit">{error}</p>;
+  }
+  if (!data) {
+    return <p className="text-sm text-txt-2">Loading…</p>;
+  }
+
+  const selected = data.drivers.find((d) => d.driverId === selectedId) ?? null;
+
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Drivers</h1>
-        <button
-          onClick={() => setFormTarget('new')}
-          className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          Add driver
-        </button>
-      </div>
-
+    <PageChassis
+      title="Drivers"
+      statusPill={{ mode: 'reporting', text: `${data.kpis.totalDrivers} drivers` }}
+      primaryAction={{ label: 'Add driver', onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data)}
+    >
       {successMessage && (
-        <p className="mb-4 rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </p>
+        <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
       )}
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
-      {/* flex-wrap + a full-width-then-fixed search box: at 390px a 256px
-          input beside a select and a checkbox pushed the row past the
-          viewport. */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <input
-          placeholder="Search name or license number…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm sm:w-64"
-        />
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value as DriverType | 'ALL')}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-        >
-          <option value="ALL">All categories</option>
-          {CATEGORY_OPTIONS.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABELS[c]}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={showDeactivated}
-            onChange={(e) => setShowDeactivated(e.target.checked)}
-          />
-          Show deactivated
-        </label>
-      </div>
-
-      {/* Stage H0e - looking a driver up is a reading task, so the phone
-          gets the identifying fields (name, category, whether they are still
-          active) plus the phone number, which is the one thing you are
-          usually reaching for it to find - and it is tappable here, which it
-          never was in the table. Email, licence and national ID stay on the
-          driver's own page. Editing and deactivating are deliberately absent
-          below md: they are management actions, not reading, and the forms
-          behind them are still desktop-first. */}
-      <ul className="space-y-3 md:hidden">
-        {drivers === null ? (
-          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
-            Loading…
-          </li>
-        ) : filtered.length === 0 ? (
-          <li className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
-            No drivers found.
-          </li>
-        ) : (
-          filtered.map((d) => (
-            <li
-              key={d.id}
-              className={`rounded-lg border border-gray-200 p-4 ${
-                d.isActive ? 'bg-white' : 'bg-gray-50'
-              }`}
-            >
-              <div className="flex items-baseline justify-between gap-3">
-                <Link
-                  to={`/drivers/${d.id}`}
-                  className={`font-medium ${d.isActive ? 'text-gray-900' : 'text-gray-400'}`}
-                >
-                  {d.user.firstName} {d.user.lastName}
-                </Link>
-                {!d.isActive && <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />}
-              </div>
-              <p className="mt-1 text-sm text-gray-600">{CATEGORY_LABELS[d.driverType]}</p>
-              <a
-                href={`tel:${d.user.phone}`}
-                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-gray-700 underline"
-              >
-                {d.user.phone}
-              </a>
-              {/* Stage H0f Part 2 - one line, because knowing you are his only way
-                  back in is worth more than the space it costs. */}
-              <p className="mt-1 text-sm">
-                <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
-              </p>
-            </li>
-          ))
-        )}
-      </ul>
-
-      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Name</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Category</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Phone</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Email</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">License</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">National ID</th>
-              {/* Stage H0f Part 2 - so an owner can see, before he needs it, which
-                  riders can get back in on their own. */}
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Password recovery</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {drivers === null ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
-                  Loading…
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
-                  No drivers found.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((d) => (
-                <tr key={d.id} className={d.isActive ? undefined : 'bg-gray-50 text-gray-400'}>
-                  <td className="px-4 py-2 font-medium text-gray-900">
-                    <Link
-                      to={`/drivers/${d.id}`}
-                      className={`hover:underline ${d.isActive ? '' : 'text-gray-400'}`}
-                    >
-                      {d.user.firstName} {d.user.lastName}
-                    </Link>
-                    {!d.isActive && (
-                      <span className="ml-2">
-                        <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">{CATEGORY_LABELS[d.driverType]}</td>
-                  <td className="px-4 py-2 text-gray-600">{d.user.phone}</td>
-                  <td className="px-4 py-2 text-gray-600">{d.user.email}</td>
-                  <td className="px-4 py-2 text-gray-600">{d.licenseNumber}</td>
-                  <td className="px-4 py-2 text-gray-600">{d.nationalId ?? '—'}</td>
-                  <td className="px-4 py-2">
-                    <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    {d.isActive ? (
-                      <>
-                        <button
-                          onClick={() => setFormTarget(d)}
-                          className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+      <ChassisGrid
+        main={
+          <>
+            <Card title="Driver performance" subtitle="worst first — this is the list you act on">
+              {data.drivers.length === 0 ? (
+                <p className="p-4 text-sm text-txt-2">
+                  No driver has any assignment history yet - nothing to score.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                        <th className="px-4 py-2 text-right font-medium">Score</th>
+                        <th className="px-4 py-2 font-medium">Driver</th>
+                        <th className="px-4 py-2 font-medium">Category</th>
+                        <th className="px-4 py-2 font-medium">6-month trend</th>
+                        <th className="px-4 py-2 font-medium">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.drivers.map((d) => (
+                        <tr
+                          key={d.driverId}
+                          onClick={() => setSelectedId(d.driverId)}
+                          className={`cursor-pointer border-b border-line-soft last:border-0 hover:bg-panel-2 ${
+                            d.driverId === selectedId ? 'bg-panel-2' : ''
+                          }`}
                         >
-                          Edit
-                        </button>
-                        {/* Stage H0f - OWNER only, matching the endpoint. A
-                            MANAGER would get a 403, so showing them a button
-                            would only be a lie. Hiding it is presentation;
-                            the guard on PATCH :id/password is the control. */}
-                        {user?.role === 'OWNER' && (
-                          <button
-                            onClick={() => setResettingPassword(d)}
-                            className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                          <td
+                            className="px-4 py-2 text-right text-lg font-bold"
+                            style={{ color: `var(--${BAND_ACCENT[d.band]})` }}
                           >
-                            Reset password
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setDeactivating(d)}
-                          className="text-sm font-medium text-red-600 hover:underline"
-                        >
-                          Deactivate
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => setReactivating(d)}
-                        className="text-sm font-medium text-gray-700 hover:underline"
-                      >
-                        Reactivate
-                      </button>
-                    )}
+                            {d.display}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Link
+                              to={`/drivers/${d.driverId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-medium text-txt hover:underline"
+                            >
+                              {d.firstName} {d.lastName}
+                            </Link>
+                            <div className="text-xs text-txt-2">{d.registrationNumber ?? '—'}</div>
+                          </td>
+                          <td className="px-4 py-2 text-txt-2">{CATEGORY_LABELS[d.driverType]}</td>
+                          <td className="px-4 py-2">
+                            <Sparkline points={d.sixMonthOnTimeRate} />
+                          </td>
+                          <td className="px-4 py-2 text-txt-2">{d.note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {selected && <Scorecard score={selected} />}
+          </>
+        }
+        rail={
+          <>
+            <Card title="AI Insights" subtitle="lowest score">
+              {data.lowestScoring ? (
+                <div className="p-4">
+                  <p className="text-sm font-medium text-txt">
+                    {data.lowestScoring.firstName} {data.lowestScoring.lastName}:{' '}
+                    {data.lowestScoring.raw}/90 raw
+                  </p>
+                  <p className="mt-1 text-xs text-txt-2">{data.lowestScoring.note}</p>
+                </div>
+              ) : (
+                <p className="p-4 text-sm text-txt-2">No driver has scoring history yet.</p>
+              )}
+            </Card>
+
+            <Card
+              title="Driver alerts"
+              subtitle={data.alerts.length > 0 ? String(data.alerts.length) : undefined}
+            >
+              {data.alerts.length === 0 ? (
+                <p className="p-4 text-sm text-txt-2">Nothing needs attention right now.</p>
+              ) : (
+                <div className="divide-y divide-line-soft">
+                  {data.alerts.map((a, i) => (
+                    <div
+                      key={i}
+                      className={`border-l-[3px] px-3 py-2 ${a.severity === 'crit' ? 'border-l-crit' : 'border-l-warn'}`}
+                    >
+                      <p className="text-sm font-medium text-txt">{a.title}</p>
+                      <p className="text-xs text-txt-2">{a.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </>
+        }
+      />
+
+      <Card
+        title="Score distribution"
+        subtitle={`${data.drivers.length} drivers across five bands`}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Band</th>
+                <th className="px-4 py-2 text-right font-medium">Drivers</th>
+                <th className="px-4 py-2 text-right font-medium">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.bandDistribution.map((row) => (
+                <tr key={row.band} className="border-b border-line-soft last:border-0">
+                  <td className="px-4 py-2">
+                    <span className="flex items-center gap-2 text-txt">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: `var(--${BAND_ACCENT[row.band]})` }}
+                      />
+                      {row.band}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right text-txt-2">{row.count}</td>
+                  <td className="px-4 py-2 text-right text-txt-2">{row.share}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <ClosingRow
+        left={
+          <Card title="What the score is built from" subtitle="weighting, of 90 raw points">
+            <div className="space-y-3 px-4 pb-4">
+              <p className="text-xs text-txt-2">
+                Conduct (off-zone events, complaints) isn't scored yet - no geofencing or complaints
+                system exists in this product to compute it from.
+              </p>
+              {[
+                { label: 'Payment reliability', pts: 50 },
+                { label: 'Honouring the contract', pts: 20 },
+                { label: 'Vehicle care', pts: 20 },
+              ].map((row) => (
+                <div key={row.label}>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-txt-2">{row.label}</span>
+                    <span className="text-txt">{row.pts} / 90</span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
+                    <div className="h-full bg-c1" style={{ width: `${(row.pts / 90) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        }
+        right={
+          <Card title="Missed payments this month" subtitle="across all drivers">
+            <div className="px-4 pb-4">
+              <p className="text-2xl font-semibold text-crit">
+                {formatTZS(data.missedPaymentTotalThisMonth)}
+              </p>
+              <p className="mt-1 text-xs text-txt-2">
+                Sum of every assignment's shortfall this month - the same definition as the
+                Operations Center's outstanding-today figure.
+              </p>
+            </div>
+          </Card>
+        }
+      />
+
+      <Card title="Manage drivers" subtitle="edit, deactivate, or reset a password">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3">
+          <input
+            placeholder="Search name or license number…"
+            value={manageSearch}
+            onChange={(e) => setManageSearch(e.target.value)}
+            className="w-full rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt sm:w-64"
+          />
+          <label className="flex items-center gap-2 text-sm text-txt-2">
+            <input
+              type="checkbox"
+              checked={manageShowDeactivated}
+              onChange={(e) => setManageShowDeactivated(e.target.checked)}
+            />
+            Show deactivated
+          </label>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Category</th>
+                <th className="px-4 py-2 font-medium">Phone</th>
+                <th className="px-4 py-2 font-medium">Password recovery</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allDrivers === null ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
+                    Loading…
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : filteredManageDrivers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
+                    No drivers found.
+                  </td>
+                </tr>
+              ) : (
+                filteredManageDrivers.map((d) => (
+                  <tr
+                    key={d.id}
+                    className={`border-b border-line-soft last:border-0 ${d.isActive ? '' : 'opacity-50'}`}
+                  >
+                    <td className="px-4 py-2 font-medium text-txt">
+                      {d.user.firstName} {d.user.lastName}
+                      {!d.isActive && (
+                        <span className="ml-2">
+                          <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-txt-2">{CATEGORY_LABELS[d.driverType]}</td>
+                    <td className="px-4 py-2 text-txt-2">{d.user.phone}</td>
+                    <td className="px-4 py-2 text-txt-2">
+                      <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
+                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {d.isActive ? (
+                        <>
+                          <button
+                            onClick={() => setFormTarget(d)}
+                            className="mr-3 text-sm font-medium text-c1 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          {user?.role === 'OWNER' && (
+                            <button
+                              onClick={() => setResettingPassword(d)}
+                              className="mr-3 text-sm font-medium text-c1 hover:underline"
+                            >
+                              Reset password
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDeactivating(d)}
+                            className="text-sm font-medium text-crit hover:underline"
+                          >
+                            Deactivate
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setReactivating(d)}
+                          className="text-sm font-medium text-c1 hover:underline"
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {resettingPassword && (
         <ResetPasswordModal
@@ -695,6 +895,6 @@ export function DriversPage() {
           onCancel={() => setReactivating(null)}
         />
       )}
-    </div>
+    </PageChassis>
   );
 }

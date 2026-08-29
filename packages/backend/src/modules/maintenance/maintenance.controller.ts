@@ -19,6 +19,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { MaintenanceService } from './maintenance.service';
+import { MaintenanceSummaryService } from './maintenance-summary.service';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { ListMaintenanceQueryDto } from './dto/list-maintenance-query.dto';
@@ -29,7 +30,10 @@ import { ListMaintenanceQueryDto } from './dto/list-maintenance-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
 export class MaintenanceController {
-  constructor(private readonly maintenanceService: MaintenanceService) {}
+  constructor(
+    private readonly maintenanceService: MaintenanceService,
+    private readonly maintenanceSummaryService: MaintenanceSummaryService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateMaintenanceDto, @CurrentUser() actor: AuthenticatedUser) {
@@ -39,6 +43,13 @@ export class MaintenanceController {
   @Get()
   list(@Query() query: ListMaintenanceQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.maintenanceService.list(query, actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as every other
+  // fixed-segment route in this codebase.
+  @Get('summary')
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.maintenanceSummaryService.getSummary(actor);
   }
 
   @Get(':id')

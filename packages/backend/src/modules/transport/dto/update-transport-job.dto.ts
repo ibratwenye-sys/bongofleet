@@ -55,6 +55,13 @@ export class UpdateTransportJobDto {
   @IsDateString()
   scheduledDate?: string;
 
+  /** Revisable up to job completion - see CreateTransportJobDto. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @IsPositive()
+  @Max(20_000)
+  expectedDistanceKm?: number;
+
   @IsOptional()
   @IsEnum(TransportJobStatus)
   status?: TransportJobStatus;

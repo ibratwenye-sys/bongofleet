@@ -98,14 +98,14 @@ export function Modal({
           scrolling internally instead of the panel growing past the edges.
           min-h-0 on the body is required - without it a flex child refuses
           to shrink below its content and the overflow returns. */}
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg bg-white shadow-lg">
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg bg-panel shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-txt">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-gray-400 hover:text-gray-600"
+            className="text-txt-3 hover:text-txt"
           >
             ✕
           </button>

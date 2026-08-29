@@ -1,14 +1,96 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
+import { formatTZS, startOfThisMonth, today } from '../lib/format';
 import type {
   CreateMaintenancePayload,
   MaintenanceLog,
+  MaintenanceSummaryResponse,
   Motorcycle,
   UpdateMaintenancePayload,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { formatTZS, startOfThisMonth, today } from '../lib/format';
+import { PageChassis } from '../components/chassis/PageChassis';
+import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
+import { Card } from '../components/chassis/Card';
+import type { KpiTile } from '../components/chassis/KpiRail';
+
+function kpisToTiles(data: MaintenanceSummaryResponse): KpiTile[] {
+  const k = data.kpis;
+  return [
+    {
+      label: 'Overdue',
+      value: String(k.overdue.count),
+      accentColor: k.overdue.count > 0 ? 'crit' : 'good',
+    },
+    {
+      label: 'Due within 7 days',
+      value: String(k.dueWithin7Days.count),
+      accentColor: k.dueWithin7Days.count > 0 ? 'warn' : 'good',
+    },
+    { label: 'Due within 30 days', value: String(k.dueWithin30Days.count), accentColor: 'c1' },
+    {
+      label: 'Nothing due',
+      value: String(k.nothingDue.count),
+      delta: `${k.nothingDue.percentOfFleet}% of the fleet`,
+      accentColor: 'good',
+    },
+    {
+      label: 'Completed, this month',
+      value: String(k.completedThisMonth.count),
+      delta: formatTZS(k.completedThisMonth.cost),
+      accentColor: 'violet',
+    },
+    {
+      label: 'Repeat visits',
+      value: String(k.repeatVisits.count),
+      accentColor: k.repeatVisits.count > 0 ? 'crit' : 'good',
+    },
+  ];
+}
+
+function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBooking'] }) {
+  if (rows.length === 0) {
+    return <p className="p-4 text-sm text-txt-2">Nothing needs booking right now.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+            <th className="px-4 py-2 font-medium">Vehicle</th>
+            <th className="px-4 py-2 font-medium">Driver</th>
+            <th className="px-4 py-2 font-medium">Why</th>
+            <th className="px-4 py-2 text-right font-medium">Odometer</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={r.motorcycleId}
+              className={`border-b border-line-soft last:border-0 ${r.status === 'OVERDUE' ? 'bg-crit-d/40' : ''}`}
+            >
+              <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
+              <td className="px-4 py-2 text-txt-2">{r.currentDriver ?? '—'}</td>
+              <td className="px-4 py-2 text-txt-2">{r.reasons.join('; ')}</td>
+              <td className="px-4 py-2 text-right text-txt-2">{r.odometer.toLocaleString()} km</td>
+              <td className="px-4 py-2">
+                <span
+                  className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
+                >
+                  {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---- Log / edit service modal (unchanged CRUD) ----
 
 interface FormState {
   motorcycleId: string;
@@ -118,11 +200,11 @@ function MaintenanceFormModal({
       <form onSubmit={handleSubmit} className="space-y-3">
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
+            <label className="mb-1 block text-sm font-medium text-txt">Vehicle</label>
             <select
               value={form.motorcycleId}
               onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             >
               <option value="">Choose a vehicle…</option>
               {motorcycles.map((m) => (
@@ -134,46 +216,46 @@ function MaintenanceFormModal({
           </div>
         )}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Description</label>
           <input
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             placeholder="e.g. Oil change, brake pads"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Cost (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">Cost (TZS)</label>
             <input
               type="number"
               min="0"
               step="0.01"
               value={form.cost}
               onChange={(e) => setForm({ ...form, cost: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Service date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">Service date</label>
             <input
               type="date"
               value={form.performedAt}
               onChange={(e) => setForm({ ...form, performedAt: e.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Odometer at service (km) <span className="text-gray-400">(optional)</span>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            Odometer at service (km) <span className="text-txt-2">(optional)</span>
           </label>
           <input
             type="number"
             min="0"
             value={form.mileageAtService}
             onChange={(e) => setForm({ ...form, mileageAtService: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             placeholder="Updates the vehicle's current mileage"
           />
         </div>
@@ -183,16 +265,16 @@ function MaintenanceFormModal({
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Next due date</label>
+              <label className="mb-1 block text-sm font-medium text-txt">Next due date</label>
               <input
                 type="date"
                 value={form.nextServiceDate}
                 onChange={(e) => setForm({ ...form, nextServiceDate: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text-sm font-medium text-txt">
                 Next due mileage (km)
               </label>
               <input
@@ -200,7 +282,7 @@ function MaintenanceFormModal({
                 min="0"
                 value={form.nextServiceMileage}
                 onChange={(e) => setForm({ ...form, nextServiceMileage: e.target.value })}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
               />
             </div>
           </div>
@@ -230,46 +312,52 @@ function MaintenanceFormModal({
 }
 
 export function MaintenancePage() {
-  const [logs, setLogs] = useState<MaintenanceLog[] | null>(null);
+  const [data, setData] = useState<MaintenanceSummaryResponse | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [from, setFrom] = useState<string>(startOfThisMonth());
-  const [to, setTo] = useState<string>(today());
-  const [motorcycleFilter, setMotorcycleFilter] = useState<string>('ALL');
   const [formTarget, setFormTarget] = useState<'new' | MaintenanceLog | null>(null);
-  const [deleting, setDeleting] = useState<MaintenanceLog | null>(null);
+  const [deleting, setDeleting] = useState<{ id: string; description: string } | null>(null);
+
+  // Manage-records fallback: "Completed this month" (full-width table)
+  // only covers this month. Older records still need an Edit/Delete path.
+  const [manageFrom, setManageFrom] = useState<string>(startOfThisMonth());
+  const [manageTo, setManageTo] = useState<string>(today());
+  const [manageVehicle, setManageVehicle] = useState<string>('ALL');
+  const [manageLogs, setManageLogs] = useState<MaintenanceLog[] | null>(null);
 
   async function load() {
-    setError(null);
-    const params = new URLSearchParams({ from, to });
-    if (motorcycleFilter !== 'ALL') {
-      params.set('motorcycleId', motorcycleFilter);
-    }
     try {
-      const data = await apiFetch<MaintenanceLog[]>(`/maintenance?${params.toString()}`);
-      setLogs(data);
-    } catch {
-      setError('Could not load maintenance records. Please try again.');
+      const [summary, motorcycleList] = await Promise.all([
+        apiFetch<MaintenanceSummaryResponse>('/maintenance/summary'),
+        apiFetch<Motorcycle[]>('/motorcycles'),
+      ]);
+      setData(summary);
+      setMotorcycles(motorcycleList);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load the maintenance summary.');
     }
   }
 
-  async function loadMotorcycles() {
+  async function loadManageLogs() {
+    const params = new URLSearchParams({ from: manageFrom, to: manageTo });
+    if (manageVehicle !== 'ALL') params.set('motorcycleId', manageVehicle);
     try {
-      setMotorcycles(await apiFetch<Motorcycle[]>('/motorcycles'));
+      setManageLogs(await apiFetch<MaintenanceLog[]>(`/maintenance?${params.toString()}`));
     } catch {
-      setMotorcycles([]);
+      setManageLogs([]);
     }
   }
-
-  useEffect(() => {
-    void loadMotorcycles();
-  }, []);
 
   useEffect(() => {
     void load();
+  }, []);
+
+  useEffect(() => {
+    void loadManageLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, motorcycleFilter]);
+  }, [manageFrom, manageTo, manageVehicle]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -286,7 +374,7 @@ export function MaintenancePage() {
     setFormTarget(null);
     setSuccessMessage(message);
     void load();
-    void loadMotorcycles(); // odometer may have moved
+    void loadManageLogs();
   }
 
   async function handleDelete() {
@@ -296,144 +384,342 @@ export function MaintenancePage() {
       setSuccessMessage('Service deleted.');
       setDeleting(null);
       void load();
+      void loadManageLogs();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not delete service.');
       setDeleting(null);
     }
   }
 
+  if (error && !data) {
+    return <p className="text-sm text-crit">{error}</p>;
+  }
+  if (!data) {
+    return <p className="text-sm text-txt-2">Loading…</p>;
+  }
+
+  const somethingDueCount =
+    data.kpis.overdue.count + data.kpis.dueWithin7Days.count + data.kpis.dueWithin30Days.count;
+  const pipelineColors: Record<string, string> = {
+    OVERDUE: 'var(--crit)',
+    DUE_7: 'var(--warn)',
+    DUE_30: 'var(--c1)',
+    NOTHING_DUE: 'var(--good)',
+  };
+  const pipelineLabels: Record<string, string> = {
+    OVERDUE: 'Overdue',
+    DUE_7: 'Due within 7 days',
+    DUE_30: 'Due within 30 days',
+    NOTHING_DUE: 'Nothing due',
+  };
+
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Maintenance</h1>
-        <button
-          onClick={() => setFormTarget('new')}
-          className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          Log service
-        </button>
-      </div>
-
+    <PageChassis
+      title="Maintenance"
+      statusPill={{ mode: 'reporting', text: `${somethingDueCount} vehicles have something due` }}
+      primaryAction={{ label: 'Log service', onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data)}
+    >
       {successMessage && (
-        <p className="mb-4 rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </p>
+        <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
       )}
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">From</label>
-          <input
-            type="date"
-            value={from}
-            max={to}
-            onChange={(e) => setFrom(e.target.value)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">To</label>
-          <input
-            type="date"
-            value={to}
-            min={from}
-            onChange={(e) => setTo(e.target.value)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Vehicle</label>
-          <select
-            value={motorcycleFilter}
-            onChange={(e) => setMotorcycleFilter(e.target.value)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-          >
-            <option value="ALL">All</option>
-            {motorcycles.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.registrationNumber}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <ChassisGrid
+        main={
+          <>
+            <Card
+              title="Needs booking"
+              subtitle={`${data.needsBooking.length} vehicles · overdue and at risk`}
+            >
+              <NeedsBookingTable rows={data.needsBooking} />
+            </Card>
+            <Card title="Service pipeline" subtitle="all vehicles">
+              <div className="px-4 pb-4">
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-panel-2">
+                  {data.servicePipeline.map((b) => (
+                    <div
+                      key={b.bucket}
+                      style={{ width: `${b.share}%`, backgroundColor: pipelineColors[b.bucket] }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-3 space-y-1.5 text-sm text-txt-2">
+                  {data.servicePipeline.map((b) => (
+                    <div key={b.bucket} className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: pipelineColors[b.bucket] }}
+                        />
+                        {pipelineLabels[b.bucket]}
+                      </span>
+                      <span className="text-txt">
+                        {b.count} <span className="text-txt-3">{b.share}%</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </>
+        }
+        rail={
+          <>
+            <Card
+              title="AI Insights"
+              subtitle={data.insights.length > 0 ? String(data.insights.length) : undefined}
+            >
+              {data.insights.length === 0 ? (
+                <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+              ) : (
+                <div className="divide-y divide-line-soft">
+                  {data.insights.map((ins, i) => (
+                    <div key={i} className="px-4 py-3">
+                      <p className="text-sm font-medium text-txt">{ins.title}</p>
+                      <p className="mt-1 text-xs text-txt-2">{ins.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+            <Card title="At risk" subtitle={`${data.atRisk.length} · nothing booked`}>
+              {data.atRisk.length === 0 ? (
+                <p className="p-4 text-sm text-txt-2">Nothing at risk right now.</p>
+              ) : (
+                <div className="divide-y divide-line-soft">
+                  {data.atRisk.slice(0, 6).map((r) => (
+                    <div
+                      key={r.motorcycleId}
+                      className={`border-l-[3px] px-3 py-2 ${r.status === 'OVERDUE' ? 'border-l-crit' : 'border-l-warn'}`}
+                    >
+                      <p className="text-sm font-medium text-txt">{r.registrationNumber}</p>
+                      <p className="text-xs text-txt-2">{r.reasons.join('; ')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </>
+        }
+      />
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Description</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Odometer</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Next service</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Cost</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {logs === null ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                  Loading…
-                </td>
+      <Card
+        title="Completed this month"
+        subtitle={`${data.completedThisMonth.length} services · ${formatTZS(data.kpis.completedThisMonth.cost)}`}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Date</th>
+                <th className="px-4 py-2 font-medium">Vehicle</th>
+                <th className="px-4 py-2 font-medium">Work</th>
+                <th className="px-4 py-2 text-right font-medium">Odometer</th>
+                <th className="px-4 py-2 text-right font-medium">Cost</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
-            ) : logs.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                  No maintenance in this period.
-                </td>
-              </tr>
-            ) : (
-              logs.map((m) => {
-                const nextParts: string[] = [];
-                if (m.nextServiceDate) nextParts.push(m.nextServiceDate.slice(0, 10));
-                if (m.nextServiceMileage != null)
-                  nextParts.push(`${m.nextServiceMileage.toLocaleString()} km`);
-                return (
-                  <tr key={m.id}>
-                    <td className="px-4 py-2 text-gray-600">{m.performedAt.slice(0, 10)}</td>
-                    <td className="px-4 py-2 font-medium text-gray-900">
-                      {regById.get(m.motorcycleId) ?? '—'}
-                    </td>
-                    <td className="px-4 py-2 text-gray-600">{m.description}</td>
-                    <td className="px-4 py-2 text-right text-gray-500">
-                      {m.mileageAtService != null
-                        ? `${m.mileageAtService.toLocaleString()} km`
+            </thead>
+            <tbody>
+              {data.completedThisMonth.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
+                    No services completed yet this month.
+                  </td>
+                </tr>
+              ) : (
+                data.completedThisMonth.map((c) => (
+                  <tr key={c.id} className="border-b border-line-soft last:border-0">
+                    <td className="px-4 py-2 text-txt-2">{c.performedAt}</td>
+                    <td className="px-4 py-2 font-medium text-txt">{c.registrationNumber}</td>
+                    <td className="px-4 py-2 text-txt-2">{c.description}</td>
+                    <td className="px-4 py-2 text-right text-txt-2">
+                      {c.mileageAtService != null
+                        ? `${c.mileageAtService.toLocaleString()} km`
                         : '—'}
                     </td>
-                    <td className="px-4 py-2 text-gray-500">
-                      {nextParts.length > 0 ? nextParts.join(' · ') : '—'}
-                    </td>
-                    <td className="px-4 py-2 text-right text-gray-700">{formatTZS(m.cost)}</td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-2 text-right text-txt-2">{formatTZS(c.cost)}</td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
                       <button
-                        onClick={() => setFormTarget(m)}
-                        className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                        onClick={() =>
+                          setFormTarget({
+                            id: c.id,
+                            motorcycleId: c.motorcycleId,
+                            mechanicId: null,
+                            description: c.description,
+                            cost: c.cost,
+                            performedAt: c.performedAt,
+                            mileageAtService: c.mileageAtService,
+                            nextServiceDate: c.nextServiceDate,
+                            nextServiceMileage: c.nextServiceMileage,
+                            createdAt: c.performedAt,
+                          })
+                        }
+                        className="mr-3 text-sm font-medium text-c1 hover:underline"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => setDeleting(m)}
-                        className="text-sm font-medium text-red-600 hover:underline"
+                        onClick={() => setDeleting({ id: c.id, description: c.description })}
+                        className="text-sm font-medium text-crit hover:underline"
                       >
                         Delete
                       </button>
                     </td>
                   </tr>
-                );
-              })
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <ClosingRow
+        left={
+          <Card title="Maintenance spend by vehicle type" subtitle="this month">
+            {data.spendByVehicleType.length === 0 ? (
+              <p className="p-4 text-sm text-txt-2">No spend recorded this month.</p>
+            ) : (
+              <div className="divide-y divide-line-soft px-4">
+                {data.spendByVehicleType.map((row) => (
+                  <div
+                    key={row.vehicleType}
+                    className="flex items-center justify-between py-2.5 text-sm"
+                  >
+                    <span className="text-txt">{row.vehicleType.toLowerCase()}</span>
+                    <span className="font-medium text-txt">{formatTZS(row.amount)}</span>
+                  </div>
+                ))}
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </Card>
+        }
+        right={
+          <Card
+            title="Repeat-visit vehicles"
+            subtitle={`${data.repeatVisitVehicles.length} · rolling 45 days`}
+          >
+            {data.repeatVisitVehicles.length === 0 ? (
+              <p className="p-4 text-sm text-txt-2">
+                No vehicle has needed more than one visit recently.
+              </p>
+            ) : (
+              <div className="divide-y divide-line-soft px-4">
+                {data.repeatVisitVehicles.map((v) => (
+                  <div
+                    key={v.motorcycleId}
+                    className="flex items-center justify-between py-2.5 text-sm"
+                  >
+                    <span className="text-txt">
+                      {v.registrationNumber} · {v.visitCount} visits
+                    </span>
+                    <span className="font-medium text-crit">{formatTZS(v.totalSpend)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        }
+      />
+
+      <Card title="Manage older records" subtitle="edit or delete a service from any date range">
+        <div className="flex flex-wrap items-end gap-3 border-b border-line-soft px-4 py-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-txt-3">From</label>
+            <input
+              type="date"
+              value={manageFrom}
+              max={manageTo}
+              onChange={(e) => setManageFrom(e.target.value)}
+              className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-txt-3">To</label>
+            <input
+              type="date"
+              value={manageTo}
+              min={manageFrom}
+              onChange={(e) => setManageTo(e.target.value)}
+              className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle</label>
+            <select
+              value={manageVehicle}
+              onChange={(e) => setManageVehicle(e.target.value)}
+              className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
+            >
+              <option value="ALL">All</option>
+              {motorcycles.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.registrationNumber}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Date</th>
+                <th className="px-4 py-2 font-medium">Vehicle</th>
+                <th className="px-4 py-2 font-medium">Description</th>
+                <th className="px-4 py-2 text-right font-medium">Cost</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {manageLogs === null ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
+                    Loading…
+                  </td>
+                </tr>
+              ) : manageLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
+                    No maintenance in this period.
+                  </td>
+                </tr>
+              ) : (
+                manageLogs.map((m) => (
+                  <tr key={m.id} className="border-b border-line-soft last:border-0">
+                    <td className="px-4 py-2 text-txt-2">{m.performedAt.slice(0, 10)}</td>
+                    <td className="px-4 py-2 font-medium text-txt">
+                      {regById.get(m.motorcycleId) ?? '—'}
+                    </td>
+                    <td className="px-4 py-2 text-txt-2">{m.description}</td>
+                    <td className="px-4 py-2 text-right text-txt-2">{formatTZS(m.cost)}</td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => setFormTarget(m)}
+                        className="mr-3 text-sm font-medium text-c1 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleting({ id: m.id, description: m.description })}
+                        className="text-sm font-medium text-crit hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {formTarget !== null && (
         <MaintenanceFormModal
           log={formTarget === 'new' ? null : formTarget}
           motorcycles={motorcycles}
-          defaultMotorcycleId={motorcycleFilter !== 'ALL' ? motorcycleFilter : ''}
+          defaultMotorcycleId={manageVehicle !== 'ALL' ? manageVehicle : ''}
           onClose={() => setFormTarget(null)}
           onSaved={handleSaved}
         />
@@ -449,6 +735,6 @@ export function MaintenancePage() {
           onCancel={() => setDeleting(null)}
         />
       )}
-    </div>
+    </PageChassis>
   );
 }

@@ -53,6 +53,16 @@ export class CreateTransportJobDto {
   @IsDateString()
   scheduledDate: string;
 
+  /** Set at job creation, revisable until the job completes (see
+   *  UpdateTransportJobDto). When present, the in-transit card computes
+   *  real progress from actual GPS fixes; when absent, it shows elapsed
+   *  time and last position only - never a fabricated ETA. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @IsPositive()
+  @Max(20_000)
+  expectedDistanceKm?: number;
+
   /**
    * The reason IS the confirmation - present and >= 10 chars means "an OWNER
    * is deliberately overriding the driver-category/vehicle-type mismatch."

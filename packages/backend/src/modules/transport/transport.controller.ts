@@ -19,6 +19,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { TransportService } from './transport.service';
+import { TransportOperationsService } from './transport-operations.service';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
@@ -29,7 +30,10 @@ import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
 export class TransportController {
-  constructor(private readonly transportService: TransportService) {}
+  constructor(
+    private readonly transportService: TransportService,
+    private readonly transportOperationsService: TransportOperationsService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateTransportJobDto, @CurrentUser() actor: AuthenticatedUser) {
@@ -51,6 +55,13 @@ export class TransportController {
   @Get('summary')
   summary(@Query() query: ListTransportJobsQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.transportService.vehicleSummary(query, actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as every other
+  // fixed-segment route in this codebase.
+  @Get('operations-summary')
+  operationsSummary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.transportOperationsService.getOperationsSummary(actor);
   }
 
   @Get(':id')

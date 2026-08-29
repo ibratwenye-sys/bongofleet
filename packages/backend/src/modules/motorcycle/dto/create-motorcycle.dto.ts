@@ -39,6 +39,12 @@ export class CreateMotorcycleDto {
   @IsString()
   colour?: string;
 
+  /** Free text the owner types by hand, e.g. "Kariakoo" - no lookup table, no geofencing. */
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  operatingArea?: string;
+
   @IsOptional()
   @IsEnum(MotorcycleStatus)
   status?: MotorcycleStatus;

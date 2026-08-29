@@ -87,6 +87,10 @@ export interface Motorcycle {
   status: MotorcycleStatus;
   currentMileage: number;
   isActive: boolean;
+  // Stage UI2 - free text the owner types by hand per vehicle, e.g.
+  // "Kariakoo". No geofencing, no lookup table - see Motorcycle.
+  // operatingArea's own schema comment.
+  operatingArea: string | null;
 }
 
 export interface CreateMotorcyclePayload {
@@ -96,6 +100,7 @@ export interface CreateMotorcyclePayload {
   model?: string;
   year?: number;
   gpsDeviceId?: string;
+  operatingArea?: string;
 }
 
 export interface UpdateMotorcyclePayload {
@@ -106,6 +111,7 @@ export interface UpdateMotorcyclePayload {
   year?: number;
   gpsDeviceId?: string;
   status?: MotorcycleStatus;
+  operatingArea?: string;
 }
 
 // A driver's name/email/phone live on the linked User, not flat on the Driver record
@@ -342,6 +348,9 @@ export interface TransportJob {
   deliveredAt: string | null;
   expensesTotal: string;
   netProfit: string;
+  // Stage UI2 - optional, set at job creation, revisable until the job
+  // completes. See TransportJob.expectedDistanceKm's own schema comment.
+  expectedDistanceKm: string | null;
 }
 
 export interface VehicleTransportSummary {
@@ -363,6 +372,7 @@ export interface CreateTransportJobPayload {
   cargo?: string;
   revenue: number;
   scheduledDate: string;
+  expectedDistanceKm?: number | null;
 }
 
 export interface UpdateTransportJobPayload {
@@ -374,6 +384,7 @@ export interface UpdateTransportJobPayload {
   revenue?: number;
   scheduledDate?: string;
   status?: TransportJobStatus;
+  expectedDistanceKm?: number | null;
 }
 
 export interface ExpenseCategory {
@@ -791,4 +802,353 @@ export interface OperationsCenterResponse {
   alerts: OperationsCenterAlert[];
   collectionSeries: DailyCollectionPoint[];
   todaysPnl: PnlSummary;
+}
+
+// ============================================================
+// Stage UI2 - the Fleet/Drivers/Assignments/Transport/Maintenance pages'
+// single data sources. Mirrors each backend *.types.ts file field for
+// field, same convention as OperationsCenterResponse above.
+// ============================================================
+
+// --- Fleet (GET /motorcycles/fleet-summary) ---
+
+export interface FleetSummaryKpis {
+  totalVehicles: { count: number; byType: string };
+  onRoadToday: { count: number; percentOfFleet: number };
+  idleToday: { count: number; targetLost: string };
+  inWorkshop: { count: number };
+  collectedToday: { amount: string };
+  netPerVehicleThisMonth: { amount: string };
+}
+
+export type FleetAlertSource = 'ASSIGNMENT' | 'DOCUMENT' | 'MAINTENANCE';
+
+export interface FleetAlert {
+  source: FleetAlertSource;
+  severity: 'crit' | 'warn';
+  title: string;
+  description: string;
+  when: string | null;
+}
+
+export interface FleetTypeCount {
+  vehicleType: string;
+  count: number;
+  share: number;
+}
+
+export interface FleetAreaGroup {
+  vehicleType: string;
+  areas: { area: string; count: number }[];
+  unset: number;
+}
+
+export interface FleetVehicleRow {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: string;
+  currentDriver: string | null;
+  operatingArea: string | null;
+  targetThisMonth: string;
+  paidThisMonth: string;
+  netThisMonth: string;
+  status: string;
+  needsAttention: boolean;
+}
+
+export interface IdleVehicleRow {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: string;
+  operatingArea: string | null;
+  daysUnassigned: number;
+  dailyTarget: string | null;
+  lostSoFar: string | null;
+  reason: string;
+  sinceDate: string;
+}
+
+export interface FleetSummaryResponse {
+  kpis: FleetSummaryKpis;
+  typeBreakdown: FleetTypeCount[];
+  worstPerformerThisMonth: MotorcyclePnl | null;
+  alerts: FleetAlert[];
+  areaGroups: FleetAreaGroup[];
+  vehicles: FleetVehicleRow[];
+  idleVehicles: IdleVehicleRow[];
+  netPerVehicleByType: { vehicleType: string; count: number; amount: string }[];
+}
+
+// --- Drivers (GET /drivers/scoreboard) ---
+
+export type ScoreBand = 'Excellent' | 'Good' | 'Fair' | 'Watch' | 'At risk';
+
+export interface DriverScoreComponents {
+  reliability: { points: number; onTimeDays: number; expectedDays: number };
+  contract: {
+    points: number;
+    hasPlan: boolean;
+    defaulted: boolean;
+    consecutiveMissedDays: number | null;
+    breachAfterConsecutiveMissedDays: number | null;
+  };
+  care: { points: number; dueKind: 'OVERDUE' | 'DUE_SOON' | null; hasAssignmentToday: boolean };
+}
+
+export interface MonthlyOnTimeRate {
+  month: string;
+  rate: number | null;
+}
+
+export interface DriverScore {
+  driverId: string;
+  driverType: DriverType;
+  firstName: string;
+  lastName: string;
+  registrationNumber: string | null;
+  raw: number;
+  display: number;
+  band: ScoreBand;
+  components: DriverScoreComponents;
+  note: string;
+  sixMonthOnTimeRate: MonthlyOnTimeRate[];
+}
+
+export interface DriverScoreboardKpis {
+  totalDrivers: number;
+  excellent: number;
+  good: number;
+  watch: number;
+  atRisk: number;
+}
+
+export type DriverAlertSource = 'ASSIGNMENT' | 'DOCUMENT';
+
+export interface DriverAlert {
+  source: DriverAlertSource;
+  severity: 'crit' | 'warn';
+  title: string;
+  description: string;
+  when: string;
+}
+
+export interface BandDistributionRow {
+  band: ScoreBand;
+  count: number;
+  share: number;
+}
+
+export interface DriverScoreboardResponse {
+  kpis: DriverScoreboardKpis;
+  drivers: DriverScore[];
+  lowestScoring: DriverScore | null;
+  alerts: DriverAlert[];
+  bandDistribution: BandDistributionRow[];
+  missedPaymentTotalThisMonth: string;
+}
+
+// --- Assignments (GET /assignments/summary) ---
+
+export interface AssignmentSummaryKpis {
+  assignedToday: { count: number; fleetSize: number; percentOfFleet: number };
+  movingToday: { count: number; percentActuallyEarning: number };
+  assignedInWorkshopToday: { count: number };
+  inStockToday: { count: number; targetLost: string };
+  createdThisMonth: { count: number; percentEndedWithPayment: number };
+  costOfIdlenessThisMonth: { amount: string };
+}
+
+export interface DailyStockPoint {
+  date: string;
+  outCount: number;
+  inStockCount: number;
+}
+
+export interface AssignmentInsight {
+  title: string;
+  description: string;
+  motorcycleId: string | null;
+}
+
+export interface AssignmentSummaryResponse {
+  kpis: AssignmentSummaryKpis;
+  dailyStockSeries: DailyStockPoint[];
+  utilisationToday: { moving: number; workshop: number; inStock: number };
+  insights: AssignmentInsight[];
+  unassignedNow: IdleVehicleRow[];
+  thisMonth: {
+    created: number;
+    endedWithPayment: number;
+    endedWithNothing: number;
+    valueOfUnpaidDays: string;
+  };
+  idlenessCostByType: {
+    vehicleType: string;
+    count: number;
+    amount: string;
+    topContributor: string | null;
+  }[];
+}
+
+// --- Transport (GET /transport-jobs/operations-summary) ---
+
+export interface VehicleTransportSummaryUI {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: string | null;
+  jobCount: number;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
+
+export interface TransportOperationsKpis {
+  fleetCount: { count: number; trucks: number; cars: number };
+  tripsThisMonth: { count: number; inTransitNow: number };
+  revenueThisMonth: { amount: string; percentOfAllRevenue: number };
+  costsThisMonth: { amount: string; percentFuel: number };
+  netThisMonth: { amount: string; perVehicleAverage: string };
+  marginThisMonth: { percent: number; vsMotorbikeMarginPercent: number | null };
+}
+
+export type TransportProgress =
+  | { kind: 'no-target'; elapsedMs: number; lastPosition: LastKnownPosition | null }
+  | {
+      kind: 'progress';
+      elapsedMs: number;
+      lastPosition: LastKnownPosition | null;
+      kmCovered: number;
+      kmRemaining: number;
+      expectedDistanceKm: number;
+    };
+
+export interface LastKnownPosition {
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+}
+
+export interface InTransitJob {
+  reference: string | null;
+  origin: string;
+  destination: string;
+  registrationNumber: string;
+  driverName: string | null;
+  cargo: string | null;
+  progress: TransportProgress;
+}
+
+export interface MarginDeclineFlag {
+  motorcycleId: string;
+  registrationNumber: string;
+  currentMarginPercent: number;
+  priorAverageMarginPercent: number;
+  priorMonthCount: number;
+}
+
+export type TransportAlertSource = 'ASSIGNMENT' | 'MAINTENANCE';
+
+export interface TransportAlert {
+  source: TransportAlertSource;
+  severity: 'crit' | 'warn';
+  title: string;
+  description: string;
+}
+
+export interface TransportTripRow {
+  id: string;
+  reference: string | null;
+  origin: string;
+  destination: string;
+  registrationNumber: string;
+  cargo: string | null;
+  revenue: string;
+  expensesTotal: string;
+  netProfit: string;
+  status: string;
+}
+
+export interface MarginSplit {
+  fuel: string;
+  other: string;
+  profit: string;
+  fuelPercent: number;
+  otherPercent: number;
+  profitPercent: number;
+}
+
+export interface TransportOperationsResponse {
+  kpis: TransportOperationsKpis;
+  perVehicleThisMonth: VehicleTransportSummaryUI[];
+  inTransitJob: InTransitJob | null;
+  marginDeclineFlag: MarginDeclineFlag | null;
+  alerts: TransportAlert[];
+  tripsThisMonth: TransportTripRow[];
+  flaggedVehicleMarginTrend: { month: string; marginPercent: number | null }[] | null;
+  marginSplit: MarginSplit;
+}
+
+// --- Maintenance (GET /maintenance/summary) ---
+
+export interface MaintenanceSummaryKpis {
+  overdue: { count: number };
+  dueWithin7Days: { count: number };
+  dueWithin30Days: { count: number };
+  nothingDue: { count: number; percentOfFleet: number };
+  completedThisMonth: { count: number; cost: string };
+  repeatVisits: { count: number };
+}
+
+export interface NeedsBookingRow {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: string;
+  currentDriver: string | null;
+  reasons: string[];
+  odometer: number;
+  nextServiceDate: string | null;
+  nextServiceMileage: number | null;
+  status: 'OVERDUE' | 'DUE_SOON';
+}
+
+export interface ServicePipelineBucket {
+  bucket: 'OVERDUE' | 'DUE_7' | 'DUE_30' | 'NOTHING_DUE';
+  count: number;
+  share: number;
+}
+
+export interface RepeatVisitVehicle {
+  motorcycleId: string;
+  registrationNumber: string;
+  visitCount: number;
+  totalSpend: string;
+}
+
+export interface MaintenanceInsight {
+  title: string;
+  description: string;
+  motorcycleId: string | null;
+}
+
+export interface CompletedServiceRow {
+  id: string;
+  motorcycleId: string;
+  registrationNumber: string;
+  description: string;
+  performedAt: string;
+  mileageAtService: number | null;
+  nextServiceDate: string | null;
+  nextServiceMileage: number | null;
+  cost: string;
+}
+
+export interface MaintenanceSummaryResponse {
+  kpis: MaintenanceSummaryKpis;
+  needsBooking: NeedsBookingRow[];
+  servicePipeline: ServicePipelineBucket[];
+  insights: MaintenanceInsight[];
+  atRisk: NeedsBookingRow[];
+  completedThisMonth: CompletedServiceRow[];
+  spendByVehicleType: { vehicleType: string; amount: string }[];
+  repeatVisitVehicles: RepeatVisitVehicle[];
 }
