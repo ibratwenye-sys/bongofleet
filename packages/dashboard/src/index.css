@@ -1,1 +1,119 @@
 @import "tailwindcss";
+
+/*
+ * Stage UI1 (DESIGN_THEMING.md) - dark is the default (no attribute
+ * needed on <html>), light is an explicit opt-in via
+ * :root[data-theme="light"]. Values copied exactly from the reference
+ * file's own <style> block (bongofleet-one-format.html) - verified
+ * against it directly, not approximated.
+ *
+ * @theme registers these as real Tailwind v4 utilities (bg-panel,
+ * text-txt, border-line, ...) rather than arbitrary-value soup - Tailwind
+ * generates `var(--color-panel)` etc. at build time, and the plain CSS
+ * block below just redeclares the same custom properties under
+ * [data-theme="light"], which every generated utility already reads at
+ * paint time. Switching theme is then a single attribute change on
+ * <html>, with no per-component logic anywhere.
+ */
+@theme {
+  --color-bg: #0b0f14;
+  --color-panel: #121821;
+  --color-panel-2: #161e29;
+  --color-line: #212c3a;
+  --color-line-soft: #1a2331;
+  --color-side: #0e141c;
+  --color-txt: #e7edf5;
+  --color-txt-2: #9aa9bc;
+  --color-txt-3: #64748b;
+
+  /* Category colours (vehicle type) - c1 motorbike, c2 bajaji, c3 truck, c4 car. */
+  --color-c1: #3987e5;
+  --color-c2: #d95926;
+  --color-c3: #199e70;
+  --color-c4: #c98500;
+  --color-c1-d: rgba(57, 135, 229, 0.14);
+  --color-c2-d: rgba(217, 89, 38, 0.14);
+  --color-c3-d: rgba(25, 158, 112, 0.14);
+  --color-c4-d: rgba(201, 133, 0, 0.16);
+
+  /* Status colours. -x is the "on dark" text step (readable directly on
+     --bg/--panel); -d is a translucent background tint - its own literal
+     token per theme, never CSS opacity() over --good/--warn/--crit, which
+     DESIGN_THEMING.md notes reads as a different hue over navy than over
+     white. */
+  --color-good: #16a34a;
+  --color-good-x: #4ade80;
+  --color-good-d: rgba(22, 163, 74, 0.14);
+  --color-warn: #fab219;
+  --color-warn-x: #fab219;
+  --color-warn-d: rgba(250, 178, 25, 0.13);
+  --color-crit: #e05252;
+  --color-crit-x: #ff8a8a;
+  --color-crit-d: rgba(224, 82, 82, 0.14);
+  --color-violet: #8b5cf6;
+  --color-violet-d: rgba(139, 92, 246, 0.13);
+
+  /* Chrome. */
+  --color-grid: #1e2a3d;
+  --color-track: #1b2431;
+  --color-page: #070a0f;
+  --color-frame: #222e3e;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+
+  /* Table-row tints - their own tokens, never opacity over a status colour
+     (same reasoning as the -d tokens above). */
+  --color-row-good: #0f1e15;
+  --color-row-warn: #1e1a10;
+  --color-row-crit: #1f1315;
+  --color-row-sel: #101c2c;
+
+  /* Fixed chassis measurements - named once here rather than repeating the
+     pixel values inline across every chassis component. */
+  --spacing-sidebar: 236px;
+  --spacing-topbar: 56px;
+  --spacing-rail: 340px;
+}
+
+:root[data-theme="light"] {
+  --color-bg: #f7f8fa;
+  --color-panel: #ffffff;
+  --color-panel-2: #f7f8fa;
+  --color-line: #e5e8ec;
+  --color-line-soft: #eff1f4;
+  --color-side: #ffffff;
+  --color-txt: #141a21;
+  --color-txt-2: #5b6673;
+  --color-txt-3: #8a94a2;
+
+  --color-c1: #2a78d6;
+  --color-c2: #eb6834;
+  --color-c3: #1baf7a;
+  --color-c4: #eda100;
+  --color-c1-d: #eaf1fc;
+  --color-c2-d: #fdeee8;
+  --color-c3-d: #e6f6f0;
+  --color-c4-d: #fcf3e0;
+
+  --color-good: #0ca30c;
+  --color-good-x: #0a7a0f;
+  --color-good-d: #e8f6e8;
+  --color-warn: #fab219;
+  --color-warn-x: #8a5a00;
+  --color-warn-d: #fef4e3;
+  --color-crit: #d03b3b;
+  --color-crit-x: #a32b2b;
+  --color-crit-d: #fbeaea;
+  --color-violet: #5b3fc4;
+  --color-violet-d: #efebfb;
+
+  --color-grid: #e9ecf1;
+  --color-track: #e9ecf1;
+  --color-page: #e9ecef;
+  --color-frame: #d6dbe1;
+  --color-shadow: rgba(20, 26, 33, 0.12);
+
+  --color-row-good: #f6fbf6;
+  --color-row-warn: #fef9f0;
+  --color-row-crit: #fdf6f6;
+  --color-row-sel: #f6fafe;
+}

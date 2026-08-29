@@ -47,6 +47,12 @@ export function VehicleMap({
   fitBoundsTo,
   children,
   heightClassName = 'h-[500px]',
+  // Stage UI1 - PublicTrackingPage.tsx (the one caller outside the
+  // signed-in chassis - no data-theme is ever set for an anonymous
+  // visitor there, see auth-context.tsx) needs this literal gray, not the
+  // token-driven border-line the two chassis pages pass instead. Left as
+  // the default so that page needed no change.
+  borderClassName = 'border-gray-200',
 }: {
   center: [number, number];
   zoom?: number;
@@ -55,11 +61,12 @@ export function VehicleMap({
   fitBoundsTo?: [number, number][];
   children?: ReactNode;
   heightClassName?: string;
+  borderClassName?: string;
 }) {
   return (
     <div
       data-testid="vehicle-map"
-      className={`relative w-full ${heightClassName} overflow-hidden rounded-lg border border-gray-200`}
+      className={`relative w-full ${heightClassName} overflow-hidden rounded-lg border ${borderClassName}`}
     >
       {!hasMapTilerKey() && (
         <div className="absolute inset-x-0 top-0 z-[1000] bg-amber-50 px-3 py-1.5 text-center text-xs text-amber-800">

@@ -66,6 +66,11 @@ export interface ExpenseCategory {
   count: number;
 }
 
+export interface DailyCollectionPoint {
+  date: string;
+  amount: string;
+}
+
 /**
  * Read-only profit-and-loss analytics for owners/managers, optionally scoped to
  * one vehicle category (motorbike/bajaji/car/truck).
@@ -267,6 +272,49 @@ export class AnalyticsService {
 
     rows.sort((a, b) => Number(b.revenue) - Number(a.revenue));
     return rows;
+  }
+
+  /**
+   * Stage UI1 - the Operations Center's "collection - last 14 days" chart.
+   * Reuses paymentWhere's exact same COMPLETED-dailyPayment/assignedDate-
+   * range filter every other revenue figure in this service already uses
+   * (rather than a second, possibly-drifting definition of "collected"),
+   * just bucketed per day instead of summed into one total. One query,
+   * grouped in memory the same way getPerMotorcycle already does - Prisma
+   * can't groupBy a related model's date column directly.
+   *
+   * Every day in [from, to] appears in the result, zero-amount days
+   * included, so a chart can plot a fixed number of bars without a caller
+   * having to fill gaps itself.
+   */
+  async getDailyCollectionSeries(
+    from: string,
+    to: string,
+    actor: AuthenticatedUser,
+  ): Promise<DailyCollectionPoint[]> {
+    assertOwnerOrManager(actor);
+    const range = buildDateRangeFilter(from, to);
+
+    const payments = await this.prisma.client.dailyPayment.findMany({
+      where: this.paymentWhere(range),
+      select: { amount: true, dailyAssignment: { select: { assignedDate: true } } },
+    });
+
+    const byDate = new Map<string, Prisma.Decimal>();
+    for (const p of payments) {
+      const key = p.dailyAssignment.assignedDate.toISOString().slice(0, 10);
+      byDate.set(key, (byDate.get(key) ?? new Prisma.Decimal(0)).plus(p.amount));
+    }
+
+    const points: DailyCollectionPoint[] = [];
+    const cursor = new Date(`${from}T00:00:00.000Z`);
+    const end = new Date(`${to}T00:00:00.000Z`);
+    while (cursor.getTime() <= end.getTime()) {
+      const key = cursor.toISOString().slice(0, 10);
+      points.push({ date: key, amount: money(byDate.get(key)) });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return points;
   }
 
   async getExpenseBreakdown(

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { apiFetch, refreshTokens } from './api';
 import { tokenStore } from './token-store';
-import type { CurrentUser, TokenResponse } from './types';
+import { applyTheme } from './theme';
+import type { CurrentUser, Theme, TokenResponse } from './types';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -10,6 +11,10 @@ interface AuthContextValue {
   status: AuthStatus;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Stage UI1 - PATCHes /auth/me and updates local state + the <html>
+   *  attribute together, so every token-driven colour on screen swaps in
+   *  one render, not just the toggle's own icon. */
+  setTheme: (theme: Theme) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -39,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const me = await apiFetch<CurrentUser>('/auth/me');
+        applyTheme(me.theme);
         setUser(me);
         setStatus('authenticated');
       } catch {
@@ -56,8 +62,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     tokenStore.setTokens(tokens);
     const me = await apiFetch<CurrentUser>('/auth/me');
+    applyTheme(me.theme);
     setUser(me);
     setStatus('authenticated');
+  }, []);
+
+  const setTheme = useCallback(async (theme: Theme) => {
+    const result = await apiFetch<{ theme: Theme }>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ theme }),
+    });
+    applyTheme(result.theme);
+    setUser((current) => (current ? { ...current, theme: result.theme } : current));
   }, []);
 
   const logout = useCallback(async () => {
@@ -69,10 +85,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.clear();
     setUser(null);
     setStatus('unauthenticated');
+    // Back to the deliberate dark default (DESIGN_THEMING.md) - a logged-out
+    // visitor has no account to read a theme choice off.
+    applyTheme(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, status, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, status, login, logout, setTheme }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

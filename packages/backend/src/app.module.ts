@@ -30,6 +30,7 @@ import { TenantModule } from './modules/tenant/tenant.module';
 import { GpsModule } from './modules/gps/gps.module';
 import { TrackingLinkModule } from './modules/tracking-link/tracking-link.module';
 import { BulkImportModule } from './modules/bulk-import/bulk-import.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { envValidationSchema } from './config/env.validation';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 
@@ -73,6 +74,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     GpsModule,
     TrackingLinkModule,
     BulkImportModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

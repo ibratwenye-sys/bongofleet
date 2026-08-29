@@ -215,10 +215,13 @@ test.describe('modals stay escapable at laptop height', () => {
  * these cover what actually gets checked away from a desk (who is behind, who
  * paid, a driver's ledger), not the long forms, which stay desktop-first.
  *
- * Both viewports are below the xl breakpoint where the nav row fits, so both
- * get the drawer; 390 additionally gets the card lists in place of the wide
- * tables, and 820 keeps the tables. That difference is the point of running
- * the same assertions at two sizes rather than one.
+ * Stage UI1 - the two viewports used to both sit below the old xl breakpoint
+ * (both got the drawer); AppShell.tsx's sidebar/drawer split moved to md
+ * (768px) with the new sidebar chassis, so 390 (phone) still gets the
+ * drawer but 820 (tablet) now shows the persistent 236px sidebar directly -
+ * see the nav test below, which branches on that. 390 additionally gets the
+ * card lists in place of the wide tables, and 820 keeps the tables - that
+ * difference is still the point of running the same assertions at two sizes.
  */
 const READING_VIEWPORTS = [
   { label: 'phone', width: 390, height: 844 },
@@ -240,11 +243,113 @@ for (const vp of READING_VIEWPORTS) {
   test.describe(`reading screens at ${vp.label} (${vp.width}x${vp.height})`, () => {
     test.use({ viewport: { width: vp.width, height: vp.height } });
 
-    test('the dashboard shows its key figures without scrolling sideways', async ({ page }) => {
+    test('the Operations Center shows its key figures without scrolling sideways', async ({
+      page,
+    }) => {
       await page.goto('/');
-      await expect(page.getByText("Today's revenue")).toBeVisible();
-      await expect(page.getByText('Fleet size')).toBeVisible();
+      // Stage UI1 - DashboardPage.tsx's four client-computed tiles were
+      // replaced by six real, server-computed KPIs (dashboard.service.ts) -
+      // these two are the ones every seeded tenant will show regardless of
+      // today's activity (a fleet always has a size; a plan count is
+      // always >= 0), so they're the stable ones to assert on here.
+      await expect(page.getByText('On the road')).toBeVisible();
+      await expect(page.getByText('Ownership plans')).toBeVisible();
       await expectNoSidewaysScroll(page);
+
+      // Stage UI1 - theme toggle + chassis-consistency, folded into this
+      // existing boot rather than a separate spec file's own goto(): this
+      // suite's REFRESH_THROTTLE budget (20/minute, shared by every real
+      // page boot in the run) was already landing exactly on the ceiling
+      // before this stage (see tracking-map.spec.ts's own top comment) -
+      // a standalone theming.spec.ts with even one extra goto() made the
+      // always-last-to-run tracking-map.spec.ts fail on a throttled
+      // refresh, measured directly. Gated to the tablet run only (one pass
+      // is enough - this isn't viewport-dependent behaviour), so the
+      // phone run of this same test stays exactly as cheap as before.
+      if (vp.label === 'tablet') {
+        // Force a known starting state rather than assuming it: this
+        // suite reuses one seeded account across runs (AUTH_STATE_FILE),
+        // so a previous failed run could have left it on light.
+        await page.getByRole('button', { name: 'Dark theme' }).click();
+        await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'light');
+
+        const navLinksOnOps = await page.locator('[aria-label="Main"] a').allTextContents();
+        // The sidebar's own bg-side background lives on Sidebar.tsx's root
+        // div, not the <nav> landmark - .bg-side is the reliable target
+        // for both the width measurement and the colour checks below.
+        const sidebarWidthOnOps = await page
+          .locator('.bg-side')
+          .first()
+          .evaluate((el) => el.getBoundingClientRect().width);
+        const mainOffsetOnOps = await page
+          .getByRole('heading', { name: 'Operations Center' })
+          .evaluate((el) => el.getBoundingClientRect().left);
+        const sidebarBgDark = await page
+          .locator('.bg-side')
+          .first()
+          .evaluate((el) => getComputedStyle(el).backgroundColor);
+        const kpiTextDark = await page
+          .locator('text=On the road')
+          .first()
+          .evaluate((el) => getComputedStyle(el).color);
+
+        // "Light theme" is the toggle's accessible name regardless of
+        // which state is current (ThemeToggle.tsx).
+        await page.getByRole('button', { name: 'Light theme' }).click();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+        const sidebarBgLight = await page
+          .locator('.bg-side')
+          .first()
+          .evaluate((el) => getComputedStyle(el).backgroundColor);
+        const kpiTextLight = await page
+          .locator('text=On the road')
+          .first()
+          .evaluate((el) => getComputedStyle(el).color);
+        expect(sidebarBgLight, 'sidebar background should repaint on toggle').not.toBe(
+          sidebarBgDark,
+        );
+        expect(kpiTextLight, 'KPI label colour should repaint on toggle').not.toBe(kpiTextDark);
+
+        // Client-side nav (no page boot, no refresh spent) to a page that
+        // has not rendered a single pixel yet this session - proves the
+        // CSS variable cascade applies to freshly-mounted content, not
+        // just what was already painted when the toggle fired. Also the
+        // chassis-consistency comparison page.
+        await page.getByRole('link', { name: 'Live Map' }).click();
+        await expect(page.getByRole('heading', { name: 'Live map' })).toBeVisible();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+        const freshPageSidebarBg = await page
+          .locator('.bg-side')
+          .first()
+          .evaluate((el) => getComputedStyle(el).backgroundColor);
+        expect(freshPageSidebarBg).toBe(sidebarBgLight);
+
+        const navLinksOnMap = await page.locator('[aria-label="Main"] a').allTextContents();
+        const sidebarWidthOnMap = await page
+          .locator('.bg-side')
+          .first()
+          .evaluate((el) => el.getBoundingClientRect().width);
+        const mainOffsetOnMap = await page
+          .getByRole('heading', { name: 'Live map' })
+          .evaluate((el) => el.getBoundingClientRect().left);
+
+        // Same nav config (nav-config.ts), same component (Sidebar.tsx),
+        // rendered once by AppShell.tsx - not two different sidebars that
+        // happen to look similar.
+        expect(navLinksOnMap).toEqual(navLinksOnOps);
+        expect(sidebarWidthOnMap).toBe(sidebarWidthOnOps);
+        // Both page titles start at the identical x-offset - proof the
+        // two pages share one grid/content-area definition
+        // (PageChassis.tsx), not two independently-tuned layouts that
+        // happen to line up by luck.
+        expect(mainOffsetOnMap).toBe(mainOffsetOnOps);
+        await expect(page.locator('text=/LIVE ·/').first()).toBeVisible();
+
+        // Leave the seeded demo account back on the default for every
+        // other spec in this suite that boots against it.
+        await page.getByRole('button', { name: 'Dark theme' }).click();
+        await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'light');
+      }
     });
 
     test('the Ownership list is readable without scrolling sideways', async ({ page }) => {
@@ -261,35 +366,56 @@ for (const vp of READING_VIEWPORTS) {
       await expectNoSidewaysScroll(page);
     });
 
-    test('the nav collapses, opens, and reaches another page', async ({ page }) => {
-      await page.goto('/');
+    if (vp.width < 768) {
+      test('the nav collapses, opens, and reaches another page', async ({ page }) => {
+        await page.goto('/');
 
-      // The row is hidden below xl, so the links must not be reachable until
-      // the menu is opened - otherwise "collapsed" is only a visual claim.
-      await expect(page.getByRole('link', { name: 'Payments' })).toBeHidden();
+        // Below md, the sidebar is a drawer - links must not be reachable
+        // until the menu is opened, or "collapsed" is only a visual claim.
+        await expect(page.getByRole('link', { name: 'Payments' })).toBeHidden();
 
-      const menu = page.getByRole('button', { name: 'Open menu' });
-      await expect(menu).toBeVisible();
+        const menu = page.getByRole('button', { name: 'Open menu' });
+        await expect(menu).toBeVisible();
 
-      // Thumb-sized, not cursor-sized.
-      const box = await menu.boundingBox();
-      expect(box, 'menu button should be laid out').not.toBeNull();
-      expect(box!.width).toBeGreaterThanOrEqual(44);
-      expect(box!.height).toBeGreaterThanOrEqual(44);
+        // Thumb-sized, not cursor-sized.
+        const box = await menu.boundingBox();
+        expect(box, 'menu button should be laid out').not.toBeNull();
+        expect(box!.width).toBeGreaterThanOrEqual(44);
+        expect(box!.height).toBeGreaterThanOrEqual(44);
 
-      await menu.click();
-      const paymentsLink = page.getByRole('link', { name: 'Payments' });
-      await expect(paymentsLink).toBeVisible();
+        await menu.click();
+        const paymentsLink = page.getByRole('link', { name: 'Payments' });
+        await expect(paymentsLink).toBeVisible();
 
-      const linkBox = await paymentsLink.boundingBox();
-      expect(linkBox!.height).toBeGreaterThanOrEqual(44);
+        const linkBox = await paymentsLink.boundingBox();
+        expect(linkBox!.height).toBeGreaterThanOrEqual(44);
 
-      await paymentsLink.click();
-      await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
-      // Navigating must close the drawer, or the destination renders beneath it.
-      await expect(paymentsLink).toBeHidden();
-      await expectNoSidewaysScroll(page);
-    });
+        await paymentsLink.click();
+        await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+        // Navigating must close the drawer, or the destination renders beneath it.
+        await expect(paymentsLink).toBeHidden();
+        await expectNoSidewaysScroll(page);
+      });
+    } else {
+      test('the sidebar is persistent (no drawer needed) and reaches another page', async ({
+        page,
+      }) => {
+        await page.goto('/');
+
+        // Stage UI1 - >= md (768px), the 236px sidebar shows directly; a
+        // tablet has no reason to hide it behind a menu the way the old
+        // 13-item flat row did at this width.
+        await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
+        const paymentsLink = page.getByRole('link', { name: 'Payments' });
+        await expect(paymentsLink).toBeVisible();
+
+        await paymentsLink.click();
+        await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+        // Still visible after navigating - there is no drawer to close.
+        await expect(paymentsLink).toBeVisible();
+        await expectNoSidewaysScroll(page);
+      });
+    }
 
     test('a plan detail and its ledger open', async ({ page }) => {
       await page.goto('/ownership');

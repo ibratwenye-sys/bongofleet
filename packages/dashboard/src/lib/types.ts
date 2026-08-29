@@ -3,6 +3,12 @@
 // doesn't match the real Prisma enum (OWNER/MANAGER/RIDER/MECHANIC).
 export type UserRole = 'OWNER' | 'MANAGER' | 'RIDER' | 'MECHANIC';
 
+// Stage UI1 - null means "never chosen"; the dashboard falls back to dark
+// (DESIGN_THEMING.md's deliberate default), never guessing from OS
+// preference. Lives on the account (auth-context.tsx), not browser storage,
+// so it reads the same on every device.
+export type Theme = 'DARK' | 'LIGHT';
+
 export interface CurrentUser {
   id: string;
   tenantId: string;
@@ -10,6 +16,7 @@ export interface CurrentUser {
   role: UserRole;
   firstName: string;
   lastName: string;
+  theme: Theme | null;
 }
 
 export interface TokenResponse {
@@ -717,4 +724,71 @@ export interface BulkImportCommitCounts {
 export interface BulkImportCommitResult {
   preview: BulkImportPreviewResult;
   counts: BulkImportCommitCounts;
+}
+
+// Stage UI1 - the Operations Center's single data source (GET
+// /dashboard/operations-center). Mirrors dashboard.types.ts on the backend.
+export interface OperationsCenterKpis {
+  onTheRoad: { count: number; fleetSize: number; deltaVsYesterday: number };
+  collectedToday: { amount: string; targetAmount: string; percentOfTarget: number };
+  outstandingToday: { count: number; amount: string };
+  activeOwnershipPlans: { count: number };
+  serviceDue: { count: number; overdueCount: number };
+  netProfitToday: { amount: string };
+}
+
+export interface MotorcyclePnl {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: VehicleType;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
+
+export interface OutstandingAssignmentRow {
+  registrationNumber: string;
+  targetAmount: string;
+  paidAmount: string;
+  balance: string;
+}
+
+export type OperationsCenterAlertSource = 'ASSIGNMENT' | 'DOCUMENT' | 'MAINTENANCE';
+export type OperationsCenterAlertSeverity = 'crit' | 'warn';
+
+export interface OperationsCenterAlert {
+  source: OperationsCenterAlertSource;
+  severity: OperationsCenterAlertSeverity;
+  title: string;
+  description: string;
+  when: string | null;
+}
+
+export interface DailyCollectionPoint {
+  date: string;
+  amount: string;
+}
+
+export interface PnlSummary {
+  from: string | null;
+  to: string | null;
+  vehicleType: VehicleType | null;
+  revenue: string;
+  rentalRevenue: string;
+  transportRevenue: string;
+  expenses: string;
+  netProfit: string;
+  paymentCount: number;
+  transportJobCount: number;
+  expenseCount: number;
+}
+
+export interface OperationsCenterResponse {
+  kpis: OperationsCenterKpis;
+  worstPerformerToday: MotorcyclePnl | null;
+  topPerformersToday: MotorcyclePnl[];
+  outstandingAssignmentRows: OutstandingAssignmentRow[];
+  alerts: OperationsCenterAlert[];
+  collectionSeries: DailyCollectionPoint[];
+  todaysPnl: PnlSummary;
 }

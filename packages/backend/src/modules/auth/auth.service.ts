@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { DriverType, UserRole } from '@prisma/client';
+import { DriverType, Theme, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { requestContext } from '../../common/context/request-context';
@@ -238,6 +238,30 @@ export class AuthService {
       select: { driverType: true },
     });
     return driver?.driverType ?? null;
+  }
+
+  /** Stage UI1 - every role has a User row, so unlike getDriverType this
+   *  needs no role check; the tenant-scoping extension still ensures it
+   *  can only ever resolve the caller's own row. */
+  async getTheme(user: AuthenticatedUser): Promise<Theme | null> {
+    const record = await this.prisma.client.user.findUnique({
+      where: { id: user.userId },
+      select: { theme: true },
+    });
+    return record?.theme ?? null;
+  }
+
+  /** Stage UI1 - PATCH /auth/me. The theme choice belongs on the account
+   *  (DESIGN_THEMING.md), not browser storage, so it reads the same on
+   *  every device the owner signs into. */
+  async updateTheme(user: AuthenticatedUser, theme: Theme): Promise<Theme> {
+    const updated = await this.prisma.client.user.update({
+      where: { id: user.userId },
+      data: { theme },
+      select: { theme: true },
+    });
+    // theme was just set to a non-null Theme above - never actually null.
+    return updated.theme as Theme;
   }
 
   private async issueTokenPair(profile: Omit<AuthenticatedUser, 'jti'>): Promise<TokenResponseDto> {

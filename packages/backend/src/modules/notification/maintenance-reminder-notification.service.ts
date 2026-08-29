@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { requestContext } from '../../common/context/request-context';
 import { MailerService } from './mailer.service';
 import { resolveOwnerRecipients, TenantSummary } from './notification.util';
+import { determineMaintenanceDue } from './maintenance-due.util';
 
 export const MAINTENANCE_REMINDER_CRON_JOB = 'maintenance-reminder-scan';
 
@@ -128,8 +129,6 @@ export class MaintenanceReminderNotificationService implements OnModuleInit {
         const mileageBuffer = this.config.get<number>('MAINTENANCE_REMINDER_MILEAGE', 500);
 
         const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-        const dateHorizon = new Date(today);
-        dateHorizon.setUTCDate(dateHorizon.getUTCDate() + withinDays);
 
         // Active bikes with at least one maintenance log carrying a next-service
         // target. We only need the newest such log per bike (its current target).
@@ -170,39 +169,20 @@ export class MaintenanceReminderNotificationService implements OnModuleInit {
             continue;
           }
 
-          const reasons: string[] = [];
-          let overdue = false;
-          let dueSoon = false;
+          const { kind, reasons } = determineMaintenanceDue(
+            {
+              currentMileage: bike.currentMileage,
+              nextServiceDate: log.nextServiceDate,
+              nextServiceMileage: log.nextServiceMileage,
+            },
+            today,
+            withinDays,
+            mileageBuffer,
+          );
 
-          if (log.nextServiceDate) {
-            const target = log.nextServiceDate;
-            if (target.getTime() < today.getTime()) {
-              overdue = true;
-              reasons.push(`service was due ${target.toISOString().slice(0, 10)}`);
-            } else if (target.getTime() <= dateHorizon.getTime()) {
-              dueSoon = true;
-              reasons.push(`service due by ${target.toISOString().slice(0, 10)}`);
-            }
-          }
-
-          if (log.nextServiceMileage != null) {
-            if (bike.currentMileage >= log.nextServiceMileage) {
-              overdue = true;
-              reasons.push(
-                `odometer ${bike.currentMileage} km past service target ${log.nextServiceMileage} km`,
-              );
-            } else if (bike.currentMileage >= log.nextServiceMileage - mileageBuffer) {
-              dueSoon = true;
-              reasons.push(
-                `odometer ${bike.currentMileage} km nearing service target ${log.nextServiceMileage} km`,
-              );
-            }
-          }
-
-          if (!overdue && !dueSoon) {
+          if (kind === null) {
             continue;
           }
-          const kind = overdue ? MaintenanceReminderKind.OVERDUE : MaintenanceReminderKind.DUE_SOON;
           if (log.reminders.some((r) => r.kind === kind)) {
             continue;
           }

@@ -4,7 +4,6 @@ import { AuthProvider } from './lib/auth-context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
 import { FleetPage } from './pages/FleetPage';
 import { DriversPage } from './pages/DriversPage';
 import { AssignmentsPage } from './pages/AssignmentsPage';
@@ -23,14 +22,19 @@ import { TrackingLinksPage } from './pages/TrackingLinksPage';
 import { BulkImportPage } from './pages/BulkImportPage';
 
 // Stage I3 - leaflet/react-leaflet added ~160kB (gzipped) to the single
-// bundle every other page also pays for on first load. These are the only
-// two pages that ever touch a map, so they're the only ones code-split -
-// no other page in this app has needed that before now.
+// bundle every other page also pays for on first load, so every page that
+// touches a map is code-split rather than pulled into the main chunk.
+// Stage UI1 added a third: Operations Center's own live-fleet card reuses
+// the same VehicleMap.tsx - lazy-loading it costs one extra chunk fetch on
+// first load of "/", the same tradeoff already accepted for the other two.
 const TrackingMapPage = lazy(() =>
   import('./pages/TrackingMapPage').then((m) => ({ default: m.TrackingMapPage })),
 );
 const PublicTrackingPage = lazy(() =>
   import('./pages/PublicTrackingPage').then((m) => ({ default: m.PublicTrackingPage })),
+);
+const OperationsCenterPage = lazy(() =>
+  import('./pages/OperationsCenterPage').then((m) => ({ default: m.OperationsCenterPage })),
 );
 
 function PageLoadingFallback() {
@@ -56,7 +60,7 @@ function App() {
             <Route path="/track/:token" element={<PublicTrackingPage />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppShell />}>
-                <Route path="/" element={<DashboardPage />} />
+                <Route path="/" element={<OperationsCenterPage />} />
                 <Route path="/fleet" element={<FleetPage />} />
                 <Route path="/fleet/:motorcycleId" element={<MotorcycleDetailPage />} />
                 <Route path="/drivers" element={<DriversPage />} />

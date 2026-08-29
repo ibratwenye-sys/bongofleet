@@ -24,16 +24,10 @@ test('Billing page loads from the nav, shows the seeded rate, and never implies 
 }) => {
   await page.goto('/');
 
-  // Stage I2 - AppShell.tsx's desktop/drawer breakpoint moved to 2xl
-  // (1536px), so this test's default 1280px viewport is drawer-only now;
-  // an unconditional wait-then-click on the menu button, same pattern
-  // smoke.spec.ts's own responsive tests use, rather than a one-shot
-  // `isVisible()` racing React's hydration (that used to work only because
-  // the desktop nav was ALSO reachable at this viewport before the
-  // breakpoint moved - the fallback papered over the race, it didn't fix it).
-  const menu = page.getByRole('button', { name: 'Open menu' });
-  await expect(menu).toBeVisible();
-  await menu.click();
+  // Stage UI1 - AppShell.tsx's sidebar/drawer breakpoint moved to md
+  // (768px): a 236px sidebar has no reason to wait for the old flat nav
+  // row's 2xl (1536px), so this test's default 1280px viewport now shows
+  // the persistent sidebar directly - no menu to open first.
   await page.getByRole('link', { name: 'Billing' }).click();
   await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
 
@@ -43,7 +37,11 @@ test('Billing page loads from the nav, shows the seeded rate, and never implies 
 
   // Stage SUB1 migration seeds exactly one tier at TZS 10,000/bike/month -
   // formatTZS renders it with zero decimal places and a currency symbol.
-  await expect(page.getByText(/TZS.*10,000/)).toBeVisible();
+  // An exact match, not a bare substring: this persistent dev DB has
+  // accumulated enough bikes over time that "Estimated monthly total" can
+  // itself contain "10,000" as a substring (e.g. 610,000), which the old
+  // loose regex matched too under strict mode.
+  await expect(page.getByText('TZS 10,000', { exact: true })).toBeVisible();
 
   // The honest disclosure line - must always be present, regardless of
   // status/trial state (see BillingPage.tsx's StatusBanner comment).

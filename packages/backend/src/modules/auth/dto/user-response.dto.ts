@@ -1,4 +1,4 @@
-import { DriverType, TenantStatus, UserRole } from '@prisma/client';
+import { DriverType, TenantStatus, Theme, UserRole } from '@prisma/client';
 
 export class UserResponseDto {
   id: string;
@@ -18,6 +18,10 @@ export class UserResponseDto {
   // UI. See AuthService.getDriverType for why this is a separate lookup
   // rather than something validateToken already carries.
   driverType: DriverType | null;
+  // Stage UI1 - null means "never chosen"; the dashboard falls back to dark
+  // (see the Theme enum's own schema comment), never guessing from OS
+  // preference.
+  theme: Theme | null;
 
   static fromProfile(profile: {
     userId: string;
@@ -29,6 +33,7 @@ export class UserResponseDto {
     tenantStatus: TenantStatus;
     trialEndsAt: Date | null;
     driverType: DriverType | null;
+    theme: Theme | null;
   }): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = profile.userId;
@@ -40,6 +45,7 @@ export class UserResponseDto {
     dto.tenantStatus = profile.tenantStatus;
     dto.trialEndsAt = profile.trialEndsAt;
     dto.driverType = profile.driverType;
+    dto.theme = profile.theme;
     return dto;
   }
 }

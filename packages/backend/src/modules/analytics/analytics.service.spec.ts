@@ -263,4 +263,43 @@ describe('AnalyticsService', () => {
       expect(rows).toEqual([{ category: 'Fuel', amount: '100.00', count: 1 }]);
     });
   });
+
+  describe('getDailyCollectionSeries', () => {
+    it('buckets COMPLETED payments by their assignment date, one point per day including zero-amount days', async () => {
+      prisma.client.dailyPayment.findMany.mockResolvedValue([
+        {
+          amount: dec(5000),
+          dailyAssignment: { assignedDate: new Date('2026-08-01T00:00:00.000Z') },
+        },
+        {
+          amount: dec(3000),
+          dailyAssignment: { assignedDate: new Date('2026-08-01T00:00:00.000Z') },
+        },
+        {
+          amount: dec(7000),
+          dailyAssignment: { assignedDate: new Date('2026-08-03T00:00:00.000Z') },
+        },
+      ]);
+
+      const points = await service.getDailyCollectionSeries('2026-08-01', '2026-08-03', owner);
+
+      expect(points).toEqual([
+        { date: '2026-08-01', amount: '8000.00' },
+        { date: '2026-08-02', amount: '0.00' }, // no payments that day - still a point, not a gap
+        { date: '2026-08-03', amount: '7000.00' },
+      ]);
+    });
+
+    it('rejects a driver, same as every other analytics method', async () => {
+      await expect(
+        service.getDailyCollectionSeries('2026-08-01', '2026-08-01', driver),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('a single-day range still returns exactly one point', async () => {
+      prisma.client.dailyPayment.findMany.mockResolvedValue([]);
+      const points = await service.getDailyCollectionSeries('2026-08-05', '2026-08-05', owner);
+      expect(points).toEqual([{ date: '2026-08-05', amount: '0.00' }]);
+    });
+  });
 });

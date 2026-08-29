@@ -15,6 +15,20 @@ enum UserRole {
   @@map("user_role")
 }
 
+/// Stage UI1 (DESIGN_THEMING.md) - the dashboard's dark/light choice.
+/// Belongs on the account, not browser storage, so it's the same across
+/// devices. Nullable rather than defaulted to DARK: null means "never
+/// chosen" and the client falls back to dark (the deliberate default,
+/// never guessed from OS preference) - an explicit DARK row would be
+/// indistinguishable from that same fallback, so there is nothing to gain
+/// from a non-null default here.
+enum Theme {
+  DARK
+  LIGHT
+
+  @@map("theme")
+}
+
 /// Stage S1. Where a tenant sits in the signup/billing lifecycle - checked
 /// on every authenticated request via tenant-lock.util.ts's checkTenantLock,
 /// which is the one place this enum's meaning is actually decided.
@@ -227,6 +241,10 @@ model User {
   firstName    String   @map("first_name")
   lastName     String   @map("last_name")
   isActive     Boolean  @default(true) @map("is_active")
+  // Stage UI1 - see the Theme enum's own comment. Every role (OWNER/
+  // MANAGER/RIDER/MECHANIC) has a User row, so this lives here rather than
+  // on Driver - a fleet owner's own theme choice has nowhere else to go.
+  theme        Theme?
 
   /// When this address was last PROVEN to reach the person who owns the
   /// account - set only when they complete a self-service password reset

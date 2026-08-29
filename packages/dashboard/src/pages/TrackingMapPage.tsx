@@ -12,6 +12,8 @@ import type {
 import { VehicleMap } from '../components/VehicleMap';
 import { markerStatus, vehicleDivIcon, STATUS_COLOR, STATUS_LABEL } from '../lib/gps-status';
 import { today, formatDateTime } from '../lib/format';
+import { PageChassis } from '../components/chassis/PageChassis';
+import type { KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
 const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
@@ -131,22 +133,42 @@ export function TrackingMapPage() {
   // navigation to the URL.
   if (user && user.role !== 'OWNER' && user.role !== 'MANAGER') {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+      <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2">
         Only the fleet owner or a manager can view the live map.
       </div>
     );
   }
 
+  // Stage UI1 (DESIGN_UI_DIRECTIONS.md) - three real tiles (live/stale/
+  // offline counts, already computed for the status legend below), not six
+  // padded to fit the rail's usual shape - this page genuinely only has
+  // three fleet-wide numbers of its own. Omitted entirely (rather than
+  // shown as 0/0/0) until the first fetch resolves.
+  const kpis: KpiTile[] | undefined =
+    positions === null
+      ? undefined
+      : (['live', 'stale', 'offline'] as const).map((status) => ({
+          label: STATUS_LABEL[status],
+          value: String(positions.filter((p) => markerStatus(p) === status).length),
+          accentColor: status === 'live' ? 'good' : status === 'stale' ? 'warn' : 'c1',
+        }));
+
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-gray-900">Live map</h1>
+    <PageChassis
+      title="Live map"
+      statusPill={{
+        mode: 'live',
+        text: `LIVE · ${(positions ?? []).filter((p) => !p.offline).length} reporting`,
+      }}
+      kpis={kpis}
+    >
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Vehicle</label>
+          <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle</label>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as VehicleType | 'ALL')}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+            className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
           >
             {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
@@ -157,9 +179,9 @@ export function TrackingMapPage() {
         </div>
       </div>
 
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-gray-600">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-txt-2">
         {(['live', 'stale', 'offline'] as const).map((status) => (
           <span key={status} className="flex items-center gap-1.5">
             <span
@@ -172,12 +194,13 @@ export function TrackingMapPage() {
         <span>📱 Phone · 📡 Device</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <VehicleMap
             center={DEFAULT_CENTER}
             fitBoundsTo={markerPoints.length > 0 ? markerPoints : undefined}
             heightClassName="h-[560px]"
+            borderClassName="border-line"
           >
             {visiblePositions.map((position) => {
               if (position.offline) return null; // no coordinates to plot
@@ -205,29 +228,29 @@ export function TrackingMapPage() {
             )}
           </VehicleMap>
           {positions !== null && visiblePositions.every((p) => p.offline) && (
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-txt-3">
               No vehicles in this category are currently reporting a live position - offline
               vehicles aren't plotted (no coordinates to show), but still appear in the fleet.
             </p>
           )}
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-line bg-panel p-4">
           {!selected ? (
-            <p className="text-sm text-gray-500">Click a vehicle on the map to see details here.</p>
+            <p className="text-sm text-txt-2">Click a vehicle on the map to see details here.</p>
           ) : (
             <div>
               <div className="mb-3 flex items-start justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-gray-900">
+                  <h2 className="text-base font-semibold text-txt">
                     {selected.registrationNumber}
                   </h2>
-                  <p className="text-xs text-gray-500">{selected.vehicleType}</p>
+                  <p className="text-xs text-txt-2">{selected.vehicleType}</p>
                 </div>
                 <button
                   onClick={() => setSelectedId(null)}
                   aria-label="Close"
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-txt-3 hover:text-txt"
                 >
                   ✕
                 </button>
@@ -235,7 +258,7 @@ export function TrackingMapPage() {
 
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Status</dt>
+                  <dt className="text-txt-2">Status</dt>
                   <dd
                     className="font-medium"
                     style={{ color: STATUS_COLOR[markerStatus(selected)] }}
@@ -244,16 +267,16 @@ export function TrackingMapPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Today's rider</dt>
-                  <dd className="text-gray-900">
+                  <dt className="text-txt-2">Today's rider</dt>
+                  <dd className="text-txt">
                     {todayRiderName === undefined
                       ? 'Loading…'
                       : (todayRiderName ?? 'No rider assigned today')}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Last fix</dt>
-                  <dd className="text-gray-900">
+                  <dt className="text-txt-2">Last fix</dt>
+                  <dd className="text-txt">
                     {(() => {
                       const t = fixTime(selected);
                       return t ? formatDateTime(t) : 'Never reported';
@@ -261,8 +284,8 @@ export function TrackingMapPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Speed</dt>
-                  <dd className="text-gray-900">
+                  <dt className="text-txt-2">Speed</dt>
+                  <dd className="text-txt">
                     {(() => {
                       const speed = speedFromPath(path ?? []);
                       return speed != null ? `${speed.toFixed(0)} km/h` : '—';
@@ -271,18 +294,16 @@ export function TrackingMapPage() {
                 </div>
               </dl>
 
-              <div className="mt-4 border-t border-gray-200 pt-3">
-                <label className="mb-1 block text-xs font-medium text-gray-500">
-                  Replay path for
-                </label>
+              <div className="mt-4 border-t border-line-soft pt-3">
+                <label className="mb-1 block text-xs font-medium text-txt-2">Replay path for</label>
                 <input
                   type="date"
                   value={pathDate}
                   max={today()}
                   onChange={(e) => setPathDate(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+                  className="w-full rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
                 />
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-txt-2">
                   {pathLoading
                     ? 'Loading path…'
                     : path && path.length > 1
@@ -296,6 +317,6 @@ export function TrackingMapPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageChassis>
   );
 }
