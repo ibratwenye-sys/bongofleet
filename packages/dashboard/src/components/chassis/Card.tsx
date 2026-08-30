@@ -13,7 +13,10 @@ export function Card({
   bodyClassName = 'p-4',
 }: {
   title: string;
-  subtitle?: string;
+  /** Usually the small trailing label ("4 new", "Sun 26 Jul"), but any
+   *  node works - Stage UI3's period-selector cards pass a pair of date
+   *  inputs here instead of plain text. */
+  subtitle?: ReactNode;
   children: ReactNode;
   bodyClassName?: string;
 }) {

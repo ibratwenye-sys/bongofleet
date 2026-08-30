@@ -71,6 +71,38 @@ export interface DailyCollectionPoint {
   amount: string;
 }
 
+export interface SegmentPnl {
+  vehicleType: VehicleType | 'TOTAL';
+  vehicleCount: number;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+  netProfitPerVehicle: string;
+  marginPct: number;
+}
+
+export interface MonthlyPnlPoint {
+  month: string;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
+
+const ALL_VEHICLE_TYPES: VehicleType[] = [
+  VehicleType.MOTORBIKE,
+  VehicleType.BAJAJI,
+  VehicleType.CAR,
+  VehicleType.TRUCK,
+];
+
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function monthKey(date: Date): string {
+  return date.toISOString().slice(0, 7);
+}
+
 /**
  * Read-only profit-and-loss analytics for owners/managers, optionally scoped to
  * one vehicle category (motorbike/bajaji/car/truck).
@@ -355,5 +387,143 @@ export class AnalyticsService {
 
     rows.sort((a, b) => Number(b.amount) - Number(a.amount));
     return rows;
+  }
+
+  /**
+   * Stage UI3 - Reports' "Profit and loss by segment" table. Each row's
+   * revenue/expenses/netProfit is exactly getSummary({...query,
+   * vehicleType}) for that type - reused, not reimplemented - so this can
+   * never drift from what the rest of the app already calls "revenue" for
+   * a category. vehicleCount is fleet composition (active vehicles of that
+   * type right now), independent of the date range: "how many trucks do I
+   * own" answers a different question than "how many trucks earned this
+   * period" and the two must not be conflated into one number.
+   *
+   * The totals row is its own getSummary(query) call with no vehicleType
+   * filter - the real all-vehicles total, not a client-side sum of four
+   * already-rounded per-segment strings (which can be off by a cent).
+   * vehicleCount on the totals row is a plain integer sum, which has no
+   * such rounding hazard.
+   */
+  async getPnlBySegment(
+    query: ReportRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<SegmentPnl[]> {
+    assertOwnerOrManager(actor);
+
+    const [counts, summaries, totalSummary] = await Promise.all([
+      Promise.all(
+        ALL_VEHICLE_TYPES.map((vt) =>
+          this.prisma.client.motorcycle.count({ where: { vehicleType: vt, isActive: true } }),
+        ),
+      ),
+      Promise.all(
+        ALL_VEHICLE_TYPES.map((vt) => this.getSummary({ ...query, vehicleType: vt }, actor)),
+      ),
+      this.getSummary(query, actor),
+    ]);
+
+    const rows = ALL_VEHICLE_TYPES.map((vt, i) => this.toSegmentRow(vt, counts[i], summaries[i]));
+    const totalVehicleCount = counts.reduce((sum, c) => sum + c, 0);
+    rows.push(this.toSegmentRow('TOTAL', totalVehicleCount, totalSummary));
+    return rows;
+  }
+
+  private toSegmentRow(
+    vehicleType: VehicleType | 'TOTAL',
+    vehicleCount: number,
+    summary: PnlSummary,
+  ): SegmentPnl {
+    const revenue = new Prisma.Decimal(summary.revenue);
+    const netProfit = new Prisma.Decimal(summary.netProfit);
+    const netProfitPerVehicle =
+      vehicleCount > 0 ? netProfit.dividedBy(vehicleCount) : new Prisma.Decimal(0);
+    const marginPct = revenue.greaterThan(0)
+      ? netProfit.dividedBy(revenue).times(100).round().toNumber()
+      : 0;
+    return {
+      vehicleType,
+      vehicleCount,
+      revenue: summary.revenue,
+      expenses: summary.expenses,
+      netProfit: summary.netProfit,
+      netProfitPerVehicle: money(netProfitPerVehicle),
+      marginPct,
+    };
+  }
+
+  /**
+   * Stage UI3 - Reports' "Revenue and profit by month" table and the
+   * closing row's margin-trend chart. Same four revenue/expense streams as
+   * getSummary (paymentWhere/transportWhere/expenseWhere/maintenanceWhere,
+   * reused unchanged), bucketed by calendar month instead of summed into
+   * one total - findMany + in-memory grouping, the same technique
+   * getDailyCollectionSeries already uses for its per-day buckets, since
+   * Prisma cannot groupBy a related model's date column directly.
+   *
+   * Every month in [monthsBack-1 months ago, this month] appears even at
+   * zero, same "no gaps" contract as getDailyCollectionSeries - a chart
+   * can plot a fixed number of bars without filling gaps itself.
+   */
+  async getMonthlyPnlSeries(
+    monthsBack: number,
+    query: Pick<ReportRangeQueryDto, 'vehicleType'>,
+    actor: AuthenticatedUser,
+    now: Date = new Date(),
+  ): Promise<MonthlyPnlPoint[]> {
+    assertOwnerOrManager(actor);
+    const vt = query.vehicleType;
+
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startMonth = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - (monthsBack - 1), 1),
+    );
+    const range = buildDateRangeFilter(isoDate(startMonth), isoDate(today));
+
+    const [payments, transportJobs, expenses, maintenance] = await Promise.all([
+      this.prisma.client.dailyPayment.findMany({
+        where: this.paymentWhere(range, vt),
+        select: { amount: true, dailyAssignment: { select: { assignedDate: true } } },
+      }),
+      this.prisma.client.transportJob.findMany({
+        where: this.transportWhere(range, vt),
+        select: { revenue: true, scheduledDate: true },
+      }),
+      this.prisma.client.expense.findMany({
+        where: this.expenseWhere(range, vt),
+        select: { amount: true, incurredAt: true },
+      }),
+      this.prisma.client.maintenanceLog.findMany({
+        where: this.maintenanceWhere(range, vt),
+        select: { cost: true, performedAt: true },
+      }),
+    ]);
+
+    const revenueByMonth = new Map<string, Prisma.Decimal>();
+    const expenseByMonth = new Map<string, Prisma.Decimal>();
+    const add = (map: Map<string, Prisma.Decimal>, key: string, amount: Prisma.Decimal | string) =>
+      map.set(key, (map.get(key) ?? new Prisma.Decimal(0)).plus(amount));
+
+    for (const p of payments)
+      add(revenueByMonth, monthKey(p.dailyAssignment.assignedDate), p.amount);
+    for (const j of transportJobs) add(revenueByMonth, monthKey(j.scheduledDate), j.revenue);
+    for (const e of expenses) add(expenseByMonth, monthKey(e.incurredAt), e.amount);
+    for (const m of maintenance) add(expenseByMonth, monthKey(m.performedAt), m.cost);
+
+    const points: MonthlyPnlPoint[] = [];
+    const cursor = new Date(startMonth);
+    for (let i = 0; i < monthsBack; i++) {
+      const key = monthKey(cursor);
+      const revenue = revenueByMonth.get(key) ?? new Prisma.Decimal(0);
+      const expenseTotal = expenseByMonth.get(key) ?? new Prisma.Decimal(0);
+      points.push({
+        month: key,
+        revenue: money(revenue),
+        expenses: money(expenseTotal),
+        netProfit: money(revenue.minus(expenseTotal)),
+      });
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+    return points;
   }
 }

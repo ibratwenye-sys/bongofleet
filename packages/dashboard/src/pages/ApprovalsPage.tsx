@@ -3,6 +3,9 @@ import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import type { Driver, Expense, Motorcycle } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { formatDateTime, formatTZS } from '../lib/format';
+import { PageChassis } from '../components/chassis/PageChassis';
+import { Card } from '../components/chassis/Card';
+import type { KpiTile } from '../components/chassis/KpiRail';
 
 /**
  * Stage H3 - the receipt column. An image gets an actual thumbnail (fetched
@@ -38,7 +41,7 @@ function ReceiptCell({ expense }: { expense: Expense }) {
   }, [isImage, expense.id, expense.receiptStorageKey]);
 
   if (!expense.receiptStorageKey) {
-    return <span className="text-gray-400">—</span>;
+    return <span className="text-txt-3">—</span>;
   }
 
   async function openFull() {
@@ -64,12 +67,12 @@ function ReceiptCell({ expense }: { expense: Expense }) {
           <img
             src={thumbUrl}
             alt="Receipt thumbnail"
-            className="h-10 w-10 rounded border border-gray-200 object-cover"
+            className="h-10 w-10 rounded border border-line object-cover"
           />
         ) : failed ? (
           <span className="text-xs text-red-500">Failed to load</span>
         ) : (
-          <span className="text-xs text-gray-400">Loading…</span>
+          <span className="text-xs text-txt-3">Loading…</span>
         )}
       </button>
     );
@@ -80,7 +83,7 @@ function ReceiptCell({ expense }: { expense: Expense }) {
       type="button"
       onClick={() => void openFull()}
       disabled={opening}
-      className="text-sm font-medium text-gray-700 hover:underline disabled:opacity-50"
+      className="text-sm font-medium text-txt hover:underline disabled:opacity-50"
     >
       {opening ? 'Opening…' : failed ? 'Could not open' : 'View receipt'}
     </button>
@@ -128,16 +131,16 @@ function RejectExpenseModal({
   return (
     <Modal title="Reject expense" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-txt-2">
           {expense.category} · {formatTZS(expense.amount)}
         </p>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Reason</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Reason</label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line px-3 py-2 text-sm"
             placeholder="Why is this being rejected?"
             autoFocus
           />
@@ -164,6 +167,31 @@ function RejectExpenseModal({
       </form>
     </Modal>
   );
+}
+
+/** Stage UI3 - a light chassis pass: this page is a worklist, not a KPI
+ *  dashboard (§ no rail/closing row - forcing that content would mean
+ *  inventing filler). All three tiles are computed from the same
+ *  already-fetched pending-expenses list, not a separate backend call. */
+function pendingKpis(expenses: Expense[]): KpiTile[] {
+  const count = expenses.length;
+  const totalValue = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const oldest =
+    expenses.length > 0
+      ? expenses.reduce((o, e) => (new Date(e.createdAt) < new Date(o.createdAt) ? e : o))
+      : null;
+  const oldestDays = oldest
+    ? Math.max(0, Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / 86_400_000))
+    : 0;
+  return [
+    { label: 'Pending', value: String(count), accentColor: count > 0 ? 'warn' : 'good' },
+    { label: 'Total value pending', value: formatTZS(totalValue), accentColor: 'c1' },
+    {
+      label: 'Oldest pending',
+      value: oldest ? `${oldestDays} day${oldestDays === 1 ? '' : 's'}` : '—',
+      accentColor: oldestDays > 3 ? 'crit' : 'good',
+    },
+  ];
 }
 
 export function ApprovalsPage() {
@@ -232,90 +260,93 @@ export function ApprovalsPage() {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Approvals</h1>
-      </div>
-
+    <PageChassis
+      title="Approvals"
+      statusPill={{ mode: 'live', text: 'LIVE' }}
+      kpis={pendingKpis(expenses ?? [])}
+    >
       {successMessage && (
-        <p className="mb-4 rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </p>
+        <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
       )}
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Rider</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Category</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Amount</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Incurred</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Submitted</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Receipt</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {expenses === null ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
-                  Loading…
-                </td>
+      <Card
+        title="Pending expense claims"
+        subtitle={expenses ? String(expenses.length) : undefined}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Rider</th>
+                <th className="px-4 py-2 font-medium">Vehicle</th>
+                <th className="px-4 py-2 font-medium">Category</th>
+                <th className="px-4 py-2 text-right font-medium">Amount</th>
+                <th className="px-4 py-2 font-medium">Incurred</th>
+                <th className="px-4 py-2 font-medium">Submitted</th>
+                <th className="px-4 py-2 font-medium">Receipt</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
-            ) : expenses.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
-                  No pending expenses.
-                </td>
-              </tr>
-            ) : (
-              expenses.map((e) => {
-                const driver = e.submittedByRiderId
-                  ? driverById.get(e.submittedByRiderId)
-                  : undefined;
-                return (
-                  <tr key={e.id}>
-                    <td className="px-4 py-2 font-medium text-gray-900">
-                      {driver
-                        ? `${driver.user.firstName} ${driver.user.lastName}`
-                        : 'Unknown rider'}
-                    </td>
-                    <td className="px-4 py-2 text-gray-600">
-                      {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'}
-                    </td>
-                    <td className="px-4 py-2 text-gray-900">{e.category}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{formatTZS(e.amount)}</td>
-                    <td className="px-4 py-2 text-gray-600">{e.incurredAt.slice(0, 10)}</td>
-                    <td className="px-4 py-2 text-gray-600">{formatDateTime(e.createdAt)}</td>
-                    <td className="px-4 py-2">
-                      <ReceiptCell expense={e} />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => void handleApprove(e)}
-                        disabled={approvingId === e.id}
-                        className="mr-3 text-sm font-medium text-green-700 hover:underline disabled:opacity-50"
-                      >
-                        {approvingId === e.id ? 'Approving…' : 'Approve'}
-                      </button>
-                      <button
-                        onClick={() => setRejecting(e)}
-                        disabled={approvingId === e.id}
-                        className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {expenses === null ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-txt-2">
+                    Loading…
+                  </td>
+                </tr>
+              ) : expenses.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-txt-2">
+                    No pending expenses.
+                  </td>
+                </tr>
+              ) : (
+                expenses.map((e) => {
+                  const driver = e.submittedByRiderId
+                    ? driverById.get(e.submittedByRiderId)
+                    : undefined;
+                  return (
+                    <tr key={e.id} className="border-b border-line-soft last:border-0">
+                      <td className="px-4 py-2 font-medium text-txt">
+                        {driver
+                          ? `${driver.user.firstName} ${driver.user.lastName}`
+                          : 'Unknown rider'}
+                      </td>
+                      <td className="px-4 py-2 text-txt-2">
+                        {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-txt">{e.category}</td>
+                      <td className="px-4 py-2 text-right text-txt-2">{formatTZS(e.amount)}</td>
+                      <td className="px-4 py-2 text-txt-2">{e.incurredAt.slice(0, 10)}</td>
+                      <td className="px-4 py-2 text-txt-2">{formatDateTime(e.createdAt)}</td>
+                      <td className="px-4 py-2">
+                        <ReceiptCell expense={e} />
+                      </td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => void handleApprove(e)}
+                          disabled={approvingId === e.id}
+                          className="mr-3 text-sm font-medium text-good hover:underline disabled:opacity-50"
+                        >
+                          {approvingId === e.id ? 'Approving…' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => setRejecting(e)}
+                          disabled={approvingId === e.id}
+                          className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {rejecting && (
         <RejectExpenseModal
@@ -324,6 +355,6 @@ export function ApprovalsPage() {
           onRejected={handleRejected}
         />
       )}
-    </div>
+    </PageChassis>
   );
 }

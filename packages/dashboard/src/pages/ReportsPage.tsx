@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import type {
-  DriverRevenue,
+  AssignmentSummaryResponse,
   ExpenseCategory,
+  MonthlyPnlPoint,
   MotorcyclePnl,
-  PnlSummary,
+  OwnershipSummaryResponse,
+  SegmentPnl,
   VehicleType,
 } from '../lib/types';
 import { formatTZS, startOfThisMonth, today } from '../lib/format';
+import { PageChassis } from '../components/chassis/PageChassis';
+import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
+import { Card } from '../components/chassis/Card';
+import type { KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
 const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
@@ -17,99 +23,300 @@ const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
   CAR: 'Car',
   TRUCK: 'Truck',
 };
-
-// Singular nouns for the per-vehicle table heading, so a truck report reads
-// "Profit per truck" instead of the old fleet-wide "Profit per motorcycle".
-const CATEGORY_NOUN: Record<VehicleType | 'ALL', string> = {
-  ALL: 'vehicle',
-  MOTORBIKE: 'motorbike',
-  BAJAJI: 'bajaji',
-  CAR: 'car',
-  TRUCK: 'truck',
+const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
+  MOTORBIKE: 'Motorbike',
+  BAJAJI: 'Bajaji',
+  CAR: 'Car',
+  TRUCK: 'Truck',
 };
-
-// A small, dependency-free categorical palette for the breakdown bar. Chosen to
-// stay legible on the white cards used across the dashboard.
-const BAR_COLORS = [
-  '#2563eb',
-  '#16a34a',
-  '#d97706',
-  '#dc2626',
-  '#7c3aed',
-  '#0891b2',
-  '#db2777',
-  '#65a30d',
-];
+const MONTHS_BACK = 6;
 
 interface ReportData {
-  pnl: PnlSummary;
-  perMotorcycle: MotorcyclePnl[];
-  perDriver: DriverRevenue[];
+  segments: SegmentPnl[];
+  ownership: OwnershipSummaryResponse;
+  assignments: AssignmentSummaryResponse;
   breakdown: ExpenseCategory[];
+  perMotorcycle: MotorcyclePnl[];
+  monthlySeries: MonthlyPnlPoint[];
 }
 
-function StatCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: 'profit' | 'loss';
-}) {
-  const valueColor =
-    tone === 'profit' ? 'text-green-700' : tone === 'loss' ? 'text-red-600' : 'text-gray-900';
+function kpisToTiles(data: ReportData): KpiTile[] {
+  const total = data.segments.find((s) => s.vehicleType === 'TOTAL');
+  const nonTotal = data.segments.filter((s) => s.vehicleType !== 'TOTAL');
+  const bestMargin = nonTotal.reduce<SegmentPnl | null>(
+    (best, s) => (best === null || s.marginPct > best.marginPct ? s : best),
+    null,
+  );
+  const net = total ? parseFloat(total.netProfit) : 0;
+  return [
+    { label: 'Revenue', value: formatTZS(total?.revenue ?? '0'), accentColor: 'c1' },
+    { label: 'Expenses', value: formatTZS(total?.expenses ?? '0'), accentColor: 'warn' },
+    {
+      label: 'Net profit',
+      value: formatTZS(total?.netProfit ?? '0'),
+      accentColor: net >= 0 ? 'good' : 'crit',
+    },
+    {
+      label: 'Net profit per vehicle',
+      value: formatTZS(total?.netProfitPerVehicle ?? '0'),
+      accentColor: 'violet',
+    },
+    {
+      label: 'Best margin',
+      value: bestMargin ? `${bestMargin.marginPct}%` : '—',
+      delta:
+        bestMargin && bestMargin.vehicleType !== 'TOTAL'
+          ? VEHICLE_TYPE_LABELS[bestMargin.vehicleType as VehicleType]
+          : undefined,
+      accentColor: 'good',
+    },
+    {
+      label: 'Recoverable',
+      value: formatTZS(data.ownership.kpis.moneyAtRisk),
+      accentColor: data.ownership.kpis.moneyAtRisk !== '0.00' ? 'crit' : 'good',
+    },
+  ];
+}
+
+function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
+  const nonTotal = segments.filter((s) => s.vehicleType !== 'TOTAL');
+  const total = segments.find((s) => s.vehicleType === 'TOTAL');
+  const maxMargin = Math.max(...nonTotal.map((s) => Math.abs(s.marginPct)), 1);
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${valueColor}`}>{value}</p>
-    </div>
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+              <th className="px-4 py-2 font-medium">Type</th>
+              <th className="px-4 py-2 text-right font-medium">Vehicles</th>
+              <th className="px-4 py-2 text-right font-medium">Revenue</th>
+              <th className="px-4 py-2 text-right font-medium">Expenses</th>
+              <th className="px-4 py-2 text-right font-medium">Net</th>
+              <th className="px-4 py-2 text-right font-medium">Margin</th>
+              <th className="px-4 py-2 text-right font-medium">Net / vehicle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nonTotal.map((s) => (
+              <tr key={s.vehicleType} className="border-b border-line-soft last:border-0">
+                <td className="px-4 py-2 font-medium text-txt">
+                  {VEHICLE_TYPE_LABELS[s.vehicleType as VehicleType]}
+                </td>
+                <td className="px-4 py-2 text-right text-txt-2">{s.vehicleCount}</td>
+                <td className="px-4 py-2 text-right text-txt-2">{formatTZS(s.revenue)}</td>
+                <td className="px-4 py-2 text-right text-txt-2">{formatTZS(s.expenses)}</td>
+                <td
+                  className={`px-4 py-2 text-right font-medium ${parseFloat(s.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+                >
+                  {formatTZS(s.netProfit)}
+                </td>
+                <td className="px-4 py-2 text-right text-txt-2">{s.marginPct}%</td>
+                <td className="px-4 py-2 text-right text-txt-2">
+                  {formatTZS(s.netProfitPerVehicle)}
+                </td>
+              </tr>
+            ))}
+            {total && (
+              <tr className="border-t border-line font-semibold">
+                <td className="px-4 py-2 text-txt">Total</td>
+                <td className="px-4 py-2 text-right text-txt">{total.vehicleCount}</td>
+                <td className="px-4 py-2 text-right text-txt">{formatTZS(total.revenue)}</td>
+                <td className="px-4 py-2 text-right text-txt">{formatTZS(total.expenses)}</td>
+                <td
+                  className={`px-4 py-2 text-right ${parseFloat(total.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+                >
+                  {formatTZS(total.netProfit)}
+                </td>
+                <td className="px-4 py-2 text-right text-txt">{total.marginPct}%</td>
+                <td className="px-4 py-2 text-right text-txt">
+                  {formatTZS(total.netProfitPerVehicle)}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="p-4">
+        <p className="mb-2 text-xs font-medium text-txt-2">Margin by vehicle type</p>
+        <div className="space-y-2">
+          {nonTotal.map((s) => (
+            <div key={s.vehicleType} className="flex items-center gap-2">
+              <span className="w-20 shrink-0 text-xs text-txt-3">
+                {VEHICLE_TYPE_LABELS[s.vehicleType as VehicleType]}
+              </span>
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-panel-2">
+                <div
+                  className={s.marginPct >= 0 ? 'h-full bg-good' : 'h-full bg-crit'}
+                  style={{ width: `${(Math.abs(s.marginPct) / maxMargin) * 100}%` }}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-right text-xs text-txt-2">{s.marginPct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
-function ExpenseBreakdown({ rows }: { rows: ExpenseCategory[] }) {
-  const total = rows.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+function ReportsInsightsCard({ data }: { data: ReportData }) {
+  const idleCount = data.assignments.kpis.inStockToday.count;
+  const topIdle = data.assignments.unassignedNow[0];
+  const topMissed = data.ownership.missedDaysTable[0];
 
-  if (rows.length === 0) {
-    return <p className="text-sm text-gray-500">No expenses recorded in this period.</p>;
+  const insights: { title: string; description: string }[] = [];
+  if (idleCount > 0) {
+    insights.push({
+      title: `${idleCount} vehicle${idleCount === 1 ? '' : 's'} sitting idle`,
+      description: topIdle
+        ? `${topIdle.registrationNumber} has gone longest without a driver - ${topIdle.daysUnassigned} days.`
+        : 'No driver assigned today.',
+    });
+  }
+  if (topMissed) {
+    insights.push({
+      title: `${formatTZS(topMissed.valueAtRisk)} recoverable from ${topMissed.driverName}`,
+      description: `${topMissed.missedStreak} day${topMissed.missedStreak === 1 ? '' : 's'} missed in a row on ${topMissed.vehicleRegistration ?? 'their vehicle'}.`,
+    });
   }
 
   return (
-    <div>
-      {/* Single stacked bar showing each category's share of total expenses. */}
-      <div className="mb-4 flex h-4 w-full overflow-hidden rounded-full bg-gray-100">
-        {rows.map((row, i) => {
-          const pct = total > 0 ? (parseFloat(row.amount) / total) * 100 : 0;
+    <Card title="AI Insights">
+      {insights.length === 0 ? (
+        <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+      ) : (
+        <div className="divide-y divide-line-soft">
+          {insights.map((insight, i) => (
+            <div key={i} className="px-4 py-3">
+              <p className="text-sm font-medium text-txt">{insight.title}</p>
+              <p className="mt-1 text-xs text-txt-2">{insight.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function WhatIsEatingProfitCard({ data }: { data: ReportData }) {
+  const items: { label: string; displayAmount: string; amount: number }[] = [];
+  for (const c of data.breakdown.slice(0, 2)) {
+    items.push({
+      label: c.category,
+      displayAmount: formatTZS(c.amount),
+      amount: parseFloat(c.amount),
+    });
+  }
+  const worst = data.perMotorcycle[data.perMotorcycle.length - 1];
+  if (worst) {
+    items.push({
+      label: `${worst.registrationNumber} (worst performer)`,
+      displayAmount: formatTZS(worst.netProfit),
+      amount: Math.abs(parseFloat(worst.netProfit)),
+    });
+  }
+  const atRisk = parseFloat(data.ownership.kpis.moneyAtRisk);
+  if (atRisk > 0) {
+    items.push({
+      label: 'Ownership arrears at risk',
+      displayAmount: formatTZS(data.ownership.kpis.moneyAtRisk),
+      amount: atRisk,
+    });
+  }
+  items.sort((a, b) => b.amount - a.amount);
+
+  return (
+    <Card title="What is eating the profit">
+      {items.length === 0 ? (
+        <p className="p-4 text-sm text-txt-2">Nothing stands out this period.</p>
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-center justify-between px-4 py-2 text-sm">
+              <span className="text-txt-2">{item.label}</span>
+              <span className="font-medium text-txt">{item.displayAmount}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function marginOf(p: MonthlyPnlPoint): number {
+  const revenue = parseFloat(p.revenue);
+  return revenue > 0 ? (parseFloat(p.netProfit) / revenue) * 100 : 0;
+}
+
+function MarginTrendCard({ series }: { series: MonthlyPnlPoint[] }) {
+  if (series.length === 0) {
+    return (
+      <Card title="Margin trend">
+        <p className="p-4 text-sm text-txt-2">No data in this period.</p>
+      </Card>
+    );
+  }
+  const first = marginOf(series[0]);
+  const last = marginOf(series[series.length - 1]);
+  const direction = last >= first ? 'up' : 'down';
+  return (
+    <Card title="Margin trend" subtitle={`last ${series.length} months`}>
+      <div className="flex h-28 items-end gap-2 px-4 pt-4">
+        {series.map((p) => {
+          const margin = marginOf(p);
           return (
-            <div
-              key={row.category}
-              style={{ width: `${pct}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
-              title={`${row.category}: ${formatTZS(row.amount)}`}
-            />
+            <div key={p.month} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className={margin >= 0 ? 'w-full rounded-t bg-c1' : 'w-full rounded-t bg-crit'}
+                style={{ height: `${Math.max(2, Math.min(100, Math.abs(margin) * 2))}%` }}
+              />
+              <span className="text-[10px] text-txt-3">{p.month.slice(5)}</span>
+            </div>
           );
         })}
       </div>
-      <ul className="space-y-2">
-        {rows.map((row, i) => {
-          const pct = total > 0 ? (parseFloat(row.amount) / total) * 100 : 0;
-          return (
-            <li key={row.category} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 text-gray-700">
-                <span
-                  className="inline-block h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
-                />
-                {row.category}
-                <span className="text-gray-400">({row.count})</span>
-              </span>
-              <span className="text-gray-600">
-                {formatTZS(row.amount)} <span className="text-gray-400">· {pct.toFixed(0)}%</span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+      <p className="px-4 pb-4 pt-2 text-xs text-txt-2">
+        Margin moved {direction} from {first.toFixed(0)}% to {last.toFixed(0)}% over this period.
+      </p>
+    </Card>
+  );
+}
+
+function BestWorstVehicleCard({ rows }: { rows: MotorcyclePnl[] }) {
+  const best = rows[0];
+  const worst = rows.length > 1 ? rows[rows.length - 1] : null;
+  return (
+    <Card title="Best and worst performing vehicle this period">
+      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+        <div>
+          <p className="text-xs text-txt-2">Best</p>
+          {best ? (
+            <>
+              <p className="mt-1 text-sm font-medium text-txt">{best.registrationNumber}</p>
+              <p className="text-lg font-semibold text-good">{formatTZS(best.netProfit)}</p>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-txt-2">No activity this period.</p>
+          )}
+        </div>
+        <div>
+          <p className="text-xs text-txt-2">Worst</p>
+          {worst ? (
+            <>
+              <p className="mt-1 text-sm font-medium text-txt">{worst.registrationNumber}</p>
+              <p
+                className={`text-lg font-semibold ${parseFloat(worst.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+              >
+                {formatTZS(worst.netProfit)}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-txt-2">Only one vehicle had activity this period.</p>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -126,13 +333,18 @@ export function ReportsPage() {
     setError(null);
     const qs = `?from=${from}&to=${to}${category !== 'ALL' ? `&vehicleType=${category}` : ''}`;
     try {
-      const [pnl, perMotorcycle, perDriver, breakdown] = await Promise.all([
-        apiFetch<PnlSummary>(`/analytics/pnl${qs}`),
-        apiFetch<MotorcyclePnl[]>(`/analytics/per-motorcycle${qs}`),
-        apiFetch<DriverRevenue[]>(`/analytics/per-driver${qs}`),
-        apiFetch<ExpenseCategory[]>(`/analytics/expense-breakdown${qs}`),
-      ]);
-      setData({ pnl, perMotorcycle, perDriver, breakdown });
+      const [segments, ownership, assignments, breakdown, perMotorcycle, monthlySeries] =
+        await Promise.all([
+          apiFetch<SegmentPnl[]>(`/analytics/pnl-by-segment${qs}`),
+          apiFetch<OwnershipSummaryResponse>('/ownership-plans/summary'),
+          apiFetch<AssignmentSummaryResponse>('/assignments/summary'),
+          apiFetch<ExpenseCategory[]>(`/analytics/expense-breakdown${qs}`),
+          apiFetch<MotorcyclePnl[]>(`/analytics/per-motorcycle${qs}`),
+          apiFetch<MonthlyPnlPoint[]>(
+            `/analytics/monthly-pnl-series?monthsBack=${MONTHS_BACK}${category !== 'ALL' ? `&vehicleType=${category}` : ''}`,
+          ),
+        ]);
+      setData({ segments, ownership, assignments, breakdown, perMotorcycle, monthlySeries });
     } catch {
       setError('Could not load reports. Please try again.');
     } finally {
@@ -145,174 +357,112 @@ export function ReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const netTone = data && parseFloat(data.pnl.netProfit) < 0 ? 'loss' : 'profit';
+  if (error && !data) {
+    return <p className="text-sm text-crit">{error}</p>;
+  }
+  if (!data) {
+    return <p className="text-sm text-txt-2">Loading…</p>;
+  }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
-        <div className="flex items-end gap-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as VehicleType | 'ALL')}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-            >
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">From</label>
-            <input
-              type="date"
-              value={from}
-              max={to}
-              onChange={(e) => setFrom(e.target.value)}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">To</label>
-            <input
-              type="date"
-              value={to}
-              min={from}
-              onChange={(e) => setTo(e.target.value)}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm"
-            />
-          </div>
-          <button
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+    <PageChassis
+      title="Reports"
+      statusPill={{ mode: 'live', text: 'LIVE' }}
+      kpis={kpisToTiles(data)}
+    >
+      {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
+
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-panel px-4 py-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-txt-3">Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as VehicleType | 'ALL')}
+            className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
           >
-            {loading ? 'Loading…' : 'Apply'}
-          </button>
+            {CATEGORY_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
         </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-txt-3">From</label>
+          <input
+            type="date"
+            value={from}
+            max={to}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-txt-3">To</label>
+          <input
+            type="date"
+            value={to}
+            min={from}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
+          />
+        </div>
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="rounded bg-c1 px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Apply'}
+        </button>
       </div>
 
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      <ChassisGrid
+        main={
+          <Card title="Profit and loss by segment">
+            <SegmentTable segments={data.segments} />
+          </Card>
+        }
+        rail={
+          <>
+            <ReportsInsightsCard data={data} />
+            <WhatIsEatingProfitCard data={data} />
+          </>
+        }
+      />
 
-      {data === null ? (
-        <p className="text-sm text-gray-500">Loading…</p>
-      ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard label="Revenue" value={formatTZS(data.pnl.revenue)} />
-            <StatCard label="Expenses" value={formatTZS(data.pnl.expenses)} />
-            <StatCard label="Net profit" value={formatTZS(data.pnl.netProfit)} tone={netTone} />
-          </div>
-          <p className="-mt-2 text-xs text-gray-400">
-            Revenue = rental {formatTZS(data.pnl.rentalRevenue)} ({data.pnl.paymentCount} payment
-            {data.pnl.paymentCount === 1 ? '' : 's'}) + transport{' '}
-            {formatTZS(data.pnl.transportRevenue)} ({data.pnl.transportJobCount} job
-            {data.pnl.transportJobCount === 1 ? '' : 's'}). {data.pnl.expenseCount} expense
-            record(s) in this period.
-          </p>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">
-                Profit per {CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']}
-              </h2>
-              <ProfitTable
-                unitLabel={CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']}
-                rows={data.perMotorcycle.map((m) => ({
-                  key: m.motorcycleId,
-                  label: m.registrationNumber,
-                  revenue: m.revenue,
-                  expenses: m.expenses,
-                  netProfit: m.netProfit,
-                }))}
-                emptyText={`No ${CATEGORY_NOUN[data.pnl.vehicleType ?? 'ALL']} activity in this period.`}
-              />
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue per driver</h2>
-              {data.perDriver.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  {data.pnl.vehicleType === 'CAR' || data.pnl.vehicleType === 'TRUCK'
-                    ? 'Driver revenue comes from daily rentals. Car and truck income is earned per transport job — see the Transport page.'
-                    : 'No driver revenue in this period.'}
-                </p>
-              ) : (
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-500">
-                      <th className="py-1 font-medium">Driver</th>
-                      <th className="py-1 text-right font-medium">Payments</th>
-                      <th className="py-1 text-right font-medium">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {data.perDriver.map((d) => (
-                      <tr key={d.driverId}>
-                        <td className="py-1.5 text-gray-900">{d.driverName}</td>
-                        <td className="py-1.5 text-right text-gray-500">{d.paymentCount}</td>
-                        <td className="py-1.5 text-right text-gray-700">{formatTZS(d.revenue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Expense breakdown</h2>
-            <ExpenseBreakdown rows={data.breakdown} />
-          </div>
+      <Card title="Revenue and profit by month" subtitle={`last ${MONTHS_BACK} months`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                <th className="px-4 py-2 font-medium">Month</th>
+                <th className="px-4 py-2 text-right font-medium">Revenue</th>
+                <th className="px-4 py-2 text-right font-medium">Expenses</th>
+                <th className="px-4 py-2 text-right font-medium">Net profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.monthlySeries.map((p) => (
+                <tr key={p.month} className="border-b border-line-soft last:border-0">
+                  <td className="px-4 py-2 font-medium text-txt">{p.month}</td>
+                  <td className="px-4 py-2 text-right text-txt-2">{formatTZS(p.revenue)}</td>
+                  <td className="px-4 py-2 text-right text-txt-2">{formatTZS(p.expenses)}</td>
+                  <td
+                    className={`px-4 py-2 text-right font-medium ${parseFloat(p.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+                  >
+                    {formatTZS(p.netProfit)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-    </div>
-  );
-}
+      </Card>
 
-function ProfitTable({
-  rows,
-  emptyText,
-  unitLabel = 'vehicle',
-}: {
-  rows: Array<{ key: string; label: string; revenue: string; expenses: string; netProfit: string }>;
-  emptyText: string;
-  unitLabel?: string;
-}) {
-  if (rows.length === 0) {
-    return <p className="text-sm text-gray-500">{emptyText}</p>;
-  }
-  return (
-    <table className="min-w-full text-sm">
-      <thead>
-        <tr className="text-left text-gray-500">
-          <th className="py-1 font-medium capitalize">{unitLabel}</th>
-          <th className="py-1 text-right font-medium">Revenue</th>
-          <th className="py-1 text-right font-medium">Expenses</th>
-          <th className="py-1 text-right font-medium">Net</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-100">
-        {rows.map((row) => {
-          const net = parseFloat(row.netProfit);
-          return (
-            <tr key={row.key}>
-              <td className="py-1.5 text-gray-900">{row.label}</td>
-              <td className="py-1.5 text-right text-gray-700">{formatTZS(row.revenue)}</td>
-              <td className="py-1.5 text-right text-gray-500">{formatTZS(row.expenses)}</td>
-              <td
-                className={`py-1.5 text-right font-medium ${net < 0 ? 'text-red-600' : 'text-green-700'}`}
-              >
-                {formatTZS(row.netProfit)}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+      <ClosingRow
+        left={<MarginTrendCard series={data.monthlySeries} />}
+        right={<BestWorstVehicleCard rows={data.perMotorcycle} />}
+      />
+    </PageChassis>
   );
 }

@@ -22,6 +22,7 @@ import { OwnershipPlanService } from './ownership-plan.service';
 import { OwnershipPlanGeneratorService } from './ownership-plan-generator.service';
 import { OwnershipPlanContractService } from './ownership-plan-contract.service';
 import { OwnershipPlanExcusalService } from './ownership-plan-excusal.service';
+import { OwnershipSummaryService } from './ownership-summary.service';
 import { CreateOwnershipPlanDto } from './dto/create-ownership-plan.dto';
 import { UpdateOwnershipPlanDto } from './dto/update-ownership-plan.dto';
 import { CreateDayExcusalDto } from './dto/create-day-excusal.dto';
@@ -38,6 +39,7 @@ export class OwnershipPlanController {
     private readonly generatorService: OwnershipPlanGeneratorService,
     private readonly contractService: OwnershipPlanContractService,
     private readonly excusalService: OwnershipPlanExcusalService,
+    private readonly ownershipSummaryService: OwnershipSummaryService,
   ) {}
 
   @Post()
@@ -59,6 +61,14 @@ export class OwnershipPlanController {
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   list(@CurrentUser() actor: AuthenticatedUser) {
     return this.ownershipPlanService.list(actor);
+  }
+
+  // Must stay ahead of `:id` below - same reasoning as every other
+  // fixed-segment route in this codebase.
+  @Get('summary')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.ownershipSummaryService.getSummary(actor);
   }
 
   @Get(':id')

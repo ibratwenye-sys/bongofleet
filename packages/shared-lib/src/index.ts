@@ -14,6 +14,8 @@ export {
   excusalWindowStart,
   countRecentExcusals,
 } from './hire-purchase/excusal-window';
+export { positionSeverity } from './hire-purchase/position-severity';
+export type { PlanPositionSeverity } from './hire-purchase/position-severity';
 export {
   DRIVER_SEARCH_DEBOUNCE_MS,
   DRIVER_SEARCH_RESULT_LIMIT,

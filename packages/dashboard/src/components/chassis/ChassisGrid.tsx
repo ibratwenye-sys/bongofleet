@@ -9,8 +9,12 @@ import type { ReactNode } from 'react';
 export function ChassisGrid({ main, rail }: { main: ReactNode; rail: ReactNode }) {
   return (
     <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_var(--spacing-rail)]">
-      <div className="flex flex-col gap-3.5">{main}</div>
-      <div className="flex flex-col gap-3.5">{rail}</div>
+      {/* min-w-0 overrides the grid item's default min-width:auto - without
+          it, a wide table inside `main` (its min-content width) forces the
+          1fr track to grow past the viewport instead of respecting
+          overflow-x-auto, taking the whole page into horizontal scroll. */}
+      <div className="flex min-w-0 flex-col gap-3.5">{main}</div>
+      <div className="flex min-w-0 flex-col gap-3.5">{rail}</div>
     </div>
   );
 }

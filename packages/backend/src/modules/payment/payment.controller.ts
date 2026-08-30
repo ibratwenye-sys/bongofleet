@@ -24,16 +24,22 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PaymentService, MAX_RECEIPT_SIZE_BYTES, receiptFileFilter } from './payment.service';
+import { PaymentSummaryService } from './payment-summary.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { MethodBreakdownQueryDto } from './dto/method-breakdown-query.dto';
+import { OldestPendingQueryDto } from './dto/oldest-pending-query.dto';
 
 @ApiTags('payment')
 @ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(
+    private readonly paymentService: PaymentService,
+    private readonly paymentSummaryService: PaymentSummaryService,
+  ) {}
 
   @Post()
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
@@ -45,6 +51,30 @@ export class PaymentController {
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
   list(@Query() query: ListPaymentsQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.paymentService.listPayments(query, actor);
+  }
+
+  // These three fixed-segment routes must stay ahead of `:id` below - same
+  // reasoning as every other fixed-segment route in this codebase (see
+  // assignment.controller.ts's own `summary` route).
+  @Get('summary')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.paymentSummaryService.getSummary(actor);
+  }
+
+  @Get('method-breakdown')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  methodBreakdown(
+    @Query() query: MethodBreakdownQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.paymentSummaryService.getMethodBreakdown(query.from, query.to, actor);
+  }
+
+  @Get('needs-reconciling')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  needsReconciling(@Query() query: OldestPendingQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.paymentSummaryService.getOldestPending(query.limit ?? 8, actor);
   }
 
   @Get(':id')

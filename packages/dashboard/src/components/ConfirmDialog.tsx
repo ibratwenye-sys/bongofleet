@@ -17,7 +17,7 @@ export function ConfirmDialog({
 }) {
   return (
     <Modal title={title} onClose={onCancel}>
-      <p className="mb-6 text-sm text-gray-600">{message}</p>
+      <p className="mb-6 text-sm text-txt-2">{message}</p>
       <div className="flex justify-end gap-2">
         <button
           type="button"

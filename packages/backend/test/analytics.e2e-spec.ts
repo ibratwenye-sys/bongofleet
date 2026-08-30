@@ -272,6 +272,129 @@ describe('Analytics & expenses (e2e)', () => {
       .set('Authorization', `Bearer ${driverLogin.body.accessToken}`)
       .expect(403);
   });
+
+  // Stage UI3 - the Payments closing row's "Collection rate" chart, reusing
+  // the exact same getDailyCollectionSeries the Operations Center already
+  // charts, now over a caller-supplied range instead of a fixed 14 days.
+  it('collection-series returns one point per day in range, gaps included', async () => {
+    const token = await signupOwner(app, 'owner-f@fleet-f.test', 'Fleet F');
+    const { driverId, motorcycleId } = await setupFleet(app, token, 'F1');
+
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(2), 10000, 7000);
+    // isoDaysAgo(1) deliberately left with no payment - must appear as a
+    // zero-amount point, not be skipped.
+
+    const res = await request(app.getHttpServer())
+      .get('/analytics/collection-series')
+      .query({ from: isoDaysAgo(2), to: isoDaysAgo(0) })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body).toHaveLength(3);
+    expect(res.body[0]).toEqual({ date: isoDaysAgo(2), amount: '7000.00' });
+    expect(res.body[1]).toEqual({ date: isoDaysAgo(1), amount: '0.00' });
+    expect(res.body[2]).toEqual({ date: isoDaysAgo(0), amount: '0.00' });
+  });
+
+  it('rejects collection-series with no from/to (unlike /pnl, which treats it as all-time)', async () => {
+    const token = await signupOwner(app, 'owner-g@fleet-g.test', 'Fleet G');
+    await request(app.getHttpServer())
+      .get('/analytics/collection-series')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
+  // Stage UI3 - Reports' "Profit and loss by segment" table: a real
+  // vehicleCount (fleet composition) alongside revenue/expenses reused
+  // from /pnl per type, plus a totals row that is its own server
+  // computation, not a client-side sum of the rows above.
+  it('pnl-by-segment reports vehicleCount, revenue/expenses/netProfit, and a real totals row per vehicle type', async () => {
+    const token = await signupOwner(app, 'owner-h@fleet-h.test', 'Fleet H');
+    const { driverId, motorcycleId: bikeId } = await setupFleet(app, token, 'H1');
+    const truckRes = await request(app.getHttpServer())
+      .post('/motorcycles')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ registrationNumber: 'REG-H2', vehicleType: 'TRUCK' })
+      .expect(201);
+    const truckId = truckRes.body.id as string;
+
+    // Bike: 10000 rental revenue, 2000 expense.
+    await earn(app, token, driverId, bikeId, isoDaysAgo(1), 10000, 10000);
+    await request(app.getHttpServer())
+      .post('/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ category: 'Fuel', amount: 2000, incurredAt: isoDaysAgo(1), motorcycleId: bikeId })
+      .expect(201);
+
+    // Truck: a transport job worth 50000, no expenses.
+    await request(app.getHttpServer())
+      .post('/transport-jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        motorcycleId: truckId,
+        ownerDriven: true,
+        origin: 'Dar',
+        destination: 'Arusha',
+        revenue: 50000,
+        scheduledDate: isoDaysAgo(1),
+      })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .get('/analytics/pnl-by-segment')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const motorbike = res.body.find((r: { vehicleType: string }) => r.vehicleType === 'MOTORBIKE');
+    expect(motorbike).toMatchObject({
+      vehicleCount: 1,
+      revenue: '10000.00',
+      expenses: '2000.00',
+      netProfit: '8000.00',
+      netProfitPerVehicle: '8000.00',
+      marginPct: 80,
+    });
+
+    const truck = res.body.find((r: { vehicleType: string }) => r.vehicleType === 'TRUCK');
+    expect(truck).toMatchObject({
+      vehicleCount: 1,
+      revenue: '50000.00',
+      expenses: '0.00',
+      netProfit: '50000.00',
+    });
+
+    const total = res.body.find((r: { vehicleType: string }) => r.vehicleType === 'TOTAL');
+    expect(total).toMatchObject({
+      vehicleCount: 2,
+      revenue: '60000.00',
+      expenses: '2000.00',
+      netProfit: '58000.00',
+    });
+  });
+
+  // Stage UI3 - Reports' "Revenue and profit by month" table.
+  it('monthly-pnl-series buckets revenue and expenses by calendar month', async () => {
+    const token = await signupOwner(app, 'owner-i@fleet-i.test', 'Fleet I');
+    const { driverId, motorcycleId } = await setupFleet(app, token, 'I1');
+
+    await earn(app, token, driverId, motorcycleId, isoDaysAgo(1), 8000, 8000);
+    await request(app.getHttpServer())
+      .post('/expenses')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ category: 'Fuel', amount: 1500, incurredAt: isoDaysAgo(1), motorcycleId })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .get('/analytics/monthly-pnl-series')
+      .query({ monthsBack: 1 })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    expect(res.body).toEqual([
+      { month: thisMonth, revenue: '8000.00', expenses: '1500.00', netProfit: '6500.00' },
+    ]);
+  });
 });
 
 async function currentTenantId(prisma: PrismaService, ownerEmail: string): Promise<string> {

@@ -27,11 +27,13 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ExpenseService, MAX_RECEIPT_SIZE_BYTES, receiptFileFilter } from './expense.service';
+import { ExpenseSummaryService } from './expense-summary.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ListExpensesQueryDto } from './dto/list-expenses-query.dto';
 import { SubmitExpenseDto } from './dto/submit-expense.dto';
 import { RejectExpenseDto } from './dto/reject-expense.dto';
+import { ReportRangeQueryDto } from '../analytics/dto/report-range-query.dto';
 
 @ApiTags('expense')
 @ApiBearerAuth()
@@ -39,7 +41,10 @@ import { RejectExpenseDto } from './dto/reject-expense.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
 export class ExpenseController {
-  constructor(private readonly expenseService: ExpenseService) {}
+  constructor(
+    private readonly expenseService: ExpenseService,
+    private readonly expenseSummaryService: ExpenseSummaryService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateExpenseDto, @CurrentUser() actor: AuthenticatedUser) {
@@ -67,6 +72,21 @@ export class ExpenseController {
   @Get('pending-count')
   pendingCount(@CurrentUser() actor: AuthenticatedUser) {
     return this.expenseService.pendingCount(actor);
+  }
+
+  @Get('summary')
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.expenseSummaryService.getKpis(actor);
+  }
+
+  @Get('cost-per-vehicle-type')
+  costPerVehicleType(@Query() query: ReportRangeQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.expenseSummaryService.getCostPerVehicleByType(query, actor);
+  }
+
+  @Get('anomalies')
+  anomalies(@CurrentUser() actor: AuthenticatedUser) {
+    return this.expenseSummaryService.getVehicleAnomalies(actor);
   }
 
   @Get()

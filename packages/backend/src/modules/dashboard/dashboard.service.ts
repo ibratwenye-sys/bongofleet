@@ -1,11 +1,15 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OwnershipPlanStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
+import { OwnershipPlanStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { dateOnlyInDarEsSalaam } from '../ownership-plan/ownership-plan.derivation';
 import { determineMaintenanceDue } from '../notification/maintenance-due.util';
+import {
+  getDailyCollectionStatus,
+  type DailyCollectionStatus,
+} from '../../common/daily-collection-status.util';
 import {
   OperationsCenterAlert,
   OperationsCenterKpis,
@@ -60,15 +64,13 @@ export class DashboardService {
 
     const today = dateOnlyInDarEsSalaam(now);
     const todayIso = isoDate(today);
-    const tomorrow = addDays(today, 1);
     const yesterday = addDays(today, -1);
     const seriesStart = addDays(today, -(COLLECTION_SERIES_DAYS - 1));
 
     const [
       fleetSize,
-      todaysAssignments,
+      collectionStatus,
       yesterdaysOnRoad,
-      collectedTodayAgg,
       activeOwnershipPlanCount,
       dueBikes,
       todaysPnl,
@@ -78,17 +80,14 @@ export class DashboardService {
       recentDocumentAlerts,
     ] = await Promise.all([
       this.prisma.client.motorcycle.count({ where: { isActive: true } }),
-      this.prisma.client.dailyAssignment.findMany({
-        where: { assignedDate: { gte: today, lt: tomorrow } },
-        select: { id: true, motorcycleId: true, targetAmount: true },
-      }),
+      // Stage UI3 - the shared helper the Payments page's KPI rail also
+      // calls, so "due today" / "received today" / "outstanding" never
+      // drift between the two pages. Its own dailyAssignment.findMany call
+      // (today's assignments) is what used to sit inline here.
+      getDailyCollectionStatus(this.prisma, today),
       this.prisma.client.dailyAssignment.findMany({
         where: { assignedDate: { gte: yesterday, lt: today } },
         select: { motorcycleId: true },
-      }),
-      this.prisma.client.dailyPayment.aggregate({
-        _sum: { amount: true },
-        where: { status: PaymentStatus.COMPLETED, paidAt: { gte: today, lt: tomorrow } },
       }),
       this.prisma.client.ownershipPlan.count({ where: { status: OwnershipPlanStatus.ACTIVE } }),
       this.prisma.client.motorcycle.findMany({
@@ -140,12 +139,11 @@ export class DashboardService {
       }),
     ]);
 
-    const { kpis, outstandingRows } = await this.buildKpis(
+    const kpis = this.buildKpis(
       {
         fleetSize,
-        todaysAssignments,
+        collectionStatus,
         yesterdaysOnRoad,
-        collectedTodayAgg,
         activeOwnershipPlanCount,
         dueBikes,
       },
@@ -160,7 +158,9 @@ export class DashboardService {
     // query (analytics.getPerMotorcycle already sorts netProfit desc).
     const topPerformersToday = perMotorcycleToday.slice(0, 3);
     const alerts = this.buildAlerts(recentAssignmentAlerts, recentDocumentAlerts, dueBikes, today);
-    const outstandingAssignmentRows = await this.resolveOutstandingRows(outstandingRows);
+    const outstandingAssignmentRows = await this.resolveOutstandingRows(
+      collectionStatus.outstandingRows,
+    );
 
     return {
       kpis,
@@ -177,12 +177,7 @@ export class DashboardService {
    *  outstanding rows' bare motorcycleId into the registration number the
    *  table actually displays. */
   private async resolveOutstandingRows(
-    rows: {
-      motorcycleId: string;
-      targetAmount: Prisma.Decimal;
-      paidAmount: Prisma.Decimal;
-      balance: Prisma.Decimal;
-    }[],
+    rows: DailyCollectionStatus['outstandingRows'],
   ): Promise<OutstandingAssignmentRow[]> {
     if (rows.length === 0) return [];
     const motorcycles = await this.prisma.client.motorcycle.findMany({
@@ -198,12 +193,15 @@ export class DashboardService {
     }));
   }
 
-  private async buildKpis(
+  /** Stage UI1, refactored in UI3 to build collectedToday/outstandingToday
+   *  from the shared getDailyCollectionStatus result instead of its own
+   *  duplicate queries (see this file's header comment on
+   *  getOperationsCenter's Promise.all). */
+  private buildKpis(
     input: {
       fleetSize: number;
-      todaysAssignments: { id: string; motorcycleId: string; targetAmount: Prisma.Decimal }[];
+      collectionStatus: DailyCollectionStatus;
       yesterdaysOnRoad: { motorcycleId: string }[];
-      collectedTodayAgg: { _sum: { amount: Prisma.Decimal | null } };
       activeOwnershipPlanCount: number;
       dueBikes: {
         id: string;
@@ -212,68 +210,20 @@ export class DashboardService {
       }[];
     },
     today: Date,
-  ): Promise<{
-    kpis: OperationsCenterKpis;
-    outstandingRows: {
-      motorcycleId: string;
-      targetAmount: Prisma.Decimal;
-      paidAmount: Prisma.Decimal;
-      balance: Prisma.Decimal;
-    }[];
-  }> {
-    const {
-      fleetSize,
-      todaysAssignments,
-      yesterdaysOnRoad,
-      collectedTodayAgg,
-      activeOwnershipPlanCount,
-      dueBikes,
-    } = input;
+  ): OperationsCenterKpis {
+    const { fleetSize, collectionStatus, yesterdaysOnRoad, activeOwnershipPlanCount, dueBikes } =
+      input;
 
-    const onRoadCount = new Set(todaysAssignments.map((a) => a.motorcycleId)).size;
+    const onRoadCount = new Set(collectionStatus.todaysAssignments.map((a) => a.motorcycleId)).size;
     const onRoadYesterday = new Set(yesterdaysOnRoad.map((a) => a.motorcycleId)).size;
-    const todayTotalTarget = todaysAssignments.reduce(
-      (sum, a) => sum.plus(a.targetAmount),
+    const { dueToday, receivedToday, outstandingRows } = collectionStatus;
+    const percentOfTarget = dueToday.isZero()
+      ? 0
+      : receivedToday.dividedBy(dueToday).times(100).round().toNumber();
+    const outstandingAmount = outstandingRows.reduce(
+      (sum, r) => sum.plus(r.balance),
       new Prisma.Decimal(0),
     );
-    const collectedToday = new Prisma.Decimal(collectedTodayAgg._sum.amount ?? 0);
-    const percentOfTarget = todayTotalTarget.isZero()
-      ? 0
-      : collectedToday.dividedBy(todayTotalTarget).times(100).round().toNumber();
-
-    const assignmentIds = todaysAssignments.map((a) => a.id);
-    const paidByAssignment =
-      assignmentIds.length > 0
-        ? await this.prisma.client.dailyPayment.groupBy({
-            by: ['dailyAssignmentId'],
-            where: { dailyAssignmentId: { in: assignmentIds }, status: PaymentStatus.COMPLETED },
-            _sum: { amount: true },
-          })
-        : [];
-    const paidById = new Map(paidByAssignment.map((p) => [p.dailyAssignmentId, p._sum.amount]));
-
-    let outstandingCount = 0;
-    let outstandingAmount = new Prisma.Decimal(0);
-    const outstandingRows: {
-      motorcycleId: string;
-      targetAmount: Prisma.Decimal;
-      paidAmount: Prisma.Decimal;
-      balance: Prisma.Decimal;
-    }[] = [];
-    for (const a of todaysAssignments) {
-      const paid = new Prisma.Decimal(paidById.get(a.id) ?? 0);
-      const shortfall = new Prisma.Decimal(a.targetAmount).minus(paid);
-      if (shortfall.greaterThan(0)) {
-        outstandingCount += 1;
-        outstandingAmount = outstandingAmount.plus(shortfall);
-        outstandingRows.push({
-          motorcycleId: a.motorcycleId,
-          targetAmount: new Prisma.Decimal(a.targetAmount),
-          paidAmount: paid,
-          balance: shortfall,
-        });
-      }
-    }
 
     const withinDays = this.config.get<number>('MAINTENANCE_REMINDER_DAYS', 14);
     const mileageBuffer = this.config.get<number>('MAINTENANCE_REMINDER_MILEAGE', 500);
@@ -297,26 +247,23 @@ export class DashboardService {
     }
 
     return {
-      kpis: {
-        onTheRoad: {
-          count: onRoadCount,
-          fleetSize,
-          deltaVsYesterday: onRoadCount - onRoadYesterday,
-        },
-        collectedToday: {
-          amount: money(collectedToday),
-          targetAmount: money(todayTotalTarget),
-          percentOfTarget,
-        },
-        outstandingToday: { count: outstandingCount, amount: money(outstandingAmount) },
-        activeOwnershipPlans: { count: activeOwnershipPlanCount },
-        serviceDue: { count: overdueCount + dueSoonCount, overdueCount },
-        // netProfitToday is filled in by the caller from analytics.getSummary
-        // (avoids a second, parallel P&L computation here) - see
-        // getOperationsCenter.
-        netProfitToday: { amount: '0.00' },
+      onTheRoad: {
+        count: onRoadCount,
+        fleetSize,
+        deltaVsYesterday: onRoadCount - onRoadYesterday,
       },
-      outstandingRows,
+      collectedToday: {
+        amount: money(receivedToday),
+        targetAmount: money(dueToday),
+        percentOfTarget,
+      },
+      outstandingToday: { count: outstandingRows.length, amount: money(outstandingAmount) },
+      activeOwnershipPlans: { count: activeOwnershipPlanCount },
+      serviceDue: { count: overdueCount + dueSoonCount, overdueCount },
+      // netProfitToday is filled in by the caller from analytics.getSummary
+      // (avoids a second, parallel P&L computation here) - see
+      // getOperationsCenter.
+      netProfitToday: { amount: '0.00' },
     };
   }
 

@@ -112,17 +112,17 @@ export function PaymentFormModal({
     <Modal title="Record payment" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {lockedAssignment ? (
-          <div className="rounded bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          <div className="rounded bg-panel-2 px-3 py-2 text-sm text-txt">
             {assignmentLabel(lockedAssignment, drivers, motorcycles)}
           </div>
         ) : (
           <>
-            <div className="flex gap-1 rounded border border-gray-200 bg-gray-50 p-1 text-sm">
+            <div className="flex gap-1 rounded border border-line bg-panel-2 p-1 text-sm">
               <button
                 type="button"
                 onClick={() => setMode('rentToOwn')}
                 className={`flex-1 rounded px-2 py-1 font-medium ${
-                  mode === 'rentToOwn' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  mode === 'rentToOwn' ? 'bg-panel text-txt shadow-sm' : 'text-txt-2'
                 }`}
               >
                 Rent-to-own
@@ -131,7 +131,7 @@ export function PaymentFormModal({
                 type="button"
                 onClick={() => setMode('regular')}
                 className={`flex-1 rounded px-2 py-1 font-medium ${
-                  mode === 'regular' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  mode === 'regular' ? 'bg-panel text-txt shadow-sm' : 'text-txt-2'
                 }`}
               >
                 Regular assignment
@@ -140,7 +140,7 @@ export function PaymentFormModal({
 
             {mode === 'rentToOwn' ? (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Driver</label>
+                <label className="mb-1 block text-sm font-medium text-txt">Driver</label>
                 {/* Stage DS1 - includeInactive: recording a payment is exactly the
                     "driver who was let go" case DriverService.search's includeInactive
                     exists for - the owner still needs to find them to record a final
@@ -149,7 +149,7 @@ export function PaymentFormModal({
                     make that impossible. */}
                 <DriverPicker value={selectedDriver} onSelect={setSelectedDriver} includeInactive />
                 {selectedDriver && rentToOwnAssignment && (
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-txt-2">
                     Latest charge: {rentToOwnAssignment.assignedDate.slice(0, 10)} — target{' '}
                     {Number(rentToOwnAssignment.targetAmount).toLocaleString()} TZS
                   </p>
@@ -162,11 +162,11 @@ export function PaymentFormModal({
               </div>
             ) : (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Assignment</label>
+                <label className="mb-1 block text-sm font-medium text-txt">Assignment</label>
                 <select
                   value={assignmentId}
                   onChange={(e) => setAssignmentId(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded border border-line px-3 py-2 text-sm"
                 >
                   <option value="">Select an assignment…</option>
                   {assignments.map((a) => (
@@ -181,23 +181,23 @@ export function PaymentFormModal({
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Amount (TZS)</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Amount (TZS)</label>
           <input
             type="number"
             min="0"
             step="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Payment method</label>
+          <label className="mb-1 block text-sm font-medium text-txt">Payment method</label>
           <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line px-3 py-2 text-sm"
           >
             <option value="">Unspecified</option>
             {PAYMENT_METHODS.map((m) => (

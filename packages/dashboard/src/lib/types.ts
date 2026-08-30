@@ -1152,3 +1152,148 @@ export interface MaintenanceSummaryResponse {
   spendByVehicleType: { vehicleType: string; amount: string }[];
   repeatVisitVehicles: RepeatVisitVehicle[];
 }
+
+// ============================================================
+// Stage UI3 - the Payments/Ownership/Expenses/Approvals/Reports pages'
+// single data sources. Mirrors each backend service's own return type
+// field for field, same convention as the Stage UI2 block above.
+// ============================================================
+
+// --- Payments (GET /payments/summary, /payments/method-breakdown,
+//     /payments/needs-reconciling) ---
+
+export interface PaymentSummaryKpis {
+  dueToday: string;
+  receivedToday: string;
+  stillOutstanding: { count: number; amount: string };
+  dueThisMonth: string;
+  receivedThisMonth: string;
+}
+
+export interface PaymentSummaryResponse {
+  kpis: PaymentSummaryKpis;
+}
+
+export interface MethodBreakdownRow {
+  method: string;
+  count: number;
+  amount: string;
+  pendingCount: number;
+  pendingAmount: string;
+}
+
+export interface OldestPendingRow {
+  paymentId: string;
+  driverName: string;
+  amount: string;
+  method: string;
+  createdAt: string;
+}
+
+// --- Ownership (GET /ownership-plans/summary) ---
+
+export interface OwnershipSummaryKpis {
+  activePlanCount: number;
+  onScheduleCount: number;
+  slippingCount: number;
+  toTerminateCount: number;
+  finishingEarlyCount: number;
+  missedDaysTotal: number;
+  moneyAtRisk: string;
+}
+
+export interface ExpectedCompletionPoint {
+  month: string;
+  count: number;
+}
+
+export interface OwnershipInsight {
+  title: string;
+  description: string;
+  planIds: string[];
+}
+
+export interface MissedDaysRow {
+  planId: string;
+  driverName: string;
+  vehicleRegistration: string | null;
+  missedStreak: number;
+  valueAtRisk: string;
+  recentExcusalCount: number;
+  verdict: 'Terminate' | 'Watch';
+  severity: 'red' | 'amber';
+}
+
+export interface ContractValueTotals {
+  totalOwed: string;
+  collectedToDate: string;
+  paidIn: string;
+  atRisk: string;
+  stillToCome: string;
+}
+
+export interface TwoBalances {
+  remainingToOwn: string;
+  remainingToBill: string;
+  arrears: string;
+}
+
+export interface OwnershipSummaryResponse {
+  kpis: OwnershipSummaryKpis;
+  planHealth: { onSchedule: number; slipping: number; toTerminate: number; finishingEarly: number };
+  insights: OwnershipInsight[];
+  expectedCompletions: ExpectedCompletionPoint[];
+  missedDaysTable: MissedDaysRow[];
+  contractValueTotals: ContractValueTotals;
+  twoBalances: TwoBalances;
+}
+
+// --- Expenses (GET /expenses/summary, /expenses/cost-per-vehicle-type,
+//     /expenses/anomalies) ---
+
+export interface ExpenseSummaryKpis {
+  spentThisMonth: string;
+  fuelThisMonth: string;
+  repairsThisMonth: string;
+  recurringOffendersCount: number;
+  claimsAwaitingApproval: number;
+  costPerVehicle: string;
+}
+
+export interface ExpenseSummaryResponse {
+  kpis: ExpenseSummaryKpis;
+}
+
+export interface CostPerVehicleTypeRow {
+  vehicleType: VehicleType;
+  costPerVehicle: string;
+}
+
+export interface VehicleAnomalyRow {
+  motorcycleId: string;
+  registrationNumber: string;
+  vehicleType: VehicleType;
+  currentPeriodCost: string;
+  trailing3MoAvg: string;
+  changePct: number;
+  pattern: string;
+}
+
+// --- Reports (GET /analytics/pnl-by-segment, /analytics/monthly-pnl-series) ---
+
+export interface SegmentPnl {
+  vehicleType: VehicleType | 'TOTAL';
+  vehicleCount: number;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+  netProfitPerVehicle: string;
+  marginPct: number;
+}
+
+export interface MonthlyPnlPoint {
+  month: string;
+  revenue: string;
+  expenses: string;
+  netProfit: string;
+}
