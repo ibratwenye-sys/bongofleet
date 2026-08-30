@@ -530,7 +530,7 @@ export function FleetPage() {
         title="All vehicles"
         subtitle={`${data.vehicles.length} rows · sorted by what needs attention`}
       >
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -594,6 +594,60 @@ export function FleetPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {data.vehicles.map((v) => (
+            <div
+              key={v.motorcycleId}
+              className={`border-b border-line-soft px-4 py-3 last:border-0 ${
+                v.needsAttention ? 'border-l-[3px] border-l-crit' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <Link
+                  to={`/fleet/${v.motorcycleId}`}
+                  className="text-sm font-medium text-txt hover:underline"
+                >
+                  {v.registrationNumber}
+                </Link>
+                <span className="text-sm text-txt-2">{v.status}</span>
+              </div>
+              <p className="mt-1 text-xs text-txt-2">
+                {VEHICLE_TYPE_LABELS[v.vehicleType as VehicleType] ?? v.vehicleType} ·{' '}
+                {v.currentDriver ?? '—'} · {v.operatingArea ?? '—'}
+              </p>
+              <div className="mt-1 flex items-center justify-between text-sm">
+                <span className="text-txt-2">
+                  Target {formatTZS(v.targetThisMonth)} · Paid {formatTZS(v.paidThisMonth)}
+                </span>
+                <span
+                  className={`font-medium ${parseFloat(v.netThisMonth) >= 0 ? 'text-good' : 'text-crit'}`}
+                >
+                  {formatTZS(v.netThisMonth)}
+                </span>
+              </div>
+              <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                <button
+                  onClick={() => void openEdit(v.motorcycleId)}
+                  className="text-sm font-medium text-c1 hover:underline"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() =>
+                    setDeactivating({
+                      id: v.motorcycleId,
+                      registrationNumber: v.registrationNumber,
+                    })
+                  }
+                  className="text-sm font-medium text-crit hover:underline"
+                >
+                  Deactivate
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </Card>
 

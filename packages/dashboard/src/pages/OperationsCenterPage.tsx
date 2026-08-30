@@ -211,37 +211,58 @@ export function OperationsCenterPage() {
                   Every assignment due today has been paid in full.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                        <th className="px-4 py-2 font-medium">Vehicle</th>
-                        <th className="px-4 py-2 text-right font-medium">Target</th>
-                        <th className="px-4 py-2 text-right font-medium">Paid</th>
-                        <th className="px-4 py-2 text-right font-medium">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.outstandingAssignmentRows.map((row) => (
-                        <tr
-                          key={row.registrationNumber}
-                          className="border-b border-line-soft last:border-0"
-                        >
-                          <td className="px-4 py-2 text-txt">{row.registrationNumber}</td>
-                          <td className="px-4 py-2 text-right text-txt-2">
-                            {formatTZS(row.targetAmount)}
-                          </td>
-                          <td className="px-4 py-2 text-right text-txt-2">
-                            {formatTZS(row.paidAmount)}
-                          </td>
-                          <td className="px-4 py-2 text-right font-medium text-crit">
-                            {formatTZS(row.balance)}
-                          </td>
+                <>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                          <th className="px-4 py-2 font-medium">Vehicle</th>
+                          <th className="px-4 py-2 text-right font-medium">Target</th>
+                          <th className="px-4 py-2 text-right font-medium">Paid</th>
+                          <th className="px-4 py-2 text-right font-medium">Balance</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {data.outstandingAssignmentRows.map((row) => (
+                          <tr
+                            key={row.registrationNumber}
+                            className="border-b border-line-soft last:border-0"
+                          >
+                            <td className="px-4 py-2 text-txt">{row.registrationNumber}</td>
+                            <td className="px-4 py-2 text-right text-txt-2">
+                              {formatTZS(row.targetAmount)}
+                            </td>
+                            <td className="px-4 py-2 text-right text-txt-2">
+                              {formatTZS(row.paidAmount)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-medium text-crit">
+                              {formatTZS(row.balance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:hidden">
+                    {data.outstandingAssignmentRows.map((row) => (
+                      <div
+                        key={row.registrationNumber}
+                        className="border-b border-line-soft px-4 py-3 last:border-0"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-txt">{row.registrationNumber}</span>
+                          <span className="text-sm font-medium text-crit">
+                            {formatTZS(row.balance)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-txt-2">
+                          Target {formatTZS(row.targetAmount)} · Paid {formatTZS(row.paidAmount)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </Card>
           </>

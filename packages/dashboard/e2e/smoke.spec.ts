@@ -312,6 +312,32 @@ for (const vp of READING_VIEWPORTS) {
       await expect(page.getByText('Ownership plans')).toBeVisible();
       await expectNoSidewaysScroll(page);
 
+      // Stage UI4b - card list (phone) vs table (md+) for the "Today's
+      // outstanding assignments" card, folded into this same boot rather
+      // than its own test/goto() for the same REFRESH_THROTTLE reason the
+      // theming block below already documents. The empty-state message
+      // ("Every assignment due today has been paid in full.") renders
+      // identically at every width and has neither presentation in the
+      // DOM, so only assert the split when there's at least one row.
+      {
+        const outstandingCard = page.locator('div.rounded-lg', {
+          has: page.getByRole('heading', { name: "Today's outstanding assignments" }),
+        });
+        await expect(outstandingCard).toBeVisible();
+        const table = outstandingCard.locator('table');
+        const cardList = outstandingCard.locator('.md\\:hidden');
+        const rowCount = await table.locator('tbody tr').count();
+        if (rowCount > 0) {
+          if (vp.width < 768) {
+            await expect(table).toBeHidden();
+            await expect(cardList).toBeVisible();
+          } else {
+            await expect(table).toBeVisible();
+            await expect(cardList).toBeHidden();
+          }
+        }
+      }
+
       // Stage UI1 - theme toggle + chassis-consistency, folded into this
       // existing boot rather than a separate spec file's own goto(): this
       // suite's REFRESH_THROTTLE budget (20/minute, shared by every real
@@ -406,6 +432,44 @@ for (const vp of READING_VIEWPORTS) {
         await page.getByRole('button', { name: 'Dark theme' }).click();
         await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'light');
       }
+
+      // Stage UI4b - the Fleet page's own card-vs-table split, reached by
+      // client-side nav (no page boot, no refresh spent - same reasoning as
+      // the Live Map hop above) rather than its own test/goto(). Works from
+      // wherever the test above left off: '/' on the phone run, Live Map on
+      // the tablet run - Fleet is reachable from both the tab bar and the
+      // persistent sidebar.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Tab bar' })
+          .getByRole('link', { name: /^Fleet/ })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Fleet', exact: true }).click();
+      }
+      await expect(page.getByRole('heading', { name: 'Fleet', exact: true })).toBeVisible();
+
+      const vehiclesCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'All vehicles' }),
+      });
+      const table = vehiclesCard.locator('table');
+      const cardList = vehiclesCard.locator('.md\\:hidden');
+
+      // DEMO-OWN-A is a seeded demo vehicle (prisma/seed.ts) - stable across
+      // runs, unlike this suite's own generated data.
+      const knownVehicle = cardList.getByText('DEMO-OWN-A').or(table.getByText('DEMO-OWN-A'));
+      await expect(knownVehicle.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+
+      if (vp.width < 768) {
+        await expect(table).toBeHidden();
+        await expect(cardList).toBeVisible();
+      } else {
+        await expect(table).toBeVisible();
+        await expect(cardList).toBeHidden();
+      }
+      await expectNoSidewaysScroll(page);
     });
 
     test('the Ownership list is readable without scrolling sideways', async ({ page }) => {
