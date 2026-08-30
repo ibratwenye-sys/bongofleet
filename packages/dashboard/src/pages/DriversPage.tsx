@@ -276,10 +276,10 @@ function DriverFormModal({
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
             Email{' '}
-            {!isEdit && <span className="font-normal text-gray-500">(the driver&apos;s own)</span>}
+            {!isEdit && <span className="font-normal text-txt-2">(the driver&apos;s own)</span>}
           </label>
           {isEdit ? (
-            <p className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+            <p className="rounded border border-line bg-panel-2 px-3 py-2 text-sm text-txt-2">
               {form.email} <span className="text-xs">(cannot be changed here)</span>
             </p>
           ) : (
@@ -290,7 +290,7 @@ function DriverFormModal({
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-txt-2">
                 He signs in with this address, and it is where his password reset code is sent. Use
                 an address he can actually open - if you invent one, you will be the only person who
                 can ever reset his password.

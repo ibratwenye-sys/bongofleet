@@ -68,11 +68,11 @@ function CreateLinkModal({
     <Modal title="New tracking link" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">Vehicle</label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line px-3 py-2 text-sm"
           >
             <option value="">Whole fleet</option>
             {motorcycles.map((m) => (
@@ -84,26 +84,26 @@ function CreateLinkModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Label</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">Label</label>
           <input
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
             placeholder="e.g. Truck T203 - Mombasa delivery"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-line px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Expires</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">Expires</label>
           <input
             type="date"
             value={form.expiryDate}
             min={toDateInput(new Date())}
             disabled={form.neverExpires}
             onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+            className="w-full rounded border border-line px-3 py-2 text-sm disabled:bg-panel-2 disabled:text-txt-3"
           />
-          <label className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+          <label className="mt-2 flex items-center gap-2 text-sm text-txt-2">
             <input
               type="checkbox"
               checked={form.neverExpires}
@@ -113,7 +113,7 @@ function CreateLinkModal({
           </label>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-crit">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -203,7 +203,7 @@ export function TrackingLinksPage() {
   // (AppShell.tsx), this covers a direct navigation to the URL.
   if (user && user.role !== 'OWNER' && user.role !== 'MANAGER') {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+      <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
         Only the fleet owner or a manager can view tracking links.
       </div>
     );
@@ -212,7 +212,7 @@ export function TrackingLinksPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Tracking links</h1>
+        <h1 className="text-xl font-semibold text-txt">Tracking links</h1>
         <button
           onClick={() => setCreating(true)}
           className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
@@ -221,68 +221,66 @@ export function TrackingLinksPage() {
         </button>
       </div>
 
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm text-txt-2">
         Shareable, no-login-required links for checking a vehicle's position - hand one to a
         customer watching a delivery, or keep one for yourself on your phone.
       </p>
 
       {successMessage && (
-        <p className="mb-4 rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </p>
+        <p className="mb-4 rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
       )}
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+        <table className="min-w-full divide-y divide-line-soft text-sm">
+          <thead className="bg-panel-2">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Label</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Vehicle</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Views</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Last viewed</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Actions</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Label</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Vehicle</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Status</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">Views</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Last viewed</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line-soft">
             {links === null ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
                   Loading…
                 </td>
               </tr>
             ) : links.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
                   No tracking links yet.
                 </td>
               </tr>
             ) : (
               links.map((link) => (
                 <tr key={link.id}>
-                  <td className="px-4 py-2 font-medium text-gray-900">{link.label}</td>
-                  <td className="px-4 py-2 text-gray-600">
+                  <td className="px-4 py-2 font-medium text-txt">{link.label}</td>
+                  <td className="px-4 py-2 text-txt-2">
                     {link.motorcycleId ? (regById.get(link.motorcycleId) ?? '—') : 'Whole fleet'}
                   </td>
                   <td className="px-4 py-2">
                     <StatusBadge status={link.status} styles={TRACKING_LINK_STATUS_STYLES} />
                   </td>
-                  <td className="px-4 py-2 text-right text-gray-700">{link.viewCount}</td>
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-2 text-right text-txt-2">{link.viewCount}</td>
+                  <td className="px-4 py-2 text-txt-2">
                     {link.lastViewedAt ? formatDateTime(link.lastViewedAt) : 'Never'}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => void handleCopy(link.token)}
-                      className="mr-3 text-sm font-medium text-gray-700 hover:underline"
+                      className="mr-3 text-sm font-medium text-txt-2 hover:underline"
                     >
                       Copy link
                     </button>
                     {link.status !== 'REVOKED' && (
                       <button
                         onClick={() => setRevoking(link)}
-                        className="text-sm font-medium text-red-600 hover:underline"
+                        className="text-sm font-medium text-crit hover:underline"
                       >
                         Revoke
                       </button>

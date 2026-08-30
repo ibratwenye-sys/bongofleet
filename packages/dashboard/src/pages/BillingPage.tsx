@@ -19,7 +19,7 @@ function daysUntil(iso: string): number {
 function StatusBanner({ billing }: { billing: TenantBilling }) {
   if (billing.billingExempt) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+      <div className="rounded-lg bg-panel-2 px-4 py-3 text-sm text-txt-2">
         This account is exempt from billing.
       </div>
     );
@@ -27,15 +27,13 @@ function StatusBanner({ billing }: { billing: TenantBilling }) {
 
   if (billing.status === 'PAST_DUE') {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-        Payment past due.
-      </div>
+      <div className="rounded-lg bg-crit-d px-4 py-3 text-sm text-crit">Payment past due.</div>
     );
   }
 
   if (billing.status === 'CANCELLED') {
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+      <div className="rounded-lg bg-panel-2 px-4 py-3 text-sm text-txt-2">
         Subscription cancelled.
       </div>
     );
@@ -43,7 +41,7 @@ function StatusBanner({ billing }: { billing: TenantBilling }) {
 
   if (billing.status === 'PENDING_VERIFICATION') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <div className="rounded-lg bg-warn-d px-4 py-3 text-sm text-warn">
         Account not yet verified.
       </div>
     );
@@ -54,7 +52,7 @@ function StatusBanner({ billing }: { billing: TenantBilling }) {
     const days = daysUntil(billing.trialEndsAt);
     if (days > 0) {
       return (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-lg bg-c1-d px-4 py-3 text-sm text-c1">
           Trial ends in {days} day{days === 1 ? '' : 's'} (
           {new Date(billing.trialEndsAt).toLocaleDateString()}).
         </div>
@@ -62,11 +60,7 @@ function StatusBanner({ billing }: { billing: TenantBilling }) {
     }
   }
 
-  return (
-    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-      Active.
-    </div>
-  );
+  return <div className="rounded-lg bg-good-d px-4 py-3 text-sm text-good">Active.</div>;
 }
 
 export function BillingPage() {
@@ -98,7 +92,7 @@ export function BillingPage() {
   // this page: it's the fleet owner's own subscription, not a support console.
   if (user && user.role !== 'OWNER') {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+      <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
         Only the fleet owner can view billing.
       </div>
     );
@@ -106,30 +100,30 @@ export function BillingPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-gray-900">Billing</h1>
+      <h1 className="mb-4 text-xl font-semibold text-txt">Billing</h1>
 
-      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <p className="text-sm text-txt-2">Loading…</p>
       ) : billing === null ? null : (
         <div className="space-y-4">
           <StatusBanner billing={billing} />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">Active bikes</p>
-              <p className="mt-2 text-2xl font-semibold text-gray-900">{billing.activeBikeCount}</p>
+            <div className="rounded-lg border border-line bg-panel p-6 shadow-sm">
+              <p className="text-sm font-medium text-txt-2">Active bikes</p>
+              <p className="mt-2 text-2xl font-semibold text-txt">{billing.activeBikeCount}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">Price per bike / month</p>
-              <p className="mt-2 text-2xl font-semibold text-gray-900">
+            <div className="rounded-lg border border-line bg-panel p-6 shadow-sm">
+              <p className="text-sm font-medium text-txt-2">Price per bike / month</p>
+              <p className="mt-2 text-2xl font-semibold text-txt">
                 {formatTZS(billing.pricePerBikePerMonth)}
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">Estimated monthly total</p>
-              <p className="mt-2 text-2xl font-semibold text-gray-900">
+            <div className="rounded-lg border border-line bg-panel p-6 shadow-sm">
+              <p className="text-sm font-medium text-txt-2">Estimated monthly total</p>
+              <p className="mt-2 text-2xl font-semibold text-txt">
                 {formatTZS(billing.estimatedMonthlyTotal)}
               </p>
             </div>
@@ -140,7 +134,7 @@ export function BillingPage() {
               this page may imply a bill is coming while that's true - a real
               trust problem for an owner reading it - so this is not
               conditional on status/trialEndsAt; it always shows. */}
-          <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+          <p className="rounded-lg border border-line bg-panel-2 px-4 py-3 text-xs text-txt-2">
             Payment collection isn't connected yet — nothing above is being charged automatically.
             This is an estimate for your own planning only.
           </p>

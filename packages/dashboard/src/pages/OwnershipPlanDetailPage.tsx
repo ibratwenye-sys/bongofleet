@@ -29,9 +29,9 @@ const DAY_EXCUSAL_STATUS_LABELS: Record<string, string> = {
 
 function runningPositionClass(value: string): string {
   const n = Number(value);
-  if (n < 0) return 'text-red-700 font-medium';
-  if (n > 0) return 'text-green-700 font-medium';
-  return 'text-gray-600';
+  if (n < 0) return 'text-crit font-medium';
+  if (n > 0) return 'text-good font-medium';
+  return 'text-txt-2';
 }
 
 function ContractSection({
@@ -125,28 +125,28 @@ function ContractSection({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-3 text-lg font-medium text-gray-900">Contract</h2>
-      <div className="rounded border border-gray-200 bg-white p-4">
+      <h2 className="mb-3 text-lg font-medium text-txt">Contract</h2>
+      <div className="rounded border border-line bg-panel p-4">
         {contracts === null ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-txt-2">Loading…</p>
         ) : latest === null ? (
-          <p className="mb-3 text-sm text-gray-500">No contract generated yet.</p>
+          <p className="mb-3 text-sm text-txt-2">No contract generated yet.</p>
         ) : (
-          <p className="mb-3 text-sm text-gray-600">
+          <p className="mb-3 text-sm text-txt-2">
             Latest: {latest.fileName} — generated {latest.uploadedAt.slice(0, 10)}
             {contracts.length > 1 && ` (${contracts.length} versions on file)`}
           </p>
         )}
 
         {!hasContractEndDate && (
-          <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mb-3 rounded bg-warn-d px-3 py-2 text-sm text-warn">
             No contract end date is set for this plan - the contract will print &quot;Haijajazwa /
             Not on file&quot; where the end date belongs.
           </p>
         )}
 
         {activePaymentAccounts !== null && activePaymentAccounts.length === 0 && (
-          <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mb-3 rounded bg-warn-d px-3 py-2 text-sm text-warn">
             No active payment account is configured for this tenant - the contract will print
             &quot;Hakuna akaunti ya malipo iliyowekwa&quot; (no payment account configured).
           </p>
@@ -164,14 +164,14 @@ function ContractSection({
             <button
               onClick={handleDownloadClick}
               disabled={downloading}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2 disabled:opacity-50"
             >
               {downloading ? 'Opening…' : 'Download latest'}
             </button>
           )}
         </div>
 
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-crit">{error}</p>}
       </div>
 
       {confirmingNoEndDate && (
@@ -246,34 +246,34 @@ function ExcuseDayDialog({
 
   return (
     <Modal title="Excuse a day" onClose={onClose}>
-      <p className="mb-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      <p className="mb-4 rounded bg-warn-d px-3 py-2 text-sm text-warn">
         Excusing a day does <strong>not</strong> change what the driver owes. He still owes that
         money and pays it later — this only stops the day from counting as a missed day on his
         record.
       </p>
 
-      <label className="mb-3 block text-sm font-medium text-gray-700">
+      <label className="mb-3 block text-sm font-medium text-txt-2">
         Date
         <input
           type="date"
           value={excusedDate}
           onChange={(e) => setExcusedDate(e.target.value)}
-          className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+          className="mt-1 block w-full rounded border border-line px-3 py-1.5 text-sm"
         />
       </label>
 
-      <label className="mb-4 block text-sm font-medium text-gray-700">
+      <label className="mb-4 block text-sm font-medium text-txt-2">
         Reason (required)
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="e.g. Msiba wa jamaa - alimjulisha msimamizi wake (family bereavement - told his supervisor)"
-          className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+          className="mt-1 block w-full rounded border border-line px-3 py-1.5 text-sm"
         />
       </label>
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 text-sm text-crit">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <button
@@ -378,40 +378,40 @@ function LedgerSection({ planId }: { planId: string }) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-medium text-gray-900">Instalment ledger</h2>
+        <h2 className="text-lg font-medium text-txt">Instalment ledger</h2>
         <button
           type="button"
           onClick={() => setExcuseDialogDate(null)}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2"
         >
           Excuse a day
         </button>
       </div>
 
-      {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}
+      {actionError && <p className="mb-3 text-sm text-crit">{actionError}</p>}
 
-      <div className="max-h-[32rem] overflow-y-auto overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="sticky top-0 bg-gray-50">
+      <div className="max-h-[32rem] overflow-y-auto overflow-x-auto rounded-lg border border-line bg-panel">
+        <table className="min-w-full divide-y divide-line-soft text-sm">
+          <thead className="sticky top-0 bg-panel-2">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Owed</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Paid</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Running position</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Excusal</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500"></th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Date</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">Owed</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">Paid</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">Running position</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">Excusal</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line-soft">
             {rows === null ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
                   No instalments generated yet.
                 </td>
               </tr>
@@ -419,17 +419,17 @@ function LedgerSection({ planId }: { planId: string }) {
               rows.map((row) => (
                 <tr
                   key={row.date}
-                  className={row.excusal?.status === 'APPROVED' ? 'bg-green-50' : ''}
+                  className={row.excusal?.status === 'APPROVED' ? 'bg-good-d' : ''}
                 >
-                  <td className="px-4 py-2 text-gray-600">{row.date}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">
+                  <td className="px-4 py-2 text-txt-2">{row.date}</td>
+                  <td className="px-4 py-2 text-right text-txt-2">
                     {row.ledger ? formatTZS(row.ledger.owed) : '—'}
                   </td>
-                  <td className="px-4 py-2 text-right text-gray-600">
+                  <td className="px-4 py-2 text-right text-txt-2">
                     {row.ledger ? formatTZS(row.ledger.paid) : '—'}
                   </td>
                   <td
-                    className={`px-4 py-2 text-right ${row.ledger ? runningPositionClass(row.ledger.runningPosition) : 'text-gray-400'}`}
+                    className={`px-4 py-2 text-right ${row.ledger ? runningPositionClass(row.ledger.runningPosition) : 'text-txt-3'}`}
                   >
                     {row.ledger ? formatTZS(row.ledger.runningPosition) : '—'}
                   </td>
@@ -440,19 +440,19 @@ function LedgerSection({ planId }: { planId: string }) {
                           status={row.excusal.status}
                           styles={DAY_EXCUSAL_STATUS_STYLES}
                         />
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-txt-2">
                           {DAY_EXCUSAL_STATUS_LABELS[row.excusal.status] ?? row.excusal.status}
                           {row.excusal.reason && ` — ${row.excusal.reason}`}
                         </p>
                         {row.excusal.status !== 'REQUESTED' && row.excusal.decidedByName && (
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-txt-3">
                             by {row.excusal.decidedByName}
                             {row.excusal.decidedAt && ` · ${row.excusal.decidedAt.slice(0, 10)}`}
                           </p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-txt-3">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -460,7 +460,7 @@ function LedgerSection({ planId }: { planId: string }) {
                       <button
                         type="button"
                         onClick={() => setRevoking(row.excusal)}
-                        className="text-xs font-medium text-red-600 hover:underline"
+                        className="text-xs font-medium text-crit hover:underline"
                       >
                         {row.excusal.status === 'APPROVED' ? 'Revoke' : 'Decline'}
                       </button>
@@ -468,7 +468,7 @@ function LedgerSection({ planId }: { planId: string }) {
                       <button
                         type="button"
                         onClick={() => setExcuseDialogDate(row.date)}
-                        className="text-xs font-medium text-gray-600 hover:underline"
+                        className="text-xs font-medium text-txt-2 hover:underline"
                       >
                         Excuse
                       </button>
@@ -561,14 +561,12 @@ function ContractEndDateEditor({
         {plan.contractEndDate ? (
           `ends ${plan.contractEndDate.slice(0, 10)}`
         ) : (
-          <span className="text-amber-700">
-            no end date set - system estimate {plan.derivedEndDate}
-          </span>
+          <span className="text-warn">no end date set - system estimate {plan.derivedEndDate}</span>
         )}{' '}
         <button
           type="button"
           onClick={startEditing}
-          className="text-gray-600 underline hover:text-gray-900"
+          className="text-txt-2 underline hover:text-txt"
         >
           {plan.contractEndDate ? 'edit' : 'set end date'}
         </button>
@@ -582,7 +580,7 @@ function ContractEndDateEditor({
         type="date"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="rounded border border-gray-300 px-2 py-1 text-sm"
+        className="rounded border border-line px-2 py-1 text-sm"
       />
       <button
         type="button"
@@ -595,11 +593,11 @@ function ContractEndDateEditor({
       <button
         type="button"
         onClick={() => setEditing(false)}
-        className="text-xs text-gray-500 hover:underline"
+        className="text-xs text-txt-2 hover:underline"
       >
         Cancel
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-crit">{error}</span>}
     </span>
   );
 }
@@ -668,8 +666,8 @@ function CompletionChecklistSection({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-2 text-sm font-semibold text-gray-700">Completion checklist</h2>
-      <div className="space-y-2 rounded border border-gray-200 bg-white p-4">
+      <h2 className="mb-2 text-sm font-semibold text-txt">Completion checklist</h2>
+      <div className="space-y-2 rounded border border-line bg-panel p-4">
         {items.map((item) => (
           <label key={item.key} className="flex items-center gap-2 text-sm">
             <input
@@ -678,11 +676,11 @@ function CompletionChecklistSection({
               disabled={saving === item.key}
               onChange={(e) => void toggle(item.key, e.target.checked)}
             />
-            <span className="text-gray-900">{item.label}</span>
-            {item.at && <span className="text-xs text-gray-500">— {item.at.slice(0, 10)}</span>}
+            <span className="text-txt">{item.label}</span>
+            {item.at && <span className="text-xs text-txt-2">— {item.at.slice(0, 10)}</span>}
           </label>
         ))}
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-crit">{error}</p>}
       </div>
     </section>
   );
@@ -701,20 +699,20 @@ export function OwnershipPlanDetailPage() {
   }, [planId]);
 
   if (!planId) return null;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!plan) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (error) return <p className="text-sm text-crit">{error}</p>;
+  if (!plan) return <p className="text-sm text-txt-2">Loading…</p>;
 
   return (
     <div>
-      <Link to="/ownership" className="mb-4 inline-block text-sm text-gray-600 hover:underline">
+      <Link to="/ownership" className="mb-4 inline-block text-sm text-txt-2 hover:underline">
         ← Back to ownership plans
       </Link>
-      <h1 className="mb-1 text-xl font-semibold text-gray-900">
+      <h1 className="mb-1 text-xl font-semibold text-txt">
         {plan.driver ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}` : 'Driver'}
         {' — '}
         {plan.motorcycle?.registrationNumber ?? 'Vehicle'}
       </h1>
-      <p className="mb-4 text-sm text-gray-600">
+      <p className="mb-4 text-sm text-txt-2">
         {formatTZS(plan.dailyAmount)}/day for {plan.instalmentCount} days · declared value{' '}
         {formatTZS(plan.totalPrice)} · {formatTZS(plan.downPayment)} down · started{' '}
         {plan.startDate.slice(0, 10)} · <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
@@ -723,27 +721,27 @@ export function OwnershipPlanDetailPage() {
           below and the breach threshold OwnershipPage's severity colouring
           watches - a date condition, not a payment-streak condition. */}
       {plan.pastDeadlineStillOwing && (
-        <p className="mb-4 text-sm font-medium text-purple-700">
+        <p className="mb-4 text-sm font-medium text-violet">
           Past the contract's end date, still owing {formatTZS(plan.remainingToOwn)}.
         </p>
       )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded border border-gray-200 bg-white p-3">
-          <p className="text-xs text-gray-500">Paid to date</p>
-          <p className="text-lg font-semibold text-gray-900">{formatTZS(plan.amountPaid)}</p>
+        <div className="rounded border border-line bg-panel p-3">
+          <p className="text-xs text-txt-2">Paid to date</p>
+          <p className="text-lg font-semibold text-txt">{formatTZS(plan.amountPaid)}</p>
         </div>
-        <div className="rounded border border-gray-200 bg-white p-3">
-          <p className="text-xs text-gray-500">Remaining</p>
-          <p className="text-lg font-semibold text-gray-900">{formatTZS(plan.remainingToOwn)}</p>
+        <div className="rounded border border-line bg-panel p-3">
+          <p className="text-xs text-txt-2">Remaining</p>
+          <p className="text-lg font-semibold text-txt">{formatTZS(plan.remainingToOwn)}</p>
         </div>
-        <div className="rounded border border-gray-200 bg-white p-3">
-          <p className="text-xs text-gray-500">Days left</p>
-          <p className="text-lg font-semibold text-gray-900">{plan.daysLeft}</p>
+        <div className="rounded border border-line bg-panel p-3">
+          <p className="text-xs text-txt-2">Days left</p>
+          <p className="text-lg font-semibold text-txt">{plan.daysLeft}</p>
         </div>
-        <div className="rounded border border-gray-200 bg-white p-3">
-          <p className="text-xs text-gray-500">Projected completion</p>
-          <p className="text-lg font-semibold text-gray-900">{plan.projectedCompletion}</p>
+        <div className="rounded border border-line bg-panel p-3">
+          <p className="text-xs text-txt-2">Projected completion</p>
+          <p className="text-lg font-semibold text-txt">{plan.projectedCompletion}</p>
         </div>
       </div>
 

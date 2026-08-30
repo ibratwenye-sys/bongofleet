@@ -287,8 +287,8 @@ function MaintenanceFormModal({
             placeholder="Updates the vehicle's current mileage"
           />
         </div>
-        <div className="rounded border border-gray-100 bg-gray-50 p-3">
-          <p className="mb-2 text-xs font-medium text-gray-500">
+        <div className="rounded border border-line bg-panel-2 p-3">
+          <p className="mb-2 text-xs font-medium text-txt-2">
             Next service reminder (optional) — you'll be emailed when either is near.
           </p>
           <div className="grid grid-cols-2 gap-3">

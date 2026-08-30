@@ -30,14 +30,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+    <div className="flex min-h-screen items-center justify-center bg-page">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm"
+        className="w-full max-w-sm rounded-lg border border-line bg-panel p-8 shadow-sm"
       >
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">BongoFleet</h1>
+        <h1 className="mb-6 text-xl font-semibold text-txt">BongoFleet</h1>
 
-        <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="email">
+        <label className="mb-1 block text-sm font-medium text-txt-2" htmlFor="email">
           Email
         </label>
         <input
@@ -46,10 +46,10 @@ export function LoginPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mb-4 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+          className="mb-4 w-full rounded border border-line px-3 py-2 text-sm"
         />
 
-        <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="password">
+        <label className="mb-1 block text-sm font-medium text-txt-2" htmlFor="password">
           Password
         </label>
         <input
@@ -58,10 +58,10 @@ export function LoginPage() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mb-4 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+          className="mb-4 w-full rounded border border-line px-3 py-2 text-sm"
         />
 
-        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-4 text-sm text-crit">{error}</p>}
 
         <button
           type="submit"

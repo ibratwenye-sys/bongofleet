@@ -106,11 +106,11 @@ export function DriverPicker({
 
   if (value) {
     return (
-      <div className="flex items-center justify-between rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm">
-        <span className="text-gray-900">
+      <div className="flex items-center justify-between rounded border border-line bg-panel-2 px-3 py-2 text-sm">
+        <span className="text-txt">
           {value.firstName} {value.lastName}
           {!value.isActive && (
-            <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+            <span className="ml-2 rounded bg-panel-2 px-1.5 py-0.5 text-xs font-medium text-txt-2">
               Inactive
             </span>
           )}
@@ -122,7 +122,7 @@ export function DriverPicker({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="ml-3 shrink-0 text-sm font-medium text-gray-600 hover:underline"
+          className="ml-3 shrink-0 text-sm font-medium text-txt-2 hover:underline"
         >
           Change
         </button>
@@ -145,16 +145,16 @@ export function DriverPicker({
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        className="w-full rounded border border-line px-3 py-2 text-sm"
       />
       {open && query.trim() !== '' && (
-        <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded border border-line bg-panel shadow-lg">
           {loading ? (
-            <p className="px-3 py-2 text-sm text-gray-500">Searching…</p>
+            <p className="px-3 py-2 text-sm text-txt-2">Searching…</p>
           ) : error ? (
-            <p className="px-3 py-2 text-sm text-red-600">{error}</p>
+            <p className="px-3 py-2 text-sm text-crit">{error}</p>
           ) : results.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-gray-500">
+            <p className="px-3 py-2 text-sm text-txt-2">
               No drivers match &quot;{query.trim()}&quot;.
             </p>
           ) : (
@@ -166,24 +166,24 @@ export function DriverPicker({
                   onClick={() => selectDriver(driver)}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   className={`block w-full px-3 py-2 text-left text-sm ${
-                    index === highlightedIndex ? 'bg-gray-100' : ''
+                    index === highlightedIndex ? 'bg-panel-2' : ''
                   }`}
                 >
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-txt">
                     {driver.firstName} {driver.lastName}
                     {!driver.isActive && (
-                      <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                      <span className="ml-2 rounded bg-panel-2 px-1.5 py-0.5 text-xs font-medium text-txt-2">
                         Inactive
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-txt-2">
                     {driver.registrationNumber ?? 'No vehicle on file'} · {driver.phone}
                   </div>
                 </button>
               ))}
               {hasMore && (
-                <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+                <p className="border-t border-line-soft px-3 py-2 text-xs text-txt-2">
                   More matches than shown — refine your search.
                 </p>
               )}

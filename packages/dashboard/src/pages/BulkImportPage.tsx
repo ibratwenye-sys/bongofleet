@@ -44,10 +44,10 @@ function saveBlobAs(blob: Blob, filename: string): void {
 
 function statusBadge(status: BulkImportRowResult['status']) {
   const styles: Record<BulkImportRowResult['status'], string> = {
-    new: 'bg-green-50 text-green-700 border-green-200',
-    update: 'bg-blue-50 text-blue-700 border-blue-200',
-    reference: 'bg-gray-50 text-gray-500 border-gray-200',
-    error: 'bg-red-50 text-red-700 border-red-200',
+    new: 'bg-good-d text-good',
+    update: 'bg-c1-d text-c1',
+    reference: 'bg-panel-2 text-txt-2',
+    error: 'bg-crit-d text-crit',
   };
   const label: Record<BulkImportRowResult['status'], string> = {
     new: 'New',
@@ -56,7 +56,7 @@ function statusBadge(status: BulkImportRowResult['status']) {
     error: 'Error',
   };
   return (
-    <span className={`rounded border px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
+    <span className={`rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
       {label[status]}
     </span>
   );
@@ -67,10 +67,7 @@ function RowMessages({ row }: { row: BulkImportRowResult }) {
   return (
     <ul className="mt-1 space-y-0.5">
       {row.messages.map((m, i) => (
-        <li
-          key={i}
-          className={`text-xs ${m.severity === 'error' ? 'text-red-600' : 'text-amber-700'}`}
-        >
+        <li key={i} className={`text-xs ${m.severity === 'error' ? 'text-crit' : 'text-warn'}`}>
           {m.severity === 'error' ? '⚠ ' : '• '}
           {m.text}
         </li>
@@ -84,25 +81,23 @@ function SheetResultCard({ sheet, rows }: { sheet: BulkImportSheet; rows: BulkIm
   const warningCount = rows.filter((r) => r.messages.some((m) => m.severity === 'warning')).length;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-900">{SHEET_LABEL[sheet]}</h3>
-        <p className="text-xs text-gray-500">
+    <div className="rounded-lg border border-line bg-panel shadow-sm">
+      <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
+        <h3 className="text-sm font-semibold text-txt">{SHEET_LABEL[sheet]}</h3>
+        <p className="text-xs text-txt-2">
           {rows.length} row{rows.length === 1 ? '' : 's'}
-          {errorCount > 0 && <span className="ml-2 text-red-600">{errorCount} error(s)</span>}
-          {warningCount > 0 && (
-            <span className="ml-2 text-amber-700">{warningCount} warning(s)</span>
-          )}
+          {errorCount > 0 && <span className="ml-2 text-crit">{errorCount} error(s)</span>}
+          {warningCount > 0 && <span className="ml-2 text-warn">{warningCount} warning(s)</span>}
         </p>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-3 text-sm text-gray-500">No rows in this sheet.</p>
+        <p className="px-4 py-3 text-sm text-txt-2">No rows in this sheet.</p>
       ) : (
-        <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+        <div className="max-h-80 divide-y divide-line-soft overflow-y-auto">
           {rows.map((row) => (
             <div key={row.row} className="px-4 py-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-gray-500">Row {row.row}</span>
+                <span className="text-xs font-medium text-txt-2">Row {row.row}</span>
                 {statusBadge(row.status)}
               </div>
               <RowMessages row={row} />
@@ -188,7 +183,7 @@ export function BulkImportPage() {
   // the backend's POST /bulk-import/preview and /commit.
   if (user && user.role !== 'OWNER') {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+      <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
         Only the fleet owner can bulk import.
       </div>
     );
@@ -196,11 +191,11 @@ export function BulkImportPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-gray-900">Bulk import</h1>
+      <h1 className="mb-4 text-xl font-semibold text-txt">Bulk import</h1>
 
-      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-2 text-sm font-semibold text-gray-900">1. Download the templates</h2>
-        <p className="mb-3 text-xs text-gray-500">
+      <div className="mb-4 rounded-lg border border-line bg-panel p-4 shadow-sm">
+        <h2 className="mb-2 text-sm font-semibold text-txt">1. Download the templates</h2>
+        <p className="mb-3 text-xs text-txt-2">
           Fill these in with your fleet's data, then upload the workbook below. Each has one worked
           example row and notes on every column - format phone/NIDA/registration columns as Text if
           you add columns of your own.
@@ -210,17 +205,17 @@ export function BulkImportPage() {
             <button
               key={sheet}
               onClick={() => void downloadTemplate(sheet)}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded border border-line px-3 py-1.5 text-sm text-txt-2 hover:bg-panel-2"
             >
               {SHEET_LABEL[sheet]} template
             </button>
           ))}
         </div>
-        {templateError && <p className="mt-2 text-xs text-red-600">{templateError}</p>}
+        {templateError && <p className="mt-2 text-xs text-crit">{templateError}</p>}
       </div>
 
-      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-2 text-sm font-semibold text-gray-900">2. Upload your workbook</h2>
+      <div className="mb-4 rounded-lg border border-line bg-panel p-4 shadow-sm">
+        <h2 className="mb-2 text-sm font-semibold text-txt">2. Upload your workbook</h2>
         <div className="flex flex-wrap items-center gap-3">
           <input
             ref={fileInputRef}
@@ -249,13 +244,13 @@ export function BulkImportPage() {
             {committing ? 'Importing…' : 'Import'}
           </button>
         </div>
-        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-xs text-crit">{error}</p>}
       </div>
 
       {commitCounts && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-green-900">Import complete</h2>
-          <div className="grid grid-cols-2 gap-2 text-sm text-green-800 sm:grid-cols-3">
+        <div className="mb-4 rounded-lg bg-good-d p-4">
+          <h2 className="mb-2 text-sm font-semibold text-good">Import complete</h2>
+          <div className="grid grid-cols-2 gap-2 text-sm text-good sm:grid-cols-3">
             {(Object.keys(COUNT_LABEL) as (keyof BulkImportCommitCounts)[]).map((key) => (
               <div key={key}>
                 {COUNT_LABEL[key]}: <span className="font-semibold">{commitCounts[key]}</span>
@@ -267,7 +262,7 @@ export function BulkImportPage() {
 
       {preview && (
         <div className="space-y-4">
-          <p className={`text-sm ${preview.canCommit ? 'text-green-700' : 'text-red-600'}`}>
+          <p className={`text-sm ${preview.canCommit ? 'text-good' : 'text-crit'}`}>
             {preview.canCommit
               ? 'No errors - ready to import.'
               : 'Some rows have errors - fix them in the workbook, then upload and preview again.'}

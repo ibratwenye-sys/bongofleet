@@ -30,9 +30,9 @@ function googleMapsUrl(latitude: number, longitude: number): string {
 
 function VehicleCard({ position }: { position: PublicVehiclePosition }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-line bg-panel p-5 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-gray-900">{position.registrationNumber}</h2>
+        <h2 className="text-base font-semibold text-txt">{position.registrationNumber}</h2>
         {position.offline ? (
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
             Offline
@@ -45,14 +45,14 @@ function VehicleCard({ position }: { position: PublicVehiclePosition }) {
       </div>
 
       {position.offline ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-txt-2">
           {position.lastKnownAt
             ? `Last seen ${timeAgo(position.lastKnownAt)}.`
             : 'No location reported yet.'}
         </p>
       ) : (
         <>
-          <p className="mb-2 text-sm text-gray-500">
+          <p className="mb-2 text-sm text-txt-2">
             As of {timeAgo(position.recordedAt)} · {position.latitude.toFixed(5)},{' '}
             {position.longitude.toFixed(5)}
           </p>
@@ -125,15 +125,15 @@ export function PublicTrackingPage() {
   const positions = data === null ? [] : Array.isArray(data) ? data : [data];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <div className="min-h-screen bg-page p-4 md:p-6">
       <div className="mx-auto max-w-lg">
-        <h1 className="mb-4 text-lg font-semibold text-gray-900">BongoFleet vehicle tracking</h1>
+        <h1 className="mb-4 text-lg font-semibold text-txt">BongoFleet vehicle tracking</h1>
 
-        {loading && <p className="text-sm text-gray-500">Loading…</p>}
-        {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        {loading && <p className="text-sm text-txt-2">Loading…</p>}
+        {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
         {!loading && !error && positions.length === 0 && (
-          <p className="text-sm text-gray-500">No vehicles to show.</p>
+          <p className="text-sm text-txt-2">No vehicles to show.</p>
         )}
 
         <div className="space-y-3">
