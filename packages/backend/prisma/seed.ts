@@ -427,6 +427,56 @@ async function seedTransportShowcase(prisma: PrismaClient, tenantId: string): Pr
   console.log('Seeded transport showcase: DEMO-TRN-A, one delivered trip with a fuel expense.');
 }
 
+/**
+ * Stage UI4f - a minimal, reproducible MaintenancePage fixture, same
+ * reasoning as seedTransportShowcase (UI-FIX2): without it, "Needs
+ * booking" and "Completed this month" had nothing but stale or non-
+ * seeded live-DB data to anchor mobile-card e2e coverage on.
+ *
+ * One vehicle, one MaintenanceLog that does double duty: performedAt is
+ * recent enough to land in "Completed this month" (and the default
+ * "Manage older records" range), and its own nextServiceDate is already
+ * in the past, so the same vehicle also shows up as OVERDUE in "Needs
+ * booking" - the minimum needed to exercise all three tables, not a
+ * fully realistic service-history timeline.
+ *
+ * Guarded on DEMO-MNT-A already existing, same convention as the other
+ * showcase seeders.
+ */
+async function seedMaintenanceShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const already = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-MNT-A' },
+  });
+  if (already) {
+    // eslint-disable-next-line no-console
+    console.log('Maintenance showcase already seeded for this tenant - nothing to do.');
+    return;
+  }
+
+  const vehicle = await prisma.motorcycle.create({
+    data: {
+      tenantId,
+      registrationNumber: 'DEMO-MNT-A',
+      currentMileage: 10000,
+    },
+  });
+
+  await prisma.maintenanceLog.create({
+    data: {
+      tenantId,
+      motorcycleId: vehicle.id,
+      description: 'Oil change',
+      cost: 15000,
+      performedAt: dateOnly(1),
+      mileageAtService: 10000,
+      nextServiceDate: dateOnly(3),
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('Seeded maintenance showcase: DEMO-MNT-A, one overdue completed service.');
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -442,6 +492,7 @@ async function main(): Promise<void> {
     const { tenantId, ownerUserId } = await seedOwnerAndBasicDemoData(prisma);
     await seedOwnershipPlanShowcase(prisma, tenantId, ownerUserId);
     await seedTransportShowcase(prisma, tenantId);
+    await seedMaintenanceShowcase(prisma, tenantId);
   } finally {
     await prisma.$disconnect();
   }

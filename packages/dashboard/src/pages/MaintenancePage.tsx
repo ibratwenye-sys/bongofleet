@@ -54,39 +54,67 @@ function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBo
     return <p className="p-4 text-sm text-txt-2">Nothing needs booking right now.</p>;
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-            <th className="px-4 py-2 font-medium">Vehicle</th>
-            <th className="px-4 py-2 font-medium">Driver</th>
-            <th className="px-4 py-2 font-medium">Why</th>
-            <th className="px-4 py-2 text-right font-medium">Odometer</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.motorcycleId}
-              className={`border-b border-line-soft last:border-0 ${r.status === 'OVERDUE' ? 'bg-crit-d/40' : ''}`}
-            >
-              <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
-              <td className="px-4 py-2 text-txt-2">{r.currentDriver ?? '—'}</td>
-              <td className="px-4 py-2 text-txt-2">{r.reasons.join('; ')}</td>
-              <td className="px-4 py-2 text-right text-txt-2">{r.odometer.toLocaleString()} km</td>
-              <td className="px-4 py-2">
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
-                >
-                  {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
-                </span>
-              </td>
+    <>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+              <th className="px-4 py-2 font-medium">Vehicle</th>
+              <th className="px-4 py-2 font-medium">Driver</th>
+              <th className="px-4 py-2 font-medium">Why</th>
+              <th className="px-4 py-2 text-right font-medium">Odometer</th>
+              <th className="px-4 py-2 font-medium">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.motorcycleId}
+                className={`border-b border-line-soft last:border-0 ${r.status === 'OVERDUE' ? 'bg-crit-d/40' : ''}`}
+              >
+                <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
+                <td className="px-4 py-2 text-txt-2">{r.currentDriver ?? '—'}</td>
+                <td className="px-4 py-2 text-txt-2">{r.reasons.join('; ')}</td>
+                <td className="px-4 py-2 text-right text-txt-2">
+                  {r.odometer.toLocaleString()} km
+                </td>
+                <td className="px-4 py-2">
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
+                  >
+                    {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((r) => (
+          <div
+            key={r.motorcycleId}
+            className={`border-b border-line-soft px-4 py-3 last:border-0 ${
+              r.status === 'OVERDUE' ? 'border-l-[3px] border-l-crit' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium text-txt">{r.registrationNumber}</span>
+              <span
+                className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
+              >
+                {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-txt-2">
+              {r.currentDriver ?? '—'} · {r.odometer.toLocaleString()} km
+            </p>
+            <p className="mt-1 text-xs text-txt-2">{r.reasons.join('; ')}</p>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -508,7 +536,7 @@ export function MaintenancePage() {
         title="Completed this month"
         subtitle={`${data.completedThisMonth.length} services · ${formatTZS(data.kpis.completedThisMonth.cost)}`}
       >
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -571,6 +599,57 @@ export function MaintenancePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {data.completedThisMonth.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">
+              No services completed yet this month.
+            </p>
+          ) : (
+            data.completedThisMonth.map((c) => (
+              <div key={c.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-txt">{c.registrationNumber}</span>
+                  <span className="text-xs text-txt-2">{c.performedAt}</span>
+                </div>
+                <p className="mt-1 text-xs text-txt-2">{c.description}</p>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-txt-2">
+                    {c.mileageAtService != null ? `${c.mileageAtService.toLocaleString()} km` : '—'}
+                  </span>
+                  <span className="font-medium text-txt">{formatTZS(c.cost)}</span>
+                </div>
+                <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                  <button
+                    onClick={() =>
+                      setFormTarget({
+                        id: c.id,
+                        motorcycleId: c.motorcycleId,
+                        mechanicId: null,
+                        description: c.description,
+                        cost: c.cost,
+                        performedAt: c.performedAt,
+                        mileageAtService: c.mileageAtService,
+                        nextServiceDate: c.nextServiceDate,
+                        nextServiceMileage: c.nextServiceMileage,
+                        createdAt: c.performedAt,
+                      })
+                    }
+                    className="text-sm font-medium text-c1 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleting({ id: c.id, description: c.description })}
+                    className="text-sm font-medium text-crit hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 
@@ -660,7 +739,7 @@ export function MaintenancePage() {
             </select>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -712,6 +791,39 @@ export function MaintenancePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {manageLogs === null ? (
+            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+          ) : manageLogs.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No maintenance in this period.</p>
+          ) : (
+            manageLogs.map((m) => (
+              <div key={m.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-txt">{regById.get(m.motorcycleId) ?? '—'}</span>
+                  <span className="text-xs text-txt-2">{m.performedAt.slice(0, 10)}</span>
+                </div>
+                <p className="mt-1 text-xs text-txt-2">{m.description}</p>
+                <p className="mt-1 text-sm text-txt-2">{formatTZS(m.cost)}</p>
+                <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                  <button
+                    onClick={() => setFormTarget(m)}
+                    className="text-sm font-medium text-c1 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleting({ id: m.id, description: m.description })}
+                    className="text-sm font-medium text-crit hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 

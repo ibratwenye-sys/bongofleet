@@ -639,6 +639,81 @@ for (const vp of READING_VIEWPORTS) {
         await expect(tripsCardList).toBeHidden();
       }
 
+      // Stage UI4f - continue via client-side nav from Transport to
+      // Maintenance (same no-goto() reasoning as the hops above): the
+      // Fleet tab's own MobileSubNav pill on phone, the persistent
+      // sidebar's Maintenance link at tablet width.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Fleet sections' })
+          .getByRole('link', { name: 'Maintenance' })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Maintenance', exact: true }).click();
+      }
+      await expect(page.getByRole('heading', { name: 'Maintenance', exact: true })).toBeVisible();
+
+      // DEMO-MNT-A is a seeded demo vehicle/service (prisma/seed.ts,
+      // seedMaintenanceShowcase - Stage UI4f) - deliberately overdue and
+      // dated within the current month so it appears in all three tables
+      // below, same reproducible-fixture pattern as every other hop.
+      const needsBookingCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Needs booking' }),
+      });
+      const needsBookingTable = needsBookingCard.locator('table');
+      const needsBookingCardList = needsBookingCard.locator('.md\\:hidden');
+      const knownVehicleInNeedsBooking = needsBookingCardList
+        .getByText('DEMO-MNT-A')
+        .or(needsBookingTable.getByText('DEMO-MNT-A'));
+      await expect(knownVehicleInNeedsBooking.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(needsBookingTable).toBeHidden();
+        await expect(needsBookingCardList).toBeVisible();
+      } else {
+        await expect(needsBookingTable).toBeVisible();
+        await expect(needsBookingCardList).toBeHidden();
+      }
+
+      const completedCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Completed this month' }),
+      });
+      const completedTable = completedCard.locator('table');
+      const completedCardList = completedCard.locator('.md\\:hidden');
+      const knownVehicleInCompleted = completedCardList
+        .getByText('DEMO-MNT-A')
+        .or(completedTable.getByText('DEMO-MNT-A'));
+      await expect(knownVehicleInCompleted.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(completedTable).toBeHidden();
+        await expect(completedCardList).toBeVisible();
+      } else {
+        await expect(completedTable).toBeVisible();
+        await expect(completedCardList).toBeHidden();
+      }
+
+      const manageRecordsCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Manage older records' }),
+      });
+      const manageRecordsTable = manageRecordsCard.locator('table');
+      const manageRecordsCardList = manageRecordsCard.locator('.md\\:hidden');
+      const knownVehicleInManageRecords = manageRecordsCardList
+        .getByText('DEMO-MNT-A')
+        .or(manageRecordsTable.getByText('DEMO-MNT-A'));
+      await expect(knownVehicleInManageRecords.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(manageRecordsTable).toBeHidden();
+        await expect(manageRecordsCardList).toBeVisible();
+      } else {
+        await expect(manageRecordsTable).toBeVisible();
+        await expect(manageRecordsCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 
