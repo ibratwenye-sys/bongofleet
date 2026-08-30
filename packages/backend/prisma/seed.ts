@@ -528,6 +528,165 @@ async function seedApprovalsShowcase(prisma: PrismaClient, tenantId: string): Pr
   console.log('Seeded approvals showcase: DEMO-APR-A, one pending expense claim.');
 }
 
+/**
+ * Stage DM5 - guarantees the RIDER ownership-plan showcase (Amina, from
+ * seedOwnershipPlanShowcase) always has a live, unpaid DailyAssignment for
+ * TODAY's calendar date, regardless of when this script happens to run
+ * relative to OwnershipPlanGeneratorService's own nightly cron (5 0 * * *
+ * Africa/Dar_es_Salaam, registered via SchedulerRegistry in that service's
+ * onModuleInit - it does NOT run on module init, only on its own schedule).
+ * Without this, the driver app's Leo screen can show "No assignment for
+ * today yet." purely because of that timing gap - nothing actually broken,
+ * just an unhelpful demo state.
+ *
+ * Deliberately NOT gated behind seedOwnershipPlanShowcase's own DEMO-OWN-A
+ * guard, since that guard short-circuits on every run after the first - but
+ * "today" moves every day, so this needs its own check and must run (and
+ * safely no-op once today's row already exists) on every invocation.
+ *
+ * Left UNPAID on purpose - it demonstrates the "pay today" flow rather than
+ * a fait accompli, same reasoning seedApprovalsShowcase gives for leaving
+ * its own fixture PENDING rather than pre-resolved.
+ */
+async function seedTodaysLiveAssignment(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const aminaUser = await prisma.user.findFirst({
+    where: { tenantId, email: 'driver-a@bongofleet.com' },
+    include: { driverProfile: true },
+  });
+  const driver = aminaUser?.driverProfile;
+  if (!driver) {
+    // eslint-disable-next-line no-console
+    console.log(
+      "Skipping today's live assignment: Amina (driver-a@bongofleet.com) isn't seeded yet.",
+    );
+    return;
+  }
+
+  const motorcycle = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-OWN-A' },
+  });
+  if (!motorcycle) {
+    // eslint-disable-next-line no-console
+    console.log("Skipping today's live assignment: DEMO-OWN-A isn't seeded yet.");
+    return;
+  }
+
+  const plan = await prisma.ownershipPlan.findFirst({ where: { driverId: driver.id } });
+  if (!plan) {
+    // eslint-disable-next-line no-console
+    console.log("Skipping today's live assignment: Amina has no ownership plan yet.");
+    return;
+  }
+
+  const today = dateOnly(0);
+  const existing = await prisma.dailyAssignment.findFirst({
+    where: { driverId: driver.id, assignedDate: today },
+  });
+  if (existing) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `Amina already has a daily assignment for ${today.toISOString().slice(0, 10)} - nothing to do.`,
+    );
+    return;
+  }
+
+  await prisma.dailyAssignment.create({
+    data: {
+      tenantId,
+      driverId: driver.id,
+      motorcycleId: motorcycle.id,
+      ownershipPlanId: plan.id,
+      assignedDate: today,
+      targetAmount: plan.dailyAmount,
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `Seeded a live, unpaid daily assignment for Amina Hassan on ${today.toISOString().slice(0, 10)}.`,
+  );
+}
+
+/**
+ * Stage DM5 - a truck-driver demo account. Before this, no seeded Driver
+ * anywhere had driverType TRUCK_DRIVER or CAR_DRIVER (seedTransportShowcase's
+ * one TransportJob is ownerDriven: true with driverId null), so the driver
+ * app's truck/car tab bar (wired in DriverModeGate.tsx - Safari/Matumizi/
+ * Mimi) has never had a real account to view it with.
+ *
+ * John Mwakalinga is the canonical truck-driver character per the prompt
+ * that named this stage; I could not find claude/DESIGN_CANONICAL_DEMO_DATA.md
+ * anywhere in this repo to cross-check that cast-list claim against, so the
+ * name/reference/cargo/route/revenue values below are taken as given rather
+ * than independently verified against a source document.
+ *
+ * Guarded on its own registration number, same convention as the other
+ * showcase seeders.
+ */
+async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const already = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'T 908 ZAP' },
+  });
+  if (already) {
+    // eslint-disable-next-line no-console
+    console.log('Truck-driver showcase already seeded for this tenant - nothing to do.');
+    return;
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      tenantId,
+      email: 'driver-mwakalinga@bongofleet.com',
+      phone: '+255700000014',
+      passwordHash: await hashPassword('Driver1234!'),
+      role: 'RIDER',
+      firstName: 'John',
+      lastName: 'Mwakalinga',
+    },
+  });
+  const driver = await prisma.driver.create({
+    data: {
+      tenantId,
+      userId: user.id,
+      licenseNumber: 'LIC-DEMO-MWAKALINGA',
+      driverType: 'TRUCK_DRIVER',
+      nationalId: PLACEHOLDER_NATIONAL_ID,
+    },
+  });
+  const truck = await prisma.motorcycle.create({
+    data: {
+      tenantId,
+      registrationNumber: 'T 908 ZAP',
+      vehicleType: 'TRUCK',
+      currentMileage: 20000,
+    },
+  });
+
+  const today = dateOnly(0);
+  await prisma.transportJob.create({
+    data: {
+      tenantId,
+      motorcycleId: truck.id,
+      driverId: driver.id,
+      ownerDriven: false,
+      reference: 'BF-7QK2M91X',
+      origin: 'DAR ES SALAAM',
+      destination: 'MOROGORO',
+      cargo: '8 tonnes of cement',
+      revenue: 450000,
+      status: 'IN_TRANSIT',
+      scheduledDate: today,
+      pickedUpAt: today,
+      deliveredAt: null,
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log(
+    'Seeded truck-driver showcase: John Mwakalinga (driver-mwakalinga@bongofleet.com) driving T 908 ZAP, job BF-7QK2M91X to Morogoro.',
+  );
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -542,9 +701,11 @@ async function main(): Promise<void> {
   try {
     const { tenantId, ownerUserId } = await seedOwnerAndBasicDemoData(prisma);
     await seedOwnershipPlanShowcase(prisma, tenantId, ownerUserId);
+    await seedTodaysLiveAssignment(prisma, tenantId);
     await seedTransportShowcase(prisma, tenantId);
     await seedMaintenanceShowcase(prisma, tenantId);
     await seedApprovalsShowcase(prisma, tenantId);
+    await seedTruckDriverShowcase(prisma, tenantId);
   } finally {
     await prisma.$disconnect();
   }
