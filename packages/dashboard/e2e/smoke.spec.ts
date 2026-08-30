@@ -807,13 +807,53 @@ for (const vp of READING_VIEWPORTS) {
       await page.goto('/ownership');
       await expect(page.getByRole('heading', { name: 'Ownership plans' })).toBeVisible();
 
-      // Both presentations (cards below md, table at and above it) are always
-      // in the DOM, so everything here filters to the visible one rather than
-      // taking .first() - at 820 the cards come first in document order and
-      // are the hidden ones.
-      await expect(page.getByText('Amina Hassan').filter({ visible: true }).first()).toBeVisible({
+      // Stage UI4h - "All plans" (14 columns) and "Missed days and what
+      // they are worth" both split hidden md:block (table) / md:hidden
+      // (card list), same pattern as every other page's tables. Amina
+      // Hassan (DEMO-OWN-A) anchors "All plans"; Baraka Mwangi (DEMO-OWN-B)
+      // anchors "Missed days" - verified live rather than assumed from the
+      // seedOwnershipPlanShowcase comments, which describe the plans'
+      // states as of seeding, not as of today (real elapsed time has since
+      // pushed every showcase driver's missed streak well past its
+      // original amber/red design).
+      const allPlansCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'All plans' }),
+      });
+      const allPlansTable = allPlansCard.locator('table');
+      const allPlansCardList = allPlansCard.locator('.md\\:hidden');
+      const knownDriverInAllPlans = allPlansCardList
+        .getByText('Amina Hassan')
+        .or(allPlansTable.getByText('Amina Hassan'));
+      await expect(knownDriverInAllPlans.filter({ visible: true }).first()).toBeVisible({
         timeout: 15_000,
       });
+      if (vp.width < 768) {
+        await expect(allPlansTable).toBeHidden();
+        await expect(allPlansCardList).toBeVisible();
+      } else {
+        await expect(allPlansTable).toBeVisible();
+        await expect(allPlansCardList).toBeHidden();
+      }
+
+      const missedDaysCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Missed days and what they are worth' }),
+      });
+      const missedDaysTable = missedDaysCard.locator('table');
+      const missedDaysCardList = missedDaysCard.locator('.md\\:hidden');
+      const knownDriverInMissedDays = missedDaysCardList
+        .getByText('Baraka Mwangi')
+        .or(missedDaysTable.getByText('Baraka Mwangi'));
+      await expect(knownDriverInMissedDays.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(missedDaysTable).toBeHidden();
+        await expect(missedDaysCardList).toBeVisible();
+      } else {
+        await expect(missedDaysTable).toBeVisible();
+        await expect(missedDaysCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

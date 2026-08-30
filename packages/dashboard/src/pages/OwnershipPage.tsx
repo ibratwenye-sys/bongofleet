@@ -822,44 +822,76 @@ function MissedDaysTable({ rows }: { rows: OwnershipSummaryResponse['missedDaysT
       {rows.length === 0 ? (
         <p className="p-4 text-sm text-txt-2">No plan is currently behind or in a missed streak.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Driver</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 text-right font-medium">Missed streak</th>
-                <th className="px-4 py-2 text-right font-medium">Value at risk</th>
-                <th className="px-4 py-2 text-right font-medium">Recent excusals</th>
-                <th className="px-4 py-2 font-medium">Verdict</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.planId} className="border-b border-line-soft last:border-0">
-                  <td className="px-4 py-2 font-medium text-txt">
-                    <Link to={`/ownership/${r.planId}`} className="hover:underline">
-                      {r.driverName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-txt-2">{r.vehicleRegistration ?? '—'}</td>
-                  <td className="px-4 py-2 text-right text-txt-2">
-                    {r.missedStreak} day{r.missedStreak === 1 ? '' : 's'}
-                  </td>
-                  <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.valueAtRisk)}</td>
-                  <td className="px-4 py-2 text-right text-txt-2">{r.recentExcusalCount || '—'}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-xs font-medium ${VERDICT_STYLES[r.verdict]}`}
-                    >
-                      {r.verdict}
-                    </span>
-                  </td>
+        <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                  <th className="px-4 py-2 font-medium">Driver</th>
+                  <th className="px-4 py-2 font-medium">Vehicle</th>
+                  <th className="px-4 py-2 text-right font-medium">Missed streak</th>
+                  <th className="px-4 py-2 text-right font-medium">Value at risk</th>
+                  <th className="px-4 py-2 text-right font-medium">Recent excusals</th>
+                  <th className="px-4 py-2 font-medium">Verdict</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.planId} className="border-b border-line-soft last:border-0">
+                    <td className="px-4 py-2 font-medium text-txt">
+                      <Link to={`/ownership/${r.planId}`} className="hover:underline">
+                        {r.driverName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-txt-2">{r.vehicleRegistration ?? '—'}</td>
+                    <td className="px-4 py-2 text-right text-txt-2">
+                      {r.missedStreak} day{r.missedStreak === 1 ? '' : 's'}
+                    </td>
+                    <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.valueAtRisk)}</td>
+                    <td className="px-4 py-2 text-right text-txt-2">
+                      {r.recentExcusalCount || '—'}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${VERDICT_STYLES[r.verdict]}`}
+                      >
+                        {r.verdict}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden">
+            {rows.map((r) => (
+              <div key={r.planId} className="border-b border-line-soft px-4 py-3 last:border-0">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    to={`/ownership/${r.planId}`}
+                    className="font-medium text-txt hover:underline"
+                  >
+                    {r.driverName}
+                  </Link>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${VERDICT_STYLES[r.verdict]}`}
+                  >
+                    {r.verdict}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-txt-2">{r.vehicleRegistration ?? '—'}</p>
+                <div className="mt-1 flex items-center justify-between text-xs text-txt-2">
+                  <span>
+                    {r.missedStreak} day{r.missedStreak === 1 ? '' : 's'} missed ·{' '}
+                    {r.recentExcusalCount || '—'} recent excusals
+                  </span>
+                  <span className="text-sm font-medium text-txt">{formatTZS(r.valueAtRisk)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </Card>
   );
@@ -1003,7 +1035,7 @@ export function OwnershipPage() {
       <ChassisGrid
         main={
           <Card title="All plans" subtitle={`${plans.length} shown`}>
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -1115,6 +1147,115 @@ export function OwnershipPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div className="md:hidden">
+              {plans.length === 0 ? (
+                <p className="p-4 text-center text-sm text-txt-2">No ownership plans yet.</p>
+              ) : (
+                plans.map((plan) => {
+                  const severity = positionSeverity(
+                    plan.daysBehind,
+                    plan.consecutiveMissedDays,
+                    plan.graceDays,
+                    plan.breachAfterConsecutiveMissedDays,
+                  );
+                  const totalOwed = parseFloat(plan.amountPaid) + parseFloat(plan.remainingToOwn);
+                  const progressPct =
+                    totalOwed > 0
+                      ? Math.min(100, (parseFloat(plan.amountPaid) / totalOwed) * 100)
+                      : 0;
+                  const severityBorder =
+                    severity === 'red'
+                      ? 'border-l-[3px] border-l-crit'
+                      : severity === 'amber'
+                        ? 'border-l-[3px] border-l-warn'
+                        : '';
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`border-b border-line-soft px-4 py-3 last:border-0 ${severityBorder}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Link
+                          to={`/ownership/${plan.id}`}
+                          className="font-medium text-txt hover:underline"
+                        >
+                          {plan.driver
+                            ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}`
+                            : '—'}
+                        </Link>
+                        <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
+                      </div>
+                      <p className="mt-0.5 text-xs text-txt-2">
+                        {plan.motorcycle?.registrationNumber ?? '—'}
+                      </p>
+                      {plan.pastDeadlineStillOwing && (
+                        <span
+                          className={`mt-1 inline-block rounded px-1.5 py-0.5 text-xs font-medium ${PAST_DEADLINE_BADGE_STYLES}`}
+                        >
+                          Past deadline, still owing
+                        </span>
+                      )}
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                          <div className="h-full bg-c1" style={{ width: `${progressPct}%` }} />
+                        </div>
+                        <span className="text-xs text-txt-3">{Math.round(progressPct)}%</span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                        <div>
+                          <dt className="text-txt-3">Daily amount</dt>
+                          <dd className="text-txt">{formatTZS(plan.dailyAmount)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Remaining</dt>
+                          <dd className="text-txt">{formatTZS(plan.remainingToOwn)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Position</dt>
+                          <dd className={SEVERITY_TEXT_STYLES[severity]}>
+                            {positionLabel(plan.daysBehind, plan.daysAhead)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Missed streak</dt>
+                          <dd className={SEVERITY_TEXT_STYLES[severity]}>
+                            {missedStreakLabel(plan.consecutiveMissedDays)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Recent excusals</dt>
+                          <dd className="text-txt">
+                            {recentExcusalLabel(plan.recentExcusalCount)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Start</dt>
+                          <dd className="text-txt">{plan.startDate.slice(0, 10)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">End</dt>
+                          <dd className="text-txt">
+                            <EndDateCell
+                              contractEndDate={plan.contractEndDate}
+                              derivedEndDate={plan.derivedEndDate}
+                            />
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-txt-3">Days left</dt>
+                          <dd className="text-txt">{plan.daysLeft}</dd>
+                        </div>
+                        <div className="col-span-2">
+                          <dt className="text-txt-3">Projected completion</dt>
+                          <dd className="text-txt">{plan.projectedCompletion}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </Card>
         }
