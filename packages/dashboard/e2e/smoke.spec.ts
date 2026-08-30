@@ -714,6 +714,92 @@ for (const vp of READING_VIEWPORTS) {
         await expect(manageRecordsCardList).toBeHidden();
       }
 
+      // Stage UI4g - continue via client-side nav from Maintenance to
+      // Payments (same no-goto() reasoning as every hop above). This is
+      // the first hop that crosses NAV_GROUPS groups (Fleet -> Money), not
+      // just pages within the same group, so the phone step differs: the
+      // bottom tab bar's own "Money" link (no cross-group MobileSubNav
+      // pill exists), matched with a regex since BottomTabBar.tsx appends
+      // a NavBadge (pending-approvals count) as a child of the label, same
+      // reasoning UI4b already used for the Fleet tab's own /^Fleet/
+      // match. Money's tab links straight to /payments (NAV_GROUPS's
+      // Money group first item), so this one click lands directly here.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Tab bar' })
+          .getByRole('link', { name: /^Money/ })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Payments', exact: true }).click();
+      }
+      // exact: true - PaymentsPage also has a Card titled "All payments",
+      // which a loose match cross-matches under strict mode.
+      await expect(page.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
+
+      // Every DailyPayment seedOwnerAndBasicDemoData/seedOwnershipPlanShowcase
+      // create leaves paymentMethod unset, so payment-summary.service.ts's
+      // getMethodBreakdown buckets all of them under 'UNSPECIFIED' - a
+      // real, reproducible row, verified against a fresh reseed (not
+      // assumed) rather than added as a new fixture. Amina Hassan's own
+      // ownership-plan payments anchor "All payments", same as every
+      // other Fleet-group hop.
+      const reconciliationStatusCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Reconciliation status' }),
+      });
+      const reconciliationStatusTable = reconciliationStatusCard.locator('table');
+      const reconciliationStatusCardList = reconciliationStatusCard.locator('.md\\:hidden');
+      const knownMethodInStatus = reconciliationStatusCardList
+        .getByText('UNSPECIFIED')
+        .or(reconciliationStatusTable.getByText('UNSPECIFIED'));
+      await expect(knownMethodInStatus.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(reconciliationStatusTable).toBeHidden();
+        await expect(reconciliationStatusCardList).toBeVisible();
+      } else {
+        await expect(reconciliationStatusTable).toBeVisible();
+        await expect(reconciliationStatusCardList).toBeHidden();
+      }
+
+      const reconciliationByMethodCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Reconciliation by method' }),
+      });
+      const reconciliationByMethodTable = reconciliationByMethodCard.locator('table');
+      const reconciliationByMethodCardList = reconciliationByMethodCard.locator('.md\\:hidden');
+      const knownMethodByMethod = reconciliationByMethodCardList
+        .getByText('UNSPECIFIED')
+        .or(reconciliationByMethodTable.getByText('UNSPECIFIED'));
+      await expect(knownMethodByMethod.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(reconciliationByMethodTable).toBeHidden();
+        await expect(reconciliationByMethodCardList).toBeVisible();
+      } else {
+        await expect(reconciliationByMethodTable).toBeVisible();
+        await expect(reconciliationByMethodCardList).toBeHidden();
+      }
+
+      const allPaymentsCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'All payments' }),
+      });
+      const allPaymentsTable = allPaymentsCard.locator('table');
+      const allPaymentsCardList = allPaymentsCard.locator('.md\\:hidden');
+      const knownDriverInPayments = allPaymentsCardList
+        .getByText('Amina Hassan')
+        .or(allPaymentsTable.getByText('Amina Hassan'));
+      await expect(knownDriverInPayments.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(allPaymentsTable).toBeHidden();
+        await expect(allPaymentsCardList).toBeVisible();
+      } else {
+        await expect(allPaymentsTable).toBeVisible();
+        await expect(allPaymentsCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

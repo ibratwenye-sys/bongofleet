@@ -93,36 +93,58 @@ function MethodBreakdownTable({ rows }: { rows: MethodBreakdownRow[] }) {
     return <p className="p-4 text-sm text-txt-2">No payments in this period.</p>;
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-            <th className="px-4 py-2 font-medium">Method</th>
-            <th className="px-4 py-2 text-right font-medium">Count</th>
-            <th className="px-4 py-2 text-right font-medium">Amount</th>
-            <th className="px-4 py-2 text-right font-medium">Pending</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.method} className="border-b border-line-soft last:border-0">
-              <td className="px-4 py-2 font-medium text-txt">{r.method}</td>
-              <td className="px-4 py-2 text-right text-txt-2">{r.count}</td>
-              <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.amount)}</td>
-              <td className="px-4 py-2 text-right">
-                {r.pendingCount > 0 ? (
-                  <span className="text-warn">
-                    {r.pendingCount} · {formatTZS(r.pendingAmount)}
-                  </span>
-                ) : (
-                  <span className="text-txt-3">—</span>
-                )}
-              </td>
+    <>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+              <th className="px-4 py-2 font-medium">Method</th>
+              <th className="px-4 py-2 text-right font-medium">Count</th>
+              <th className="px-4 py-2 text-right font-medium">Amount</th>
+              <th className="px-4 py-2 text-right font-medium">Pending</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.method} className="border-b border-line-soft last:border-0">
+                <td className="px-4 py-2 font-medium text-txt">{r.method}</td>
+                <td className="px-4 py-2 text-right text-txt-2">{r.count}</td>
+                <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.amount)}</td>
+                <td className="px-4 py-2 text-right">
+                  {r.pendingCount > 0 ? (
+                    <span className="text-warn">
+                      {r.pendingCount} · {formatTZS(r.pendingAmount)}
+                    </span>
+                  ) : (
+                    <span className="text-txt-3">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden">
+        {rows.map((r) => (
+          <div key={r.method} className="border-b border-line-soft px-4 py-3 last:border-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium text-txt">{r.method}</span>
+              {r.pendingCount > 0 ? (
+                <span className="text-warn">
+                  {r.pendingCount} · {formatTZS(r.pendingAmount)}
+                </span>
+              ) : (
+                <span className="text-txt-3">—</span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-txt-2">
+              {r.count} · {formatTZS(r.amount)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -340,7 +362,7 @@ export function PaymentsPage() {
             ))}
           </select>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -401,6 +423,52 @@ export function PaymentsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {filtered.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No payments found.</p>
+          ) : (
+            filtered.map((p) => {
+              const driver = driverById.get(p.driverId);
+              return (
+                <div key={p.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-txt">
+                      {driver
+                        ? `${driver.user.firstName} ${driver.user.lastName}`
+                        : 'Unknown driver'}
+                    </span>
+                    <span className="text-xs text-txt-2">{p.createdAt.slice(0, 10)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-sm">
+                    <span className="text-txt-2">
+                      {formatTZS(p.amount)} · {p.paymentMethod ?? '—'}
+                    </span>
+                    <StatusBadge status={p.status} styles={PAYMENT_STATUS_STYLES} />
+                  </div>
+                  {p.status === 'PENDING' && (
+                    <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                      <button
+                        disabled={updatingId === p.id}
+                        onClick={() => void handleUpdateStatus(p, 'COMPLETED')}
+                        className="text-sm font-medium text-txt hover:underline disabled:opacity-50"
+                      >
+                        Reconcile
+                      </button>
+                      <button
+                        disabled={updatingId === p.id}
+                        onClick={() => void handleUpdateStatus(p, 'FAILED')}
+                        className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
+                      >
+                        Mark failed
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
