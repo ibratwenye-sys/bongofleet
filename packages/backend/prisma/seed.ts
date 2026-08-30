@@ -361,6 +361,72 @@ async function seedOwnershipPlanShowcase(
   );
 }
 
+/**
+ * Stage UI-FIX2 - a minimal, reproducible TransportPage fixture. Every
+ * other mobile-card e2e hop (Fleet, Drivers, Assignments) anchors on a
+ * real seed.ts fixture that survives a fresh reseed; Transport had none,
+ * so its own e2e coverage had to fall back to live dev-DB data. This is
+ * the smoke-test-sized fix - one vehicle, one completed trip, one
+ * expense - not a second full showcase like seedOwnershipPlanShowcase.
+ *
+ * Guarded on DEMO-TRN-A already existing, same convention as
+ * seedOwnershipPlanShowcase's DEMO-OWN-A guard.
+ */
+async function seedTransportShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const already = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-TRN-A' },
+  });
+  if (already) {
+    // eslint-disable-next-line no-console
+    console.log('Transport showcase already seeded for this tenant - nothing to do.');
+    return;
+  }
+
+  const truck = await prisma.motorcycle.create({
+    data: {
+      tenantId,
+      registrationNumber: 'DEMO-TRN-A',
+      vehicleType: 'TRUCK',
+      currentMileage: 20000,
+    },
+  });
+
+  const scheduledDate = dateOnly(1);
+  const job = await prisma.transportJob.create({
+    data: {
+      tenantId,
+      motorcycleId: truck.id,
+      ownerDriven: true,
+      reference: 'BF-DEMO-TRN-A',
+      origin: 'DAR ES SALAAM',
+      destination: 'ARUSHA',
+      revenue: 800000,
+      status: 'DELIVERED',
+      scheduledDate,
+      pickedUpAt: scheduledDate,
+      deliveredAt: scheduledDate,
+    },
+  });
+
+  // A modest fuel expense against the job - real cost/profit numbers
+  // instead of a zero-cost trip, same reasoning as
+  // seedOwnerAndBasicDemoData's own "enough for Reports to show real
+  // numbers."
+  await prisma.expense.create({
+    data: {
+      tenantId,
+      motorcycleId: truck.id,
+      transportJobId: job.id,
+      category: 'Fuel',
+      amount: 120000,
+      incurredAt: scheduledDate,
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('Seeded transport showcase: DEMO-TRN-A, one delivered trip with a fuel expense.');
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -375,6 +441,7 @@ async function main(): Promise<void> {
   try {
     const { tenantId, ownerUserId } = await seedOwnerAndBasicDemoData(prisma);
     await seedOwnershipPlanShowcase(prisma, tenantId, ownerUserId);
+    await seedTransportShowcase(prisma, tenantId);
   } finally {
     await prisma.$disconnect();
   }

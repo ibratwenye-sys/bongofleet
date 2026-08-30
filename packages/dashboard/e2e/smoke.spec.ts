@@ -598,20 +598,17 @@ for (const vp of READING_VIEWPORTS) {
       }
       await expect(page.getByRole('heading', { name: 'Transport', exact: true })).toBeVisible();
 
-      // prisma/seed.ts seeds no transport jobs at all - unlike the fleet/
-      // driver/assignment fixtures the earlier hops rely on, there is no
-      // reproducible seed for this page. '987654321' / job "BF-26XEAEKH"
-      // is real data already present in this dev DB (verified live, not
-      // assumed) rather than a script-guaranteed fixture; a fresh reseed
-      // would need a new stand-in here.
+      // DEMO-TRN-A is a seeded demo transport vehicle/job (prisma/seed.ts,
+      // seedTransportShowcase - Stage UI-FIX2), stable across a fresh
+      // reseed just like DEMO-OWN-A/Amina Hassan earlier in this chain.
       const perVehicleCard = page.locator('div.rounded-lg', {
         has: page.getByRole('heading', { name: 'Per vehicle, this month' }),
       });
       const perVehicleTable = perVehicleCard.locator('table');
       const perVehicleCardList = perVehicleCard.locator('.md\\:hidden');
       const knownVehicleInTransport = perVehicleCardList
-        .getByText('987654321')
-        .or(perVehicleTable.getByText('987654321'));
+        .getByText('DEMO-TRN-A')
+        .or(perVehicleTable.getByText('DEMO-TRN-A'));
       await expect(knownVehicleInTransport.filter({ visible: true }).first()).toBeVisible({
         timeout: 15_000,
       });
@@ -628,7 +625,9 @@ for (const vp of READING_VIEWPORTS) {
       });
       const tripsTable = tripsCard.locator('table');
       const tripsCardList = tripsCard.locator('.md\\:hidden');
-      const knownTrip = tripsCardList.getByText('987654321').or(tripsTable.getByText('987654321'));
+      const knownTrip = tripsCardList
+        .getByText('DEMO-TRN-A')
+        .or(tripsTable.getByText('DEMO-TRN-A'));
       await expect(knownTrip.filter({ visible: true }).first()).toBeVisible({
         timeout: 15_000,
       });
