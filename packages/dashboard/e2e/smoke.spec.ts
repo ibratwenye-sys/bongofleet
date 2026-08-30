@@ -800,6 +800,72 @@ for (const vp of READING_VIEWPORTS) {
         await expect(allPaymentsCardList).toBeHidden();
       }
 
+      // Stage UI4i - continue via client-side nav from Payments to
+      // Expenses (same no-goto() reasoning as every hop above). Both are
+      // in the Money group, so this is back to the normal same-group
+      // pattern: the "Money sections" MobileSubNav pill row on phone
+      // (confirmed live - MobileSubNav.tsx's aria-label is
+      // `${activeGroupLabel} sections`, so "Money sections" here, same
+      // as the pill row Fleet's own hops used), the persistent sidebar's
+      // Expenses link at tablet width.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Money sections' })
+          .getByRole('link', { name: 'Expenses' })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Expenses', exact: true }).click();
+      }
+      // exact: true - ExpensesPage also has a Card titled "All expenses",
+      // which a loose match cross-matches under strict mode.
+      await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible();
+
+      // DEMO-TRN-A is the same seeded demo vehicle UI-FIX2 added for
+      // Transport (prisma/seed.ts, seedTransportShowcase) - its one Fuel
+      // expense (120,000, no other expense/maintenance activity in its
+      // own trailing 3-month window) clears both getVehicleAnomalies'
+      // ANOMALY_FLOOR (50,000) and ANOMALY_MULTIPLIER (trailingAvg is 0,
+      // so the check passes trivially), verified against a fresh reseed
+      // via direct SQL rather than assumed - a real, reproducible row in
+      // both tables below, no new fixture needed.
+      const vehicleAnomaliesCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Vehicles costing more than they should' }),
+      });
+      const vehicleAnomaliesTable = vehicleAnomaliesCard.locator('table');
+      const vehicleAnomaliesCardList = vehicleAnomaliesCard.locator('.md\\:hidden');
+      const knownVehicleInAnomalies = vehicleAnomaliesCardList
+        .getByText('DEMO-TRN-A')
+        .or(vehicleAnomaliesTable.getByText('DEMO-TRN-A'));
+      await expect(knownVehicleInAnomalies.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(vehicleAnomaliesTable).toBeHidden();
+        await expect(vehicleAnomaliesCardList).toBeVisible();
+      } else {
+        await expect(vehicleAnomaliesTable).toBeVisible();
+        await expect(vehicleAnomaliesCardList).toBeHidden();
+      }
+
+      const allExpensesCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'All expenses' }),
+      });
+      const allExpensesTable = allExpensesCard.locator('table');
+      const allExpensesCardList = allExpensesCard.locator('.md\\:hidden');
+      const knownVehicleInExpenses = allExpensesCardList
+        .getByText('DEMO-TRN-A')
+        .or(allExpensesTable.getByText('DEMO-TRN-A'));
+      await expect(knownVehicleInExpenses.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(allExpensesTable).toBeHidden();
+        await expect(allExpensesCardList).toBeVisible();
+      } else {
+        await expect(allExpensesTable).toBeVisible();
+        await expect(allExpensesCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

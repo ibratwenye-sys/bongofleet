@@ -317,40 +317,67 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
       {rows.length === 0 ? (
         <p className="p-4 text-sm text-txt-2">No vehicle is costing more than usual right now.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Type</th>
-                <th className="px-4 py-2 text-right font-medium">Current cost</th>
-                <th className="px-4 py-2 text-right font-medium">3-month average</th>
-                <th className="px-4 py-2 text-right font-medium">Change</th>
-                <th className="px-4 py-2 font-medium">Top category</th>
-                <th className="px-4 py-2 font-medium">Verdict</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.motorcycleId} className="border-b border-line-soft last:border-0">
-                  <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
-                  <td className="px-4 py-2 text-txt-2">{VEHICLE_TYPE_LABELS[r.vehicleType]}</td>
-                  <td className="px-4 py-2 text-right text-txt-2">
-                    {formatTZS(r.currentPeriodCost)}
-                  </td>
-                  <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.trailing3MoAvg)}</td>
-                  <td className="px-4 py-2 text-right text-crit">+{r.changePct}%</td>
-                  <td className="px-4 py-2 text-txt-2">{r.pattern}</td>
-                  <td className="px-4 py-2">
-                    <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
-                      Flagged
-                    </span>
-                  </td>
+        <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                  <th className="px-4 py-2 font-medium">Vehicle</th>
+                  <th className="px-4 py-2 font-medium">Type</th>
+                  <th className="px-4 py-2 text-right font-medium">Current cost</th>
+                  <th className="px-4 py-2 text-right font-medium">3-month average</th>
+                  <th className="px-4 py-2 text-right font-medium">Change</th>
+                  <th className="px-4 py-2 font-medium">Top category</th>
+                  <th className="px-4 py-2 font-medium">Verdict</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.motorcycleId} className="border-b border-line-soft last:border-0">
+                    <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
+                    <td className="px-4 py-2 text-txt-2">{VEHICLE_TYPE_LABELS[r.vehicleType]}</td>
+                    <td className="px-4 py-2 text-right text-txt-2">
+                      {formatTZS(r.currentPeriodCost)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-txt-2">
+                      {formatTZS(r.trailing3MoAvg)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-crit">+{r.changePct}%</td>
+                    <td className="px-4 py-2 text-txt-2">{r.pattern}</td>
+                    <td className="px-4 py-2">
+                      <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
+                        Flagged
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden">
+            {rows.map((r) => (
+              <div
+                key={r.motorcycleId}
+                className="border-b border-line-soft px-4 py-3 last:border-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-txt">
+                    {r.registrationNumber} · {VEHICLE_TYPE_LABELS[r.vehicleType]}
+                  </span>
+                  <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
+                    Flagged
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-txt-2">
+                  {formatTZS(r.currentPeriodCost)} vs {formatTZS(r.trailing3MoAvg)} avg ·{' '}
+                  <span className="text-crit">+{r.changePct}%</span>
+                </p>
+                <p className="mt-1 text-xs text-txt-2">{r.pattern}</p>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </Card>
   );
@@ -558,7 +585,7 @@ export function ExpensesPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -612,6 +639,42 @@ export function ExpensesPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {expenses === null ? (
+            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+          ) : expenses.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No expenses in this period.</p>
+          ) : (
+            expenses.map((e) => (
+              <div key={e.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-txt">{e.category}</span>
+                  <span className="text-xs text-txt-2">{e.incurredAt.slice(0, 10)}</span>
+                </div>
+                <p className="mt-1 text-xs text-txt-2">
+                  {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : 'Fleet-wide'}
+                  {e.description ? ` · ${e.description}` : ''}
+                </p>
+                <p className="mt-1 text-sm text-txt-2">{formatTZS(e.amount)}</p>
+                <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                  <button
+                    onClick={() => setFormTarget(e)}
+                    className="text-sm font-medium text-txt hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleting(e)}
+                    className="text-sm font-medium text-crit hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 
