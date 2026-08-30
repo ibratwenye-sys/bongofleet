@@ -470,6 +470,64 @@ for (const vp of READING_VIEWPORTS) {
         await expect(cardList).toBeHidden();
       }
       await expectNoSidewaysScroll(page);
+
+      // Stage UI4c - continue via client-side nav from Fleet to Drivers
+      // (same no-goto() reasoning as the Fleet hop above): the Fleet tab's
+      // own MobileSubNav pill on phone, the persistent sidebar's Drivers
+      // link at tablet width.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Fleet sections' })
+          .getByRole('link', { name: 'Drivers' })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Drivers', exact: true }).click();
+      }
+      await expect(page.getByRole('heading', { name: 'Drivers', exact: true })).toBeVisible();
+
+      // Amina Hassan is a seeded demo driver (prisma/seed.ts) with
+      // assignment history, so she appears in both the scored "Driver
+      // performance" table below and "Manage drivers" further down -
+      // stable across runs, unlike this suite's own generated data.
+      const performanceCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Driver performance' }),
+      });
+      const perfTable = performanceCard.locator('table');
+      const perfCardList = performanceCard.locator('.md\\:hidden');
+      const knownDriverInPerf = perfCardList
+        .getByText('Amina Hassan')
+        .or(perfTable.getByText('Amina Hassan'));
+      await expect(knownDriverInPerf.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(perfTable).toBeHidden();
+        await expect(perfCardList).toBeVisible();
+      } else {
+        await expect(perfTable).toBeVisible();
+        await expect(perfCardList).toBeHidden();
+      }
+
+      const manageCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Manage drivers' }),
+      });
+      const manageTable = manageCard.locator('table');
+      const manageCardList = manageCard.locator('.md\\:hidden');
+      const knownDriverInManage = manageCardList
+        .getByText('Amina Hassan')
+        .or(manageTable.getByText('Amina Hassan'));
+      await expect(knownDriverInManage.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(manageTable).toBeHidden();
+        await expect(manageCardList).toBeVisible();
+      } else {
+        await expect(manageTable).toBeVisible();
+        await expect(manageCardList).toBeHidden();
+      }
+
+      await expectNoSidewaysScroll(page);
     });
 
     test('the Ownership list is readable without scrolling sideways', async ({ page }) => {

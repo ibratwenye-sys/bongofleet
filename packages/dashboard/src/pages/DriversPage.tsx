@@ -588,33 +588,69 @@ export function DriversPage() {
                   No driver has any assignment history yet - nothing to score.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                        <th className="px-4 py-2 text-right font-medium">Score</th>
-                        <th className="px-4 py-2 font-medium">Driver</th>
-                        <th className="px-4 py-2 font-medium">Category</th>
-                        <th className="px-4 py-2 font-medium">6-month trend</th>
-                        <th className="px-4 py-2 font-medium">Note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.drivers.map((d) => (
-                        <tr
-                          key={d.driverId}
-                          onClick={() => setSelectedId(d.driverId)}
-                          className={`cursor-pointer border-b border-line-soft last:border-0 hover:bg-panel-2 ${
-                            d.driverId === selectedId ? 'bg-panel-2' : ''
-                          }`}
-                        >
-                          <td
-                            className="px-4 py-2 text-right text-lg font-bold"
-                            style={{ color: `var(--${BAND_ACCENT[d.band]})` }}
+                <>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                          <th className="px-4 py-2 text-right font-medium">Score</th>
+                          <th className="px-4 py-2 font-medium">Driver</th>
+                          <th className="px-4 py-2 font-medium">Category</th>
+                          <th className="px-4 py-2 font-medium">6-month trend</th>
+                          <th className="px-4 py-2 font-medium">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.drivers.map((d) => (
+                          <tr
+                            key={d.driverId}
+                            onClick={() => setSelectedId(d.driverId)}
+                            className={`cursor-pointer border-b border-line-soft last:border-0 hover:bg-panel-2 ${
+                              d.driverId === selectedId ? 'bg-panel-2' : ''
+                            }`}
                           >
-                            {d.display}
-                          </td>
-                          <td className="px-4 py-2">
+                            <td
+                              className="px-4 py-2 text-right text-lg font-bold"
+                              style={{ color: `var(--${BAND_ACCENT[d.band]})` }}
+                            >
+                              {d.display}
+                            </td>
+                            <td className="px-4 py-2">
+                              <Link
+                                to={`/drivers/${d.driverId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-medium text-txt hover:underline"
+                              >
+                                {d.firstName} {d.lastName}
+                              </Link>
+                              <div className="text-xs text-txt-2">
+                                {d.registrationNumber ?? '—'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-txt-2">
+                              {CATEGORY_LABELS[d.driverType]}
+                            </td>
+                            <td className="px-4 py-2">
+                              <Sparkline points={d.sixMonthOnTimeRate} />
+                            </td>
+                            <td className="px-4 py-2 text-txt-2">{d.note}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:hidden">
+                    {data.drivers.map((d) => (
+                      <div
+                        key={d.driverId}
+                        onClick={() => setSelectedId(d.driverId)}
+                        className={`cursor-pointer border-b border-line-soft px-4 py-3 last:border-0 ${
+                          d.driverId === selectedId ? 'bg-panel-2' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
                             <Link
                               to={`/drivers/${d.driverId}`}
                               onClick={(e) => e.stopPropagation()}
@@ -623,17 +659,25 @@ export function DriversPage() {
                               {d.firstName} {d.lastName}
                             </Link>
                             <div className="text-xs text-txt-2">{d.registrationNumber ?? '—'}</div>
-                          </td>
-                          <td className="px-4 py-2 text-txt-2">{CATEGORY_LABELS[d.driverType]}</td>
-                          <td className="px-4 py-2">
-                            <Sparkline points={d.sixMonthOnTimeRate} />
-                          </td>
-                          <td className="px-4 py-2 text-txt-2">{d.note}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                          <span
+                            className="shrink-0 text-lg font-bold"
+                            style={{ color: `var(--${BAND_ACCENT[d.band]})` }}
+                          >
+                            {d.display}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <span className="text-xs text-txt-2">
+                            {CATEGORY_LABELS[d.driverType]}
+                          </span>
+                          <Sparkline points={d.sixMonthOnTimeRate} />
+                        </div>
+                        <p className="mt-1 text-xs text-txt-2">{d.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </Card>
 
@@ -772,7 +816,7 @@ export function DriversPage() {
             Show deactivated
           </label>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -853,6 +897,69 @@ export function DriversPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {allDrivers === null ? (
+            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+          ) : filteredManageDrivers.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No drivers found.</p>
+          ) : (
+            filteredManageDrivers.map((d) => (
+              <div
+                key={d.id}
+                className={`border-b border-line-soft px-4 py-3 last:border-0 ${
+                  d.isActive ? '' : 'opacity-50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-txt">
+                    {d.user.firstName} {d.user.lastName}
+                  </span>
+                  {!d.isActive && <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />}
+                </div>
+                <p className="mt-1 text-xs text-txt-2">
+                  {CATEGORY_LABELS[d.driverType]} · {d.user.phone}
+                </p>
+                <div className="mt-1 text-xs text-txt-2">
+                  <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
+                </div>
+                <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                  {d.isActive ? (
+                    <>
+                      <button
+                        onClick={() => setFormTarget(d)}
+                        className="text-sm font-medium text-c1 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      {user?.role === 'OWNER' && (
+                        <button
+                          onClick={() => setResettingPassword(d)}
+                          className="text-sm font-medium text-c1 hover:underline"
+                        >
+                          Reset password
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setDeactivating(d)}
+                        className="text-sm font-medium text-crit hover:underline"
+                      >
+                        Deactivate
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setReactivating(d)}
+                      className="text-sm font-medium text-c1 hover:underline"
+                    >
+                      Reactivate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 
