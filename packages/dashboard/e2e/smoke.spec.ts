@@ -527,6 +527,63 @@ for (const vp of READING_VIEWPORTS) {
         await expect(manageCardList).toBeHidden();
       }
 
+      // Stage UI4d - continue via client-side nav from Drivers to
+      // Assignments (same no-goto() reasoning as the hops above): the
+      // Fleet tab's own MobileSubNav pill on phone, the persistent
+      // sidebar's Assignments link at tablet width.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Fleet sections' })
+          .getByRole('link', { name: 'Assignments' })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Assignments', exact: true }).click();
+      }
+      await expect(page.getByRole('heading', { name: 'Assignments', exact: true })).toBeVisible();
+
+      // DEMO-OWN-A is the same seeded demo vehicle/driver pairing UI4b/c
+      // already rely on (Amina Hassan's ownership-plan showcase vehicle,
+      // prisma/seed.ts) - verified live that it's genuinely unassigned
+      // ("Vehicles in stock") and that Amina's own DailyAssignment rows
+      // land inside "Manage assignments"'s 25-row cap, rather than assumed.
+      const stockCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Vehicles in stock' }),
+      });
+      const stockTable = stockCard.locator('table');
+      const stockCardList = stockCard.locator('.md\\:hidden');
+      const knownVehicleInStock = stockCardList
+        .getByText('DEMO-OWN-A')
+        .or(stockTable.getByText('DEMO-OWN-A'));
+      await expect(knownVehicleInStock.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(stockTable).toBeHidden();
+        await expect(stockCardList).toBeVisible();
+      } else {
+        await expect(stockTable).toBeVisible();
+        await expect(stockCardList).toBeHidden();
+      }
+
+      const manageAssignmentsCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Manage assignments' }),
+      });
+      const assignmentsTable = manageAssignmentsCard.locator('table');
+      const assignmentsCardList = manageAssignmentsCard.locator('.md\\:hidden');
+      const knownDriverInAssignments = assignmentsCardList
+        .getByText('Amina Hassan')
+        .or(assignmentsTable.getByText('Amina Hassan'));
+      await expect(knownDriverInAssignments.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(assignmentsTable).toBeHidden();
+        await expect(assignmentsCardList).toBeVisible();
+      } else {
+        await expect(assignmentsTable).toBeVisible();
+        await expect(assignmentsCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

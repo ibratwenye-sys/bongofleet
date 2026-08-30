@@ -461,7 +461,7 @@ export function AssignmentsPage() {
         title="Vehicles in stock"
         subtitle={`${data.unassignedNow.length} · each one is a decision, not a status`}
       >
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -500,6 +500,37 @@ export function AssignmentsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {data.unassignedNow.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">Nothing in stock right now.</p>
+          ) : (
+            data.unassignedNow.map((v) => (
+              <div
+                key={v.motorcycleId}
+                className="border-b border-line-soft px-4 py-3 last:border-0"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-txt">
+                    {v.registrationNumber} · {v.vehicleType.toLowerCase()}
+                  </span>
+                  <span className="shrink-0 text-txt-3">{v.daysUnassigned}d</span>
+                </div>
+                <p className="mt-1 text-xs text-txt-2">
+                  {v.operatingArea ?? '—'} · {v.reason}
+                </p>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-txt-2">
+                    {v.dailyTarget ? formatTZS(v.dailyTarget) : '—'}
+                  </span>
+                  <span className="font-medium text-crit">
+                    {v.lostSoFar ? formatTZS(v.lostSoFar) : '—'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 
@@ -563,7 +594,7 @@ export function AssignmentsPage() {
       />
 
       <Card title="Manage assignments" subtitle="record a payment or delete a specific assignment">
-        <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3">
           <label className="text-sm text-txt-2">Filter by date:</label>
           <input
             type="date"
@@ -580,7 +611,7 @@ export function AssignmentsPage() {
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -658,6 +689,66 @@ export function AssignmentsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {assignments === null ? (
+            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+          ) : filteredAssignments.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No assignments found.</p>
+          ) : (
+            filteredAssignments.slice(0, 25).map((a) => {
+              const driver = driverById.get(a.driverId);
+              const motorcycle = motorcycleById.get(a.motorcycleId);
+              const assignmentPayments = paymentsByAssignment.get(a.id) ?? [];
+              const paidTotal = assignmentPayments
+                .filter((p) => p.status === 'COMPLETED')
+                .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+              const latest = assignmentPayments[0] ?? null;
+              return (
+                <div key={a.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-txt">
+                      {driver
+                        ? `${driver.user.firstName} ${driver.user.lastName}`
+                        : 'Unknown driver'}
+                    </span>
+                    <span className="text-xs text-txt-2">{a.assignedDate.slice(0, 10)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-txt-2">
+                    {motorcycle?.registrationNumber ?? 'Unknown vehicle'} ·{' '}
+                    {formatTZS(a.targetAmount)}
+                  </p>
+                  <div className="mt-1 text-sm text-txt-2">
+                    {assignmentPayments.length === 0 ? (
+                      'No payments yet'
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        {formatTZS(paidTotal)} / {formatTZS(a.targetAmount)}
+                        {latest && (
+                          <StatusBadge status={latest.status} styles={PAYMENT_STATUS_STYLES} />
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                    <button
+                      onClick={() => setPaymentTarget(a)}
+                      className="text-sm font-medium text-c1 hover:underline"
+                    >
+                      Record payment
+                    </button>
+                    <button
+                      onClick={() => setDeleting(a)}
+                      className="text-sm font-medium text-crit hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
