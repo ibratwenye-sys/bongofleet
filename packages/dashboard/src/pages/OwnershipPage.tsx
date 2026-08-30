@@ -912,14 +912,14 @@ function TwoBalancesCard({ balances }: { balances: OwnershipSummaryResponse['two
       <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
         <div>
           <p className="text-xs text-txt-2">Remaining to own</p>
-          <p className="mt-1 text-lg font-semibold text-txt">
+          <p className="mt-1 text-lg font-semibold text-txt [overflow-wrap:anywhere]">
             {formatTZS(balances.remainingToOwn)}
           </p>
           <p className="text-[11px] text-txt-3">what drivers still owe</p>
         </div>
         <div>
           <p className="text-xs text-txt-2">Remaining to bill</p>
-          <p className="mt-1 text-lg font-semibold text-txt">
+          <p className="mt-1 text-lg font-semibold text-txt [overflow-wrap:anywhere]">
             {formatTZS(balances.remainingToBill)}
           </p>
           <p className="text-[11px] text-txt-3">what the generator may still bill</p>
@@ -927,7 +927,7 @@ function TwoBalancesCard({ balances }: { balances: OwnershipSummaryResponse['two
         <div>
           <p className="text-xs text-txt-2">Arrears</p>
           <p
-            className={`mt-1 text-lg font-semibold ${balances.arrears !== '0.00' ? 'text-crit' : 'text-txt'}`}
+            className={`mt-1 text-lg font-semibold [overflow-wrap:anywhere] ${balances.arrears !== '0.00' ? 'text-crit' : 'text-txt'}`}
           >
             {formatTZS(balances.arrears)}
           </p>
