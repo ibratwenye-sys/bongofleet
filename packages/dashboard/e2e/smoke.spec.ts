@@ -584,6 +584,62 @@ for (const vp of READING_VIEWPORTS) {
         await expect(assignmentsCardList).toBeHidden();
       }
 
+      // Stage UI4e - continue via client-side nav from Assignments to
+      // Transport (same no-goto() reasoning as the hops above): the Fleet
+      // tab's own MobileSubNav pill on phone, the persistent sidebar's
+      // Transport link at tablet width.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Fleet sections' })
+          .getByRole('link', { name: 'Transport' })
+          .click();
+      } else {
+        await page.getByRole('link', { name: 'Transport', exact: true }).click();
+      }
+      await expect(page.getByRole('heading', { name: 'Transport', exact: true })).toBeVisible();
+
+      // prisma/seed.ts seeds no transport jobs at all - unlike the fleet/
+      // driver/assignment fixtures the earlier hops rely on, there is no
+      // reproducible seed for this page. '987654321' / job "BF-26XEAEKH"
+      // is real data already present in this dev DB (verified live, not
+      // assumed) rather than a script-guaranteed fixture; a fresh reseed
+      // would need a new stand-in here.
+      const perVehicleCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Per vehicle, this month' }),
+      });
+      const perVehicleTable = perVehicleCard.locator('table');
+      const perVehicleCardList = perVehicleCard.locator('.md\\:hidden');
+      const knownVehicleInTransport = perVehicleCardList
+        .getByText('987654321')
+        .or(perVehicleTable.getByText('987654321'));
+      await expect(knownVehicleInTransport.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(perVehicleTable).toBeHidden();
+        await expect(perVehicleCardList).toBeVisible();
+      } else {
+        await expect(perVehicleTable).toBeVisible();
+        await expect(perVehicleCardList).toBeHidden();
+      }
+
+      const tripsCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Trips this month' }),
+      });
+      const tripsTable = tripsCard.locator('table');
+      const tripsCardList = tripsCard.locator('.md\\:hidden');
+      const knownTrip = tripsCardList.getByText('987654321').or(tripsTable.getByText('987654321'));
+      await expect(knownTrip.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(tripsTable).toBeHidden();
+        await expect(tripsCardList).toBeVisible();
+      } else {
+        await expect(tripsTable).toBeVisible();
+        await expect(tripsCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

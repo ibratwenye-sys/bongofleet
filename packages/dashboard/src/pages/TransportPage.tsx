@@ -572,41 +572,69 @@ export function TransportPage() {
               {data.perVehicleThisMonth.length === 0 ? (
                 <p className="p-4 text-sm text-txt-2">No transport jobs this month.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                        <th className="px-4 py-2 font-medium">Vehicle</th>
-                        <th className="px-4 py-2 text-right font-medium">Trips</th>
-                        <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                        <th className="px-4 py-2 text-right font-medium">Expenses</th>
-                        <th className="px-4 py-2 text-right font-medium">Net</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.perVehicleThisMonth.map((v) => (
-                        <tr
-                          key={v.motorcycleId}
-                          className="border-b border-line-soft last:border-0"
-                        >
-                          <td className="px-4 py-2 font-medium text-txt">{v.registrationNumber}</td>
-                          <td className="px-4 py-2 text-right text-txt-2">{v.jobCount}</td>
-                          <td className="px-4 py-2 text-right text-txt-2">
-                            {formatTZS(v.revenue)}
-                          </td>
-                          <td className="px-4 py-2 text-right text-txt-2">
-                            {formatTZS(v.expenses)}
-                          </td>
-                          <td
-                            className={`px-4 py-2 text-right font-medium ${parseFloat(v.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+                <>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line-soft text-left text-xs text-txt-3">
+                          <th className="px-4 py-2 font-medium">Vehicle</th>
+                          <th className="px-4 py-2 text-right font-medium">Trips</th>
+                          <th className="px-4 py-2 text-right font-medium">Revenue</th>
+                          <th className="px-4 py-2 text-right font-medium">Expenses</th>
+                          <th className="px-4 py-2 text-right font-medium">Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.perVehicleThisMonth.map((v) => (
+                          <tr
+                            key={v.motorcycleId}
+                            className="border-b border-line-soft last:border-0"
+                          >
+                            <td className="px-4 py-2 font-medium text-txt">
+                              {v.registrationNumber}
+                            </td>
+                            <td className="px-4 py-2 text-right text-txt-2">{v.jobCount}</td>
+                            <td className="px-4 py-2 text-right text-txt-2">
+                              {formatTZS(v.revenue)}
+                            </td>
+                            <td className="px-4 py-2 text-right text-txt-2">
+                              {formatTZS(v.expenses)}
+                            </td>
+                            <td
+                              className={`px-4 py-2 text-right font-medium ${parseFloat(v.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
+                            >
+                              {formatTZS(v.netProfit)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:hidden">
+                    {data.perVehicleThisMonth.map((v) => (
+                      <div
+                        key={v.motorcycleId}
+                        className="border-b border-line-soft px-4 py-3 last:border-0"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-txt">{v.registrationNumber}</span>
+                          <span className="text-txt-2">{v.jobCount} trips</span>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between text-sm">
+                          <span className="text-txt-2">
+                            Revenue {formatTZS(v.revenue)} · Expenses {formatTZS(v.expenses)}
+                          </span>
+                          <span
+                            className={`font-medium ${parseFloat(v.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
                           >
                             {formatTZS(v.netProfit)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </Card>
 
@@ -668,7 +696,7 @@ export function TransportPage() {
       />
 
       <Card title="Trips this month" subtitle={`${data.tripsThisMonth.length} trips`}>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -758,6 +786,77 @@ export function TransportPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {data.tripsThisMonth.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No trips yet this month.</p>
+          ) : (
+            data.tripsThisMonth.map((trip) => {
+              const job = jobsById.get(trip.id);
+              const net = parseFloat(trip.netProfit);
+              return (
+                <div key={trip.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-txt">{trip.reference ?? '—'}</span>
+                    <span className="text-xs text-txt-2">{trip.registrationNumber}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-txt-2">
+                    {trip.origin} → {trip.destination}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between text-sm">
+                    <span className="text-txt-2">
+                      Revenue {formatTZS(trip.revenue)} · Cost {formatTZS(trip.expensesTotal)}
+                    </span>
+                    <span className={`font-medium ${net >= 0 ? 'text-good' : 'text-crit'}`}>
+                      {formatTZS(trip.netProfit)}
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    {job ? (
+                      <select
+                        value={job.status}
+                        onChange={(e) =>
+                          void changeStatus(job, e.target.value as TransportJobStatus)
+                        }
+                        className="w-full rounded border border-line bg-panel px-2 py-1.5 text-sm text-txt"
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {STATUS_LABELS[s]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-sm text-txt-2">{trip.status}</span>
+                    )}
+                  </div>
+                  {job && (
+                    <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                      <button
+                        onClick={() => setExpenseTarget(job)}
+                        className="text-sm font-medium text-c1 hover:underline"
+                      >
+                        + Expense
+                      </button>
+                      <button
+                        onClick={() => setFormTarget(job)}
+                        className="text-sm font-medium text-c1 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleting(job)}
+                        className="text-sm font-medium text-crit hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
