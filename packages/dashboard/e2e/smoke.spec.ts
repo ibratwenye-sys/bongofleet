@@ -866,6 +866,58 @@ for (const vp of READING_VIEWPORTS) {
         await expect(allExpensesCardList).toBeHidden();
       }
 
+      // Stage UI4j - continue via client-side nav from Expenses to
+      // Approvals (same no-goto() reasoning as every hop above). Still
+      // inside the Money group, so back to the normal same-group
+      // pattern UI4i used: the "Money sections" MobileSubNav pill row
+      // on phone, the persistent sidebar's Approvals link at tablet
+      // width.
+      // Regex, not exact: true - Approvals is the one nav item with a
+      // badgeKey (nav-config.ts), so both Sidebar.tsx and MobileSubNav.tsx
+      // append a NavBadge pending-count to its accessible name whenever
+      // pending expenses exist (true as of this stage's own
+      // seedApprovalsShowcase fixture) - same reasoning UI4b already used
+      // for the bottom tab bar's own /^Money/ match.
+      if (vp.width < 768) {
+        await page
+          .getByRole('navigation', { name: 'Money sections' })
+          .getByRole('link', { name: /^Approvals/ })
+          .click();
+      } else {
+        await page.getByRole('link', { name: /^Approvals/ }).click();
+      }
+      // exact: true - no actual collision here (the only card is titled
+      // "Pending expense claims"), but matches the defensive convention
+      // used everywhere else in this file. The page's own H1 heading has
+      // no NavBadge attached (that's a nav-link-only feature), so it's
+      // unaffected by the regex concern above.
+      await expect(page.getByRole('heading', { name: 'Approvals', exact: true })).toBeVisible();
+
+      // DEMO-APR-A / Fatuma Rajabu is a new seed fixture this stage
+      // (prisma/seed.ts, seedApprovalsShowcase) - neither existing
+      // Expense fixture sets status, so both default to APPROVED and
+      // /expenses?status=PENDING (this page's entire data source)
+      // returned zero rows against a fresh reseed without it, verified
+      // directly rather than assumed.
+      const pendingExpenseClaimsCard = page.locator('div.rounded-lg', {
+        has: page.getByRole('heading', { name: 'Pending expense claims' }),
+      });
+      const pendingExpenseClaimsTable = pendingExpenseClaimsCard.locator('table');
+      const pendingExpenseClaimsCardList = pendingExpenseClaimsCard.locator('.md\\:hidden');
+      const knownRiderInApprovals = pendingExpenseClaimsCardList
+        .getByText('Fatuma Rajabu')
+        .or(pendingExpenseClaimsTable.getByText('Fatuma Rajabu'));
+      await expect(knownRiderInApprovals.filter({ visible: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      if (vp.width < 768) {
+        await expect(pendingExpenseClaimsTable).toBeHidden();
+        await expect(pendingExpenseClaimsCardList).toBeVisible();
+      } else {
+        await expect(pendingExpenseClaimsTable).toBeVisible();
+        await expect(pendingExpenseClaimsCardList).toBeHidden();
+      }
+
       await expectNoSidewaysScroll(page);
     });
 

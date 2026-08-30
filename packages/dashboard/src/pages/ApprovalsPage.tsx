@@ -274,7 +274,7 @@ export function ApprovalsPage() {
         title="Pending expense claims"
         subtitle={expenses ? String(expenses.length) : undefined}
       >
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
@@ -345,6 +345,58 @@ export function ApprovalsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden">
+          {expenses === null ? (
+            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+          ) : expenses.length === 0 ? (
+            <p className="p-4 text-center text-sm text-txt-2">No pending expenses.</p>
+          ) : (
+            expenses.map((e) => {
+              const driver = e.submittedByRiderId
+                ? driverById.get(e.submittedByRiderId)
+                : undefined;
+              return (
+                <div key={e.id} className="border-b border-line-soft px-4 py-3 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-txt">
+                      {driver
+                        ? `${driver.user.firstName} ${driver.user.lastName}`
+                        : 'Unknown rider'}
+                    </span>
+                    <span className="text-xs text-txt-2">{e.category}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-txt-2">
+                    {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'} ·{' '}
+                    {formatTZS(e.amount)}
+                  </p>
+                  <p className="mt-1 text-xs text-txt-2">
+                    Incurred {e.incurredAt.slice(0, 10)} · Submitted {formatDateTime(e.createdAt)}
+                  </p>
+                  <div className="mt-2">
+                    <ReceiptCell expense={e} />
+                  </div>
+                  <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
+                    <button
+                      onClick={() => void handleApprove(e)}
+                      disabled={approvingId === e.id}
+                      className="text-sm font-medium text-good hover:underline disabled:opacity-50"
+                    >
+                      {approvingId === e.id ? 'Approving…' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => setRejecting(e)}
+                      disabled={approvingId === e.id}
+                      className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 

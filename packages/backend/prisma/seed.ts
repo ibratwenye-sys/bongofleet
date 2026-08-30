@@ -477,6 +477,57 @@ async function seedMaintenanceShowcase(prisma: PrismaClient, tenantId: string): 
   console.log('Seeded maintenance showcase: DEMO-MNT-A, one overdue completed service.');
 }
 
+/**
+ * Stage UI4j - a minimal, reproducible ApprovalsPage fixture, same
+ * reasoning as seedTransportShowcase/seedMaintenanceShowcase (UI-FIX2/
+ * UI4f). Neither existing Expense fixture (seedOwnerAndBasicDemoData's
+ * Fuel/4000, seedTransportShowcase's Fuel/120000) sets status, so both
+ * default to APPROVED (schema.prisma) - /expenses?status=PENDING, this
+ * page's entire data source, returns zero rows against a fresh reseed
+ * without this. One driver/vehicle pair, one PENDING expense - no
+ * receipt fields set, since a real file-upload fixture is out of scope
+ * for a smoke-test-sized seed, same reasoning UI-FIX2 gave for not
+ * building a full showcase.
+ *
+ * Guarded on DEMO-APR-A already existing, same convention as the other
+ * showcase seeders.
+ */
+async function seedApprovalsShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const already = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-APR-A' },
+  });
+  if (already) {
+    // eslint-disable-next-line no-console
+    console.log('Approvals showcase already seeded for this tenant - nothing to do.');
+    return;
+  }
+
+  const { driver, motorcycle } = await seedDriverAndVehicle(
+    prisma,
+    tenantId,
+    'apr',
+    'Fatuma',
+    'Rajabu',
+    '013',
+    'DEMO-APR-A',
+  );
+
+  await prisma.expense.create({
+    data: {
+      tenantId,
+      motorcycleId: motorcycle.id,
+      submittedByRiderId: driver.id,
+      category: 'Repairs',
+      amount: 45000,
+      incurredAt: dateOnly(1),
+      status: 'PENDING',
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('Seeded approvals showcase: DEMO-APR-A, one pending expense claim.');
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -493,6 +544,7 @@ async function main(): Promise<void> {
     await seedOwnershipPlanShowcase(prisma, tenantId, ownerUserId);
     await seedTransportShowcase(prisma, tenantId);
     await seedMaintenanceShowcase(prisma, tenantId);
+    await seedApprovalsShowcase(prisma, tenantId);
   } finally {
     await prisma.$disconnect();
   }
