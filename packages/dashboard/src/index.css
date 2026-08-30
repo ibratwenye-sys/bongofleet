@@ -72,6 +72,10 @@
   --spacing-sidebar: 236px;
   --spacing-topbar: 56px;
   --spacing-rail: 340px;
+  /* Stage UI4a - the fixed BottomTabBar's own rendered height (min-h-14,
+     56px) plus the home-indicator safe area, so <main> can reserve enough
+     bottom padding that the tab bar never sits on top of page content. */
+  --spacing-tabbar: calc(56px + env(safe-area-inset-bottom));
 }
 
 :root {

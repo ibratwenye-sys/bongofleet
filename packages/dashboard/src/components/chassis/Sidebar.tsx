@@ -2,9 +2,11 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../lib/auth-context';
 import { ThemeToggle } from '../ThemeToggle';
 import type { CurrentUser } from '../../lib/types';
-import { NAV_GROUPS } from './nav-config';
+import { filterVisibleGroups } from './nav-visibility';
 
-function NavBadge({ count }: { count: number }) {
+// Exported for reuse by the phone-width BottomTabBar/MobileSubNav
+// (Stage UI4a) - same badge, one definition.
+export function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-crit px-1 text-xs font-semibold text-white">
@@ -35,12 +37,7 @@ export function Sidebar({
 }) {
   const { user, logout } = useAuth();
 
-  const visibleGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter(
-      (item) => !item.roles || (user != null && item.roles.includes(user.role)),
-    ),
-  })).filter((group) => group.items.length > 0);
+  const visibleGroups = filterVisibleGroups(user);
 
   return (
     <div className="flex h-full flex-col bg-side text-txt">

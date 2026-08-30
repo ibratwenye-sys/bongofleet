@@ -211,6 +211,62 @@ test.describe('modals stay escapable at laptop height', () => {
 });
 
 /**
+ * Stage UI4a - the More sheet (Admin group + account/theme/logout), the
+ * phone-width replacement for that same content in Sidebar.tsx's footer.
+ * Reuses the old drawer's open/close contract (backdrop, Escape,
+ * close-on-navigate), so this covers the same ground the drawer tests used
+ * to, just against the new trigger and content.
+ */
+test.describe('the More sheet', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('opens on tap, holds the Admin links and account controls, and closes on backdrop click', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const moreTab = page.getByRole('navigation', { name: 'Tab bar' }).getByRole('button', {
+      name: 'More',
+    });
+
+    await moreTab.click();
+    const sheet = page.getByRole('dialog', { name: 'More' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Billing' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Dark theme' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Logout' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close more menu' }).click();
+    await expect(sheet).not.toBeVisible();
+  });
+
+  test('closes on Escape', async ({ page }) => {
+    await page.goto('/');
+    await page
+      .getByRole('navigation', { name: 'Tab bar' })
+      .getByRole('button', { name: 'More' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'More' });
+    await expect(sheet).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(sheet).not.toBeVisible();
+  });
+
+  test('a link inside navigates and closes the sheet', async ({ page }) => {
+    await page.goto('/');
+    await page
+      .getByRole('navigation', { name: 'Tab bar' })
+      .getByRole('button', { name: 'More' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'More' });
+
+    await sheet.getByRole('link', { name: 'Billing' }).click();
+    await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
+    await expect(sheet).not.toBeVisible();
+  });
+});
+
+/**
  * Stage H0e - the reading screens on a handset. Scope is deliberately narrow:
  * these cover what actually gets checked away from a desk (who is behind, who
  * paid, a driver's ledger), not the long forms, which stay desktop-first.
@@ -367,50 +423,67 @@ for (const vp of READING_VIEWPORTS) {
     });
 
     if (vp.width < 768) {
-      test('the nav collapses, opens, and reaches another page', async ({ page }) => {
+      test('the bottom tab bar reaches another page and highlights the active tab', async ({
+        page,
+      }) => {
         await page.goto('/');
 
-        // Below md, the sidebar is a drawer - links must not be reachable
-        // until the menu is opened, or "collapsed" is only a visual claim.
+        // Below md, the sidebar's links are not directly reachable - only
+        // through a tab (Home/Fleet/Money) or the More sheet.
         await expect(page.getByRole('link', { name: 'Payments' })).toBeHidden();
 
-        const menu = page.getByRole('button', { name: 'Open menu' });
-        await expect(menu).toBeVisible();
+        const tabBar = page.getByRole('navigation', { name: 'Tab bar' });
+        await expect(tabBar).toBeVisible();
+        const homeTab = tabBar.getByRole('link', { name: /^Home/ });
+        const moneyTab = tabBar.getByRole('link', { name: /^Money/ });
+        const moreTab = tabBar.getByRole('button', { name: 'More' });
 
-        // Thumb-sized, not cursor-sized.
-        const box = await menu.boundingBox();
-        expect(box, 'menu button should be laid out').not.toBeNull();
-        expect(box!.width).toBeGreaterThanOrEqual(44);
-        expect(box!.height).toBeGreaterThanOrEqual(44);
+        // Thumb-sized, not cursor-sized - every tab, not just one.
+        for (const tab of [homeTab, moneyTab, moreTab]) {
+          const box = await tab.boundingBox();
+          expect(box, 'tab should be laid out').not.toBeNull();
+          expect(box!.height).toBeGreaterThanOrEqual(44);
+        }
 
-        await menu.click();
-        const paymentsLink = page.getByRole('link', { name: 'Payments' });
-        await expect(paymentsLink).toBeVisible();
+        // Home ('/') is the landing route, so it starts active.
+        await expect(homeTab).toHaveClass(/bg-panel-2/);
+        await expect(moneyTab).not.toHaveClass(/bg-panel-2/);
 
-        const linkBox = await paymentsLink.boundingBox();
-        expect(linkBox!.height).toBeGreaterThanOrEqual(44);
+        await moneyTab.click();
+        // exact: true - Stage UI3's PaymentsPage also has an "All payments"
+        // card heading, which a loose match cross-matches under strict mode.
+        await expect(page.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
+        await expect(moneyTab).toHaveClass(/bg-panel-2/);
+        await expect(homeTab).not.toHaveClass(/bg-panel-2/);
 
-        await paymentsLink.click();
-        await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
-        // Navigating must close the drawer, or the destination renders beneath it.
-        await expect(paymentsLink).toBeHidden();
+        // Money has more than one destination, so its pill row appears once
+        // Money is the active tab.
+        const subNav = page.getByRole('navigation', { name: 'Money sections' });
+        await expect(subNav).toBeVisible();
+        const ownershipPill = subNav.getByRole('link', { name: 'Ownership' });
+        await ownershipPill.click();
+        await expect(page.getByRole('heading', { name: 'Ownership plans' })).toBeVisible();
+
         await expectNoSidewaysScroll(page);
       });
     } else {
-      test('the sidebar is persistent (no drawer needed) and reaches another page', async ({
+      test('the sidebar is persistent (no tab bar needed) and reaches another page', async ({
         page,
       }) => {
         await page.goto('/');
 
         // Stage UI1 - >= md (768px), the 236px sidebar shows directly; a
         // tablet has no reason to hide it behind a menu the way the old
-        // 13-item flat row did at this width.
-        await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
+        // 13-item flat row did at this width. Stage UI4a's tab bar is
+        // md:hidden, so it must not render here either.
+        await expect(page.getByRole('navigation', { name: 'Tab bar' })).toBeHidden();
         const paymentsLink = page.getByRole('link', { name: 'Payments' });
         await expect(paymentsLink).toBeVisible();
 
         await paymentsLink.click();
-        await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+        // exact: true - Stage UI3's PaymentsPage also has an "All payments"
+        // card heading, which a loose match cross-matches under strict mode.
+        await expect(page.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
         // Still visible after navigating - there is no drawer to close.
         await expect(paymentsLink).toBeVisible();
         await expectNoSidewaysScroll(page);
@@ -437,12 +510,8 @@ for (const vp of READING_VIEWPORTS) {
       // is only to confirm it still holds on a phone, where the form is
       // taller relative to the window than anywhere it was tested before.
       await page.goto('/drivers');
-      const openMenu = page.getByRole('button', { name: 'Open menu' });
-      if (await openMenu.isVisible()) {
-        // 'Add driver' is a page action, not a nav item - no menu needed, but
-        // make sure an open drawer is not covering it.
-        await expect(openMenu).toBeVisible();
-      }
+      // 'Add driver' is a page action, not a nav item - reachable directly,
+      // with no menu or sheet in the way.
       await page.getByRole('button', { name: 'Add driver' }).click();
 
       const heading = page.getByRole('heading', { name: 'Add driver' });
