@@ -47,7 +47,11 @@ export const spacing = {
   xl: 18,
 } as const;
 
-export const type = {
+// Named `typography`, not `type` (DM6's original name) - `import { type }`
+// collides with TypeScript's `import { type Foo }` inline type-import
+// syntax and either needs an awkward `type as x` alias or breaks outright.
+// Renamed here, before DM7 (this stage) becomes its first real consumer.
+export const typography = {
   greeting: { fontSize: 19, fontWeight: '800' as const },
   cardTitle: { fontSize: 14, fontWeight: '750' as const },
   // Mockup's .csub has no explicit font-weight (font-size: 11.5px only);
@@ -63,3 +67,42 @@ export const type = {
   statValue: { fontSize: 15, fontWeight: '800' as const },
   bigNumber: { fontSize: 44, fontWeight: '850' as const },
 } as const;
+
+// Stage DM7 - the Leo screen's owed/cleared tile, ported from the mockup's
+// .owed.due/.owed.clear. Each is a 160deg CSS gradient; expo-linear-gradient
+// takes normalized start/end points, not an angle, so these are converted
+// via start = 0.5 - 0.5*(sin θ, -cos θ), end = 0.5 + 0.5*(sin θ, -cos θ) for
+// θ=160deg (CSS angles are clockwise from "up").
+export const gradients = {
+  owedDue: {
+    colors: ['#3B1418', '#1C1520'] as [string, string],
+    start: { x: 0.33, y: 0.03 },
+    end: { x: 0.67, y: 0.97 },
+  },
+  owedClear: {
+    colors: ['#0E2E1E', '#132218'] as [string, string],
+    start: { x: 0.33, y: 0.03 },
+    end: { x: 0.67, y: 0.97 },
+  },
+} as const;
+
+// The owed/cleared tile's own border and text colors - distinct from the
+// base palette above, read directly off .owed.due/.owed.clear and their
+// .owed-v overrides.
+export const owedTile = {
+  dueBorder: 'rgba(239,68,68,.4)',
+  dueText: '#FFC9C9',
+  dueAmount: '#FF7A7A',
+  clearBorder: 'rgba(34,197,94,.4)',
+  clearText: '#A7E9C6',
+  clearAmount: '#3DDC84',
+} as const;
+
+// .paybtn{color:#052E16} - the Pay-now button's dark-green text over a
+// solid colors.green background.
+export const payButtonText = '#052E16';
+
+// .d i{background:#22304A} - the week strip's neutral/no-data day-bar
+// color (the base state before the .ok/.part/.no status classes apply).
+// Distinct from every named color above.
+export const dayBarNeutral = '#22304A';

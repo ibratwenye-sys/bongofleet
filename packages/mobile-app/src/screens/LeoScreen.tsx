@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -7,145 +7,138 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type TextStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useDriverData } from '../context/DriverDataContext';
 import { StatusBanners } from '../components/StatusBanners';
-import { openPlanContract } from '../contract';
-import { ApiError, NetworkError } from '../api';
-import { formatDateHuman, formatTZS, todayKey } from '../format';
-import type { OwnershipPlan } from '../types';
+import { apiFetch } from '../api';
+import { formatTZS, todayKey } from '../format';
+import type { Assignment } from '../types';
 import type { RiderTabParamList } from '../navigation/RiderTabNavigator';
+import {
+  colors,
+  radii,
+  spacing,
+  typography,
+  gradients,
+  owedTile,
+  payButtonText,
+  dayBarNeutral,
+} from '../theme';
 
 type Props = BottomTabScreenProps<RiderTabParamList, 'Leo'>;
 
-/**
- * Stage G2 (DESIGN_HIRE_PURCHASE.md §8 "Driver app"). "Today's instalment"
- * deliberately reuses the SAME target/paidToday Leo already computes for
- * every driver (assignment.targetAmount, not plan.dailyAmount) - the
- * generator caps a plan day's target at whatever remains of totalOwed
- * (ownership-plan-generator.service.ts), so the final instalment of a plan
- * is smaller than dailyAmount and dailyAmount would be the wrong number on
- * that day. daysBehind/daysAhead/netPosition/nextDueDate are read as the
- * backend returns them, never recomputed here - that day-counting
- * arithmetic has a documented history of being easy to get wrong.
- */
-function PlanCard({
-  plan,
-  target,
-  paidToday,
-}: {
-  plan: OwnershipPlan;
+type DayStatus = 'ok' | 'part' | 'no' | 'none';
+
+interface DayCell {
+  key: string;
+  label: string;
+  status: DayStatus;
+  paid: number;
   target: number;
-  paidToday: number;
-}) {
-  const [contractLoading, setContractLoading] = useState(false);
-  const [contractError, setContractError] = useState<string | null>(null);
-
-  const remaining = Math.max(0, target - paidToday);
-  const totalPrice = parseFloat(plan.totalPrice);
-  const amountPaid = parseFloat(plan.amountPaid);
-  const progress = totalPrice > 0 ? Math.min(1, Math.max(0, amountPaid / totalPrice)) : 0;
-  const endDate = plan.contractEndDate ?? plan.derivedEndDate;
-
-  async function handleViewContract() {
-    setContractError(null);
-    setContractLoading(true);
-    try {
-      await openPlanContract(plan.id);
-    } catch (err) {
-      if (err instanceof NetworkError) {
-        setContractError('Cannot reach the server. Check your connection.');
-      } else if (err instanceof ApiError) {
-        setContractError(err.message);
-      } else {
-        setContractError('Could not open the contract. Please try again.');
-      }
-    } finally {
-      setContractLoading(false);
-    }
-  }
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>Mkataba wangu</Text>
-
-      <View style={styles.row}>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Today's instalment</Text>
-          <Text style={styles.statValue}>{formatTZS(target)}</Text>
-        </View>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Paid</Text>
-          <Text style={[styles.statValue, { color: '#15803d' }]}>{formatTZS(paidToday)}</Text>
-        </View>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Remaining</Text>
-          <Text
-            style={[styles.statValue, remaining > 0 ? { color: '#b91c1c' } : { color: '#15803d' }]}
-          >
-            {formatTZS(remaining)}
-          </Text>
-        </View>
-      </View>
-
-      {plan.daysBehind > 0 ? (
-        <Text style={styles.positionBehind}>
-          You are {plan.daysBehind} day{plan.daysBehind === 1 ? '' : 's'} behind —{' '}
-          {formatTZS(Math.abs(parseFloat(plan.netPosition)))} owed
-        </Text>
-      ) : plan.daysAhead > 0 ? (
-        <Text style={styles.positionAhead}>
-          You are {plan.daysAhead} day{plan.daysAhead === 1 ? '' : 's'} ahead — nothing due until{' '}
-          {plan.nextDueDate ? formatDateHuman(plan.nextDueDate) : 'further notice'}
-        </Text>
-      ) : null}
-
-      <View style={styles.progressSection}>
-        <Text style={styles.contractLine}>
-          Started {formatDateHuman(plan.startDate)} · ends {formatDateHuman(endDate)} ·{' '}
-          {plan.daysLeft} days left
-        </Text>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-        <Text style={styles.progressLabel}>
-          {formatTZS(plan.amountPaid)} of {formatTZS(plan.totalPrice)} paid
-        </Text>
-      </View>
-
-      {contractError && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{contractError}</Text>
-        </View>
-      )}
-      <TouchableOpacity
-        style={styles.contractButton}
-        onPress={() => void handleViewContract()}
-        disabled={contractLoading}
-      >
-        {contractLoading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>View contract</Text>
-        )}
-      </TouchableOpacity>
-    </View>
-  );
 }
 
-/** Stage DM1 - the balance-display half of the old monolithic HomeScreen,
- *  reusing the same today's-assignment lookup (via DriverDataContext) as-is.
- *  The payment form itself now lives on Lipa, reached from the Pay button
- *  below. */
+// Mockup's own Mon-Sat abbreviations (Jtt/Jnn/Jtn/Alh/Ijm/Jmo), indexed by
+// Date#getDay() (0=Sunday). The mockup never shows Sunday's own
+// abbreviation - its one example's "today" happens to fall on Sunday, so
+// that cell always reads "Leo" instead. "Jpl" (Jumapili) is inferred here
+// from the same Jumatatu/Jumanne/... -> Jtt/Jnn/... truncation pattern the
+// other six already follow, for the case where today ISN'T Sunday and a
+// real Sunday cell needs its own label.
+const WEEKDAY_ABBR = ['Jpl', 'Jtt', 'Jnn', 'Jtn', 'Alh', 'Ijm', 'Jmo'] as const;
+
+function localDateDaysAgo(daysAgo: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return d;
+}
+
+function dateKeyOf(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Stage DM7 - the "Wiki hii" week strip. There's no backend endpoint for a
+ * week summary, so this classifies each of the last 7 calendar days
+ * (today back 6 days, a rolling window - not necessarily Mon-Sun) from
+ * plain GET /assignments + the payments DriverDataContext already holds,
+ * matched by dailyAssignmentId the same way Leo already computes today's
+ * own paidToday. Kept local to this file per the task spec - not shared
+ * infrastructure yet.
+ */
+function buildWeek(
+  weekAssignments: Assignment[],
+  payments: { dailyAssignmentId: string; amount: string; status: string }[],
+): DayCell[] {
+  const days: DayCell[] = [];
+  for (let daysAgo = 6; daysAgo >= 0; daysAgo -= 1) {
+    const d = localDateDaysAgo(daysAgo);
+    const key = dateKeyOf(d);
+    const label = daysAgo === 0 ? 'Leo' : WEEKDAY_ABBR[d.getDay()];
+    const a = weekAssignments.find((x) => x.assignedDate.slice(0, 10) === key);
+    if (!a) {
+      days.push({ key, label, status: 'none', paid: 0, target: 0 });
+      continue;
+    }
+    const target = parseFloat(a.targetAmount);
+    const paid = payments
+      .filter((p) => p.dailyAssignmentId === a.id && p.status !== 'FAILED')
+      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const status: DayStatus = paid <= 0 ? 'no' : paid >= target ? 'ok' : 'part';
+    days.push({ key, label, status, paid, target });
+  }
+  return days;
+}
+
+const DAY_BAR_COLOR: Record<DayStatus, string> = {
+  ok: colors.green,
+  part: colors.amber,
+  no: colors.red,
+  none: dayBarNeutral,
+};
+
+/** Stage DM1 - the balance-display half of the old monolithic HomeScreen.
+ *  Stage DM7 - rebuilt against the mockup's screen 1 ("Leo - Today") and
+ *  screen 3 ("Umemaliza" cleared state) and the DM6 dark theme. Data shape
+ *  (DriverDataContext), StatusBanners, navigation, and the offline/queue
+ *  logic are all untouched - this is a visual rebuild plus the one new
+ *  piece of client-side logic the week strip needs (buildWeek above). */
 export function LeoScreen({ navigation }: Props) {
   const { me, assignment, noAssignment, plan, payments, loading, refreshing, refresh, logout } =
     useDriverData();
 
+  const [weekAssignments, setWeekAssignments] = useState<Assignment[]>([]);
+  const [weekLoading, setWeekLoading] = useState(true);
+
+  const loadWeek = useCallback(async () => {
+    try {
+      const list = await apiFetch<Assignment[]>('/assignments');
+      setWeekAssignments(list);
+    } catch {
+      // Silently leave the week card showing nothing new - StatusBanners
+      // already surfaces "offline" for the screen as a whole; a second,
+      // week-card-specific error banner isn't worth building for this.
+    } finally {
+      setWeekLoading(false);
+    }
+    // Re-run whenever payments changes (login, a new payment, pull-to-
+    // refresh all flow through DriverDataContext's own load()) so today's
+    // cell reflects a just-recorded payment without a second effect.
+  }, []);
+
+  useEffect(() => {
+    void loadWeek();
+  }, [loadWeek, payments]);
+
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.green} />
       </View>
     );
   }
@@ -156,13 +149,33 @@ export function LeoScreen({ navigation }: Props) {
   const paidToday = todaysPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
   const target = assignment ? parseFloat(assignment.targetAmount) : 0;
   const remaining = Math.max(0, target - paidToday);
+  const cleared = assignment !== null && remaining === 0;
+
+  const initials = me ? `${me.firstName[0] ?? ''}${me.lastName[0] ?? ''}`.toUpperCase() : '';
+  const regLine = assignment?.motorcycle?.registrationNumber
+    ? `${assignment.motorcycle.registrationNumber} · ${todayKey()}`
+    : todayKey();
+
+  const week = buildWeek(weekAssignments, payments);
+  const fullCount = week.filter((d) => d.status === 'ok').length;
+  const halfCount = week.filter((d) => d.status === 'part').length;
+  const weekPaid = week.reduce((sum, d) => sum + d.paid, 0);
+  const weekTarget = week.reduce((sum, d) => sum + d.target, 0);
+
+  const motorcycle = assignment?.motorcycle ?? null;
+  const bikeLine = motorcycle
+    ? `${[motorcycle.make, motorcycle.model].filter(Boolean).join(' ') || 'Not on file'} · ${motorcycle.currentMileage.toLocaleString()} km`
+    : '';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Habari{me ? `, ${me.firstName}` : ''}!</Text>
-          <Text style={styles.date}>{todayKey()}</Text>
+      <View style={styles.greetRow}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
+        <View style={styles.greetTextWrap}>
+          <Text style={styles.greeting}>Habari, {me?.firstName ?? ''}</Text>
+          <Text style={styles.subline}>{regLine}</Text>
         </View>
         <TouchableOpacity onPress={() => void logout()}>
           <Text style={styles.logout}>Log out</Text>
@@ -173,57 +186,133 @@ export function LeoScreen({ navigation }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
+            tintColor={colors.green}
+          />
+        }
       >
-        {plan && <PlanCard plan={plan} target={target} paidToday={paidToday} />}
-
         {assignment ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Today's assignment</Text>
-            <Text style={styles.bike}>
-              {assignment.motorcycle?.registrationNumber ?? 'Motorcycle'}
+          <LinearGradient
+            colors={cleared ? gradients.owedClear.colors : gradients.owedDue.colors}
+            start={cleared ? gradients.owedClear.start : gradients.owedDue.start}
+            end={cleared ? gradients.owedClear.end : gradients.owedDue.end}
+            style={[
+              styles.owedTile,
+              { borderColor: cleared ? owedTile.clearBorder : owedTile.dueBorder },
+            ]}
+          >
+            <Text
+              style={[styles.owedLabel, { color: cleared ? owedTile.clearText : owedTile.dueText }]}
+            >
+              {cleared ? 'Umemaliza leo ✓' : 'Unadaiwa leo'}
             </Text>
-            {assignment.reference && (
-              <View style={styles.rideBox}>
-                <Text style={styles.rideLabel}>Ride number</Text>
-                <Text style={styles.rideNumber}>{assignment.reference}</Text>
-                <Text style={styles.rideHint}>
-                  Quote this when you deposit, so your payment is matched to this ride.
-                </Text>
-              </View>
-            )}
-            <View style={styles.row}>
-              <View style={styles.stat}>
-                <Text style={styles.statLabel}>Target</Text>
-                <Text style={styles.statValue}>{formatTZS(target)}</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statLabel}>Paid</Text>
-                <Text style={[styles.statValue, { color: '#15803d' }]}>{formatTZS(paidToday)}</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statLabel}>Remaining</Text>
-                <Text
-                  style={[
-                    styles.statValue,
-                    remaining > 0 ? { color: '#b91c1c' } : { color: '#15803d' },
-                  ]}
-                >
-                  {formatTZS(remaining)}
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Lipa')}>
-              <Text style={styles.buttonText}>Pay</Text>
-            </TouchableOpacity>
-          </View>
+            <Text
+              style={[
+                styles.owedValue,
+                { color: cleared ? owedTile.clearAmount : owedTile.dueAmount },
+              ]}
+            >
+              {cleared ? '0' : formatTZS(remaining)}
+            </Text>
+            <Text
+              style={[styles.owedSub, { color: cleared ? owedTile.clearText : owedTile.dueText }]}
+            >
+              {cleared
+                ? `Umelipa ${paidToday.toLocaleString()}` +
+                  (plan && plan.daysAhead > 0 ? ` — uko siku ${plan.daysAhead} mbele` : '')
+                : `You owe ${remaining.toLocaleString()} of today's ${target.toLocaleString()}`}
+            </Text>
+          </LinearGradient>
         ) : noAssignment ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Today's assignment</Text>
-            <Text style={styles.empty}>No assignment for today yet.</Text>
+          <View style={styles.noAssignmentCard}>
+            <Text style={styles.noAssignmentText}>No assignment for today yet.</Text>
           </View>
         ) : null}
+
+        {assignment && !cleared && (
+          <>
+            <TouchableOpacity style={styles.payButton} onPress={() => navigation.navigate('Lipa')}>
+              <Text style={styles.payButtonText}>Lipa sasa · Pay now</Text>
+            </TouchableOpacity>
+            {/* Stage DM7 simplification: the mockup implies a quicker,
+                cash-specific confirmation path for this button - building
+                that is Lipa's own job (a later stage), so this just opens
+                Lipa too, same as Pay now. */}
+            <TouchableOpacity
+              style={styles.payButtonAlt}
+              onPress={() => navigation.navigate('Lipa')}
+            >
+              <Text style={styles.payButtonAltText}>Nimelipa kwa fedha taslimu — I paid cash</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {assignment && (
+          <View style={styles.strip}>
+            <View style={styles.stripStat}>
+              <Text style={styles.stripLabel}>Lengo la leo</Text>
+              <Text style={styles.stripValue}>{target.toLocaleString()}</Text>
+            </View>
+            <View style={styles.stripStat}>
+              <Text style={styles.stripLabel}>Umelipa</Text>
+              <Text style={[styles.stripValue, { color: colors.green }]}>
+                {paidToday.toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.stripStat}>
+              <Text style={styles.stripLabel}>Imebaki</Text>
+              <Text
+                style={[styles.stripValue, { color: remaining > 0 ? colors.red : colors.green }]}
+              >
+                {remaining.toLocaleString()}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {!weekLoading && (
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Text style={styles.cardTitle}>Wiki hii · This week</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Malipo')}>
+                <Text style={styles.cardLink}>Historia</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dayRow}>
+              {week.map((d) => (
+                <View key={d.key} style={styles.dayCell}>
+                  <View style={[styles.dayBar, { backgroundColor: DAY_BAR_COLOR[d.status] }]} />
+                  <Text style={styles.dayLabel}>{d.label}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.weekSummaryRow}>
+              <Text style={styles.weekSummaryText}>
+                {fullCount} siku kamili · {halfCount} nusu
+              </Text>
+              <Text style={styles.weekSummaryText}>
+                <Text style={styles.weekSummaryBold}>{weekPaid.toLocaleString()}</Text> /{' '}
+                {weekTarget.toLocaleString()} TZS
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {motorcycle && (
+          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Pikipiki')}>
+            <Text style={styles.cardTitle}>Pikipiki yako</Text>
+            <View style={styles.bikeRow}>
+              <View style={styles.bikeAvatar} />
+              <View>
+                <Text style={styles.bikeReg}>{motorcycle.registrationNumber}</Text>
+                <Text style={styles.bikeMeta}>{bikeLine}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.addExpenseButton}
@@ -237,110 +326,143 @@ export function LeoScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: colors.bg },
   center: { justifyContent: 'center', alignItems: 'center' },
-  header: {
+  greetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 56,
+    paddingBottom: spacing.lg,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.card2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: colors.txt2, fontSize: 15, fontWeight: '800' },
+  greetTextWrap: { flex: 1 },
+  greeting: {
+    color: colors.txt,
+    fontSize: typography.greeting.fontSize,
+    fontWeight: typography.greeting.fontWeight,
+    letterSpacing: -0.4,
+  },
+  subline: { color: colors.txt3, fontSize: 12.5, marginTop: 2 },
+  logout: { color: colors.red, fontSize: 13, fontWeight: '600' },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: 40 },
+  owedTile: {
+    borderRadius: radii.card + 4,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  owedLabel: { fontSize: 12.5, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  owedValue: {
+    fontSize: typography.bigNumber.fontSize,
+    fontWeight: typography.bigNumber.fontWeight as TextStyle['fontWeight'],
+    marginTop: 9,
+    marginBottom: 4,
+  },
+  owedSub: { fontSize: 12.5, fontWeight: '600', textAlign: 'center' },
+  noAssignmentCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.card,
+    padding: 16,
+    marginBottom: spacing.lg,
+  },
+  noAssignmentText: { color: colors.txt2, fontSize: 14 },
+  payButton: {
+    backgroundColor: colors.green,
+    borderRadius: radii.cta,
+    padding: 17,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  payButtonText: { color: payButtonText, fontSize: 16, fontWeight: '800' },
+  payButtonAlt: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.cta,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  payButtonAltText: { color: colors.txt, fontSize: 14.5, fontWeight: '600' },
+  strip: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  stripStat: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  stripLabel: {
+    color: colors.txt3,
+    fontSize: 10.5,
+    fontWeight: '650' as TextStyle['fontWeight'],
+  },
+  stripValue: {
+    color: colors.txt,
+    fontSize: typography.statValue.fontSize,
+    fontWeight: typography.statValue.fontWeight,
+    marginTop: 5,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
+    borderRadius: radii.card,
+    padding: 16,
+    marginBottom: spacing.lg,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  cardTitle: {
+    color: colors.txt,
+    fontSize: typography.cardTitle.fontSize,
+    fontWeight: typography.cardTitle.fontWeight as TextStyle['fontWeight'],
+  },
+  cardLink: { marginLeft: 'auto', color: colors.green, fontSize: 11.5, fontWeight: '700' },
+  dayRow: { flexDirection: 'row', gap: 6, marginTop: spacing.sm },
+  dayCell: { flex: 1, alignItems: 'center' },
+  dayBar: { width: '100%', height: 30, borderRadius: 6 },
+  dayLabel: {
+    color: colors.txt3,
+    fontSize: 9.5,
+    fontWeight: '650' as TextStyle['fontWeight'],
+    marginTop: 5,
+  },
+  weekSummaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 12,
-    backgroundColor: '#111827',
+    marginTop: 13,
   },
-  greeting: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  date: { color: '#9ca3af', fontSize: 13, marginTop: 2 },
-  logout: { color: '#fca5a5', fontSize: 14, fontWeight: '600' },
-  content: { padding: 16, paddingBottom: 40 },
-  card: {
-    backgroundColor: '#fff',
+  weekSummaryText: { color: colors.txt3, fontSize: 11.5 },
+  weekSummaryBold: { color: colors.txt2, fontWeight: '700' },
+  bikeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  bikeAvatar: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
+    backgroundColor: colors.greenSoft,
   },
-  cardTitle: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
-  bike: { fontSize: 22, fontWeight: '700', color: '#111827', marginBottom: 12 },
-  rideBox: {
-    backgroundColor: '#eff6ff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  rideLabel: { fontSize: 11, fontWeight: '600', color: '#1e40af', textTransform: 'uppercase' },
-  rideNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e3a8a',
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  rideHint: { fontSize: 12, color: '#3b82f6', marginTop: 4 },
-  row: { flexDirection: 'row', marginBottom: 16 },
-  stat: { flex: 1 },
-  statLabel: { fontSize: 12, color: '#6b7280' },
-  statValue: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
-  button: {
-    backgroundColor: '#111827',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  empty: { color: '#6b7280', fontSize: 14 },
-  positionBehind: {
-    color: '#b91c1c',
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  positionAhead: {
-    color: '#15803d',
-    backgroundColor: '#dcfce7',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  // The design calls this the single most prominent thing on the card -
-  // biggest text, most vertical room of anything here.
-  progressSection: { marginBottom: 16 },
-  contractLine: { fontSize: 13, color: '#374151', marginBottom: 8 },
-  progressTrack: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#111827', borderRadius: 5 },
-  progressLabel: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 8 },
-  contractButton: {
-    backgroundColor: '#111827',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-  },
-  errorText: { color: '#991b1b', textAlign: 'center', fontSize: 13 },
-  // Stage H4 - reached from here, not a fifth tab; see RiderTabNavigator's
-  // own comment. Outlined rather than filled dark: this button sits below
-  // the card(s) it belongs to, and a second solid-dark button right under
-  // Pay/the plan's "View contract" would compete with them for attention.
+  bikeReg: { color: colors.txt, fontSize: 13.5, fontWeight: '700' },
+  bikeMeta: { color: colors.txt3, fontSize: 11.5, marginTop: 2 },
   addExpenseButton: {
     borderWidth: 1,
-    borderColor: '#111827',
-    borderRadius: 8,
+    borderColor: colors.line,
+    borderRadius: radii.cta,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  addExpenseButtonText: { color: '#111827', fontSize: 15, fontWeight: '600' },
+  addExpenseButtonText: { color: colors.txt2, fontSize: 15, fontWeight: '600' },
 });
