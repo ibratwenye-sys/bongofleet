@@ -59,6 +59,63 @@ export class DocumentService {
     this.uploadsDir = this.config.get<string>('UPLOADS_DIR', './uploads');
   }
 
+  // Same convention as ExpenseService.getOwnDriverId / OwnershipPlanService.
+  // getOwnDriverId - copied rather than factored into a shared util, per
+  // this codebase's own established per-service pattern for this lookup.
+  private async getOwnDriverId(actor: AuthenticatedUser): Promise<string> {
+    const driver = await this.prisma.client.driver.findUnique({
+      where: { userId: actor.userId },
+    });
+    if (!driver) {
+      throw new ForbiddenException('No driver profile is associated with this account');
+    }
+    return driver.id;
+  }
+
+  /**
+   * Stage DM11 - the driver app's "Nyaraka zangu" card. A lean shape (no
+   * fileName/storageKey/mimeType/referenceNumber): the rider only needs to
+   * see an expiry state here, not download anything - downloading isn't in
+   * the mockup for this card either.
+   *
+   * Motorcycle documents come from the driver's most recent DailyAssignment
+   * (same "most recent, not necessarily today's" lookup MkatabaWanguScreen/
+   * PikipikiScreen already do client-side, assignedDate desc). A
+   * CAR_DRIVER/TRUCK_DRIVER has no DailyAssignment at all, so this simply
+   * finds none and returns rider documents only - not an error, and not a
+   * driverType check, since the DriverTabNavigator's own vehicle-resolution
+   * story is a later stage's job, not this one.
+   */
+  async listMine(actor: AuthenticatedUser) {
+    const driverId = await this.getOwnDriverId(actor);
+
+    const riderDocuments = await this.prisma.client.document.findMany({
+      where: { ownerType: DocumentOwnerType.RIDER, ownerId: driverId },
+    });
+
+    const currentAssignment = await this.prisma.client.dailyAssignment.findFirst({
+      where: { driverId },
+      orderBy: { assignedDate: 'desc' },
+    });
+
+    const motorcycleDocuments = currentAssignment
+      ? await this.prisma.client.document.findMany({
+          where: {
+            ownerType: DocumentOwnerType.MOTORCYCLE,
+            ownerId: currentAssignment.motorcycleId,
+          },
+        })
+      : [];
+
+    const now = new Date();
+    return [...riderDocuments, ...motorcycleDocuments].map((doc) => ({
+      id: doc.id,
+      docType: doc.docType,
+      expiryDate: doc.expiryDate,
+      status: computeDocumentStatus(doc.expiryDate, 30, now),
+    }));
+  }
+
   private async assertOwnerExists(ownerType: DocumentOwnerType, ownerId: string): Promise<void> {
     let found: unknown;
     switch (ownerType) {

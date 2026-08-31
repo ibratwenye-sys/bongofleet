@@ -687,6 +687,91 @@ async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): 
   );
 }
 
+/**
+ * Stage DM11 - two Document rows for Amina (driver-a@bongofleet.com), so
+ * the driver app's "Nyaraka zangu" card has real data instead of being
+ * empty for every demo login - no Document rows exist anywhere else in
+ * this seed script. One VALID (green "Sawa"), one EXPIRING_SOON (amber
+ * "Siku 4") - the same two states the mockup itself shows, not just one.
+ * Placeholder file fields only (fileName/mimeType/storageKey/sizeBytes) -
+ * this seed step creates rows, not real uploaded files.
+ *
+ * Each document checked independently, not gated behind an unrelated
+ * showcase guard - same check-then-create idempotency seedTodaysLive
+ * Assignment already uses for its own reasoning.
+ */
+async function seedAminaDocuments(prisma: PrismaClient, tenantId: string): Promise<void> {
+  const aminaUser = await prisma.user.findFirst({
+    where: { tenantId, email: 'driver-a@bongofleet.com' },
+    include: { driverProfile: true },
+  });
+  const driver = aminaUser?.driverProfile;
+  if (!driver) {
+    // eslint-disable-next-line no-console
+    console.log("Skipping Amina's documents: driver-a@bongofleet.com isn't seeded yet.");
+    return;
+  }
+
+  const motorcycle = await prisma.motorcycle.findFirst({
+    where: { tenantId, registrationNumber: 'DEMO-OWN-A' },
+  });
+  if (!motorcycle) {
+    // eslint-disable-next-line no-console
+    console.log("Skipping Amina's insurance document: DEMO-OWN-A isn't seeded yet.");
+    return;
+  }
+
+  const existingLicense = await prisma.document.findFirst({
+    where: { tenantId, ownerType: 'RIDER', ownerId: driver.id, docType: 'DRIVERS_LICENSE' },
+  });
+  if (!existingLicense) {
+    await prisma.document.create({
+      data: {
+        tenantId,
+        ownerType: 'RIDER',
+        ownerId: driver.id,
+        docType: 'DRIVERS_LICENSE',
+        expiryDate: dateOnly(-400),
+        fileName: 'placeholder-drivers-license.pdf',
+        mimeType: 'application/pdf',
+        storageKey: 'placeholder/drivers-license.pdf',
+        sizeBytes: 1,
+        uploadedAt: new Date(),
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log("Seeded Amina's driver's licence document (valid).");
+  } else {
+    // eslint-disable-next-line no-console
+    console.log("Amina's driver's licence document already exists - nothing to do.");
+  }
+
+  const existingInsurance = await prisma.document.findFirst({
+    where: { tenantId, ownerType: 'MOTORCYCLE', ownerId: motorcycle.id, docType: 'INSURANCE' },
+  });
+  if (!existingInsurance) {
+    await prisma.document.create({
+      data: {
+        tenantId,
+        ownerType: 'MOTORCYCLE',
+        ownerId: motorcycle.id,
+        docType: 'INSURANCE',
+        expiryDate: dateOnly(-4),
+        fileName: 'placeholder-insurance.pdf',
+        mimeType: 'application/pdf',
+        storageKey: 'placeholder/insurance.pdf',
+        sizeBytes: 1,
+        uploadedAt: new Date(),
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log("Seeded DEMO-OWN-A's insurance document (expiring soon).");
+  } else {
+    // eslint-disable-next-line no-console
+    console.log("DEMO-OWN-A's insurance document already exists - nothing to do.");
+  }
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -706,6 +791,7 @@ async function main(): Promise<void> {
     await seedMaintenanceShowcase(prisma, tenantId);
     await seedApprovalsShowcase(prisma, tenantId);
     await seedTruckDriverShowcase(prisma, tenantId);
+    await seedAminaDocuments(prisma, tenantId);
   } finally {
     await prisma.$disconnect();
   }

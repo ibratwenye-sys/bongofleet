@@ -240,3 +240,30 @@ export interface QueuedGpsFix {
   accuracyMeters?: number;
   batteryPercent?: number;
 }
+
+export type DocumentType =
+  | 'NATIONAL_ID'
+  | 'DRIVERS_LICENSE'
+  | 'LATRA'
+  | 'INSURANCE'
+  | 'REGISTRATION_CARD'
+  | 'GUARANTOR_ID'
+  | 'VEHICLE_INSPECTION'
+  | 'ROAD_SAFETY_WEEK'
+  | 'TBS_CERTIFICATE'
+  | 'HIRE_PURCHASE_CONTRACT'
+  | 'OTHER';
+
+export type DocumentExpiryStatus = 'VALID' | 'EXPIRING_SOON' | 'EXPIRED';
+
+/**
+ * Stage DM11. GET /documents/mine - a lean shape only (no fileName/
+ * storageKey/mimeType/referenceNumber): the driver app only shows an
+ * expiry state on Mimi's "Nyaraka zangu" card, it never downloads.
+ */
+export interface MyDocument {
+  id: string;
+  docType: DocumentType;
+  expiryDate: string | null;
+  status: DocumentExpiryStatus;
+}

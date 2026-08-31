@@ -58,13 +58,22 @@ const SWAHILI_MONTHS = [
 
 // Stage DM10 - Matumizi's "Madai yako" claim dates (mockup: "24 Julai", day
 // + full Swahili month, no year - unlike formatDateHuman's "24 Jul 2026").
-// A later stage will likely want this for Mimi's document-expiry dates too;
-// left as its own function rather than folded into formatDateHuman since
+// Left as its own function rather than folded into formatDateHuman since
 // that one's English-month/year shape is still correct where it's already
-// used (Mkataba wangu).
+// used (Mkataba wangu). Turned out NOT to be what Stage DM11 needed for
+// Mimi's document-expiry dates either - that stage's own task spec calls
+// for formatDateHuman there instead; see formatMonthYearSwahili below for
+// what DM11 actually added.
 export function formatDateSwahiliShort(iso: string): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
   return `${d.getUTCDate()} ${SWAHILI_MONTHS[d.getUTCMonth()]}`;
+}
+
+// Stage DM11 - Mimi's tenure line ("Dereva · Rider · tangu Julai 2026").
+// Same SWAHILI_MONTHS as formatDateSwahiliShort above, just day-less.
+export function formatMonthYearSwahili(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
+  return `${SWAHILI_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 /** Stage I1 - "last sent HH:MM" for the GPS consent row (StatusBanners).

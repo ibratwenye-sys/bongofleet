@@ -19,6 +19,22 @@ const PATHS = {
   // Stage DM10 - Matumizi's appbar close (X), ported from the mockup's own
   // screen-5 appbar SVG.
   close: ['M18 6L6 18M6 6l12 12'],
+  // Stage DM11 - Mimi's screen-6 icons, ported verbatim from the mockup.
+  chevron: ['M9 6l6 6-6 6'],
+  // Same shape as `mkataba`'s first path (the mockup reuses this outline
+  // for both the tab-bar contract icon and Mimi's insurance row) - kept as
+  // its own named icon per the task spec rather than overloading `mkataba`
+  // outside a tab-bar context.
+  shield: ['M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6z'],
+  // The Mkataba wangu row inside Mimi's documents card - a plain document
+  // glyph, distinct from the tray+download `contract` icon used on Mkataba
+  // wangu's own appbar action.
+  contractfile: ['M6 2h9l5 5v15H6z', 'M15 2v5h5'],
+  bell: ['M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9z'],
+  // The mockup's own glyph here is literally three horizontal lines, not a
+  // globe - ported as-is.
+  language: ['M5 8h14M5 12h14M5 16h9'],
+  logout: ['M15 17l5-5-5-5', 'M20 12H9', 'M12 3H5v18h7'],
 } as const;
 
 // Stage DM8 - the mockup's appbar back icon uses stroke-width 2.2, not the
@@ -27,7 +43,24 @@ const PATHS = {
 const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2, close: 2.2 };
 
 export type IconName =
-  'leo' | 'lipa' | 'mkataba' | 'matumizi' | 'mimi' | 'back' | 'contract' | 'close' | 'camera';
+  | 'leo'
+  | 'lipa'
+  | 'mkataba'
+  | 'matumizi'
+  | 'mimi'
+  | 'back'
+  | 'contract'
+  | 'close'
+  | 'camera'
+  | 'chevron'
+  | 'settings'
+  | 'idcard'
+  | 'shield'
+  | 'contractfile'
+  | 'history'
+  | 'bell'
+  | 'language'
+  | 'logout';
 
 export function Icon({ name, size = 21, color }: { name: IconName; size?: number; color: string }) {
   const strokeWidth = STROKE_WIDTH[name] ?? 2;
@@ -84,9 +117,52 @@ export function Icon({ name, size = 21, color }: { name: IconName; size?: number
           />
         </>
       )}
+      {name === 'settings' && (
+        <>
+          <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={2} />
+          <Path
+            d="M12 3v3M12 18v3M3 12h3M18 12h3"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+      {name === 'idcard' && (
+        <>
+          <Rect
+            x={3}
+            y={5}
+            width={18}
+            height={14}
+            rx={2}
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Circle cx={9} cy={11} r={2} stroke={color} strokeWidth={2} />
+        </>
+      )}
+      {name === 'history' && (
+        <>
+          <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+          <Path
+            d="M12 7v5l3 2"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
       {name !== 'lipa' &&
         name !== 'mimi' &&
         name !== 'camera' &&
+        name !== 'settings' &&
+        name !== 'idcard' &&
+        name !== 'history' &&
         PATHS[name].map((d) => (
           <Path
             key={d}

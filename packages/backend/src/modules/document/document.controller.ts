@@ -69,6 +69,20 @@ export class DocumentController {
     return this.documentService.listExpiring(query, actor);
   }
 
+  // Stage DM11 - the driver app's own documents, RIDER included on top of
+  // the class-level OWNER/MANAGER default (RolesGuard's getAllAndOverride
+  // makes a handler-level @Roles fully replace, not add to, the class
+  // default - verified directly rather than assumed). Must stay ahead of
+  // `:id/file` below - same fixed-segment-before-param convention used
+  // throughout this codebase (e.g. ownership-plans' own `summary`/`:id`
+  // ordering), even though "mine" as a single segment can't actually
+  // collide with the two-segment `:id/file` pattern.
+  @Get('mine')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
+  listMine(@CurrentUser() actor: AuthenticatedUser) {
+    return this.documentService.listMine(actor);
+  }
+
   @Get(':id/file')
   async downloadFile(
     @Param('id') id: string,
