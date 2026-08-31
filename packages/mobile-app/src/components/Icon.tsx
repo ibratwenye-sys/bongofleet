@@ -16,13 +16,18 @@ const PATHS = {
   // Stage DM9 - Mkataba wangu's appbar-right "view contract" icon (a tray
   // + download arrow), ported from the mockup's own screen-4 appbar SVG.
   contract: ['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4', 'M7 10l5 5 5-5M12 15V3'],
+  // Stage DM10 - Matumizi's appbar close (X), ported from the mockup's own
+  // screen-5 appbar SVG.
+  close: ['M18 6L6 18M6 6l12 12'],
 } as const;
 
 // Stage DM8 - the mockup's appbar back icon uses stroke-width 2.2, not the
-// tab icons' 2 - the one exception to the shared default.
-const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2 };
+// tab icons' 2 - the one exception to the shared default. Stage DM10's
+// close icon uses the same 2.2 (its own appbar icon in the mockup).
+const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2, close: 2.2 };
 
-export type IconName = 'leo' | 'lipa' | 'mkataba' | 'matumizi' | 'mimi' | 'back' | 'contract';
+export type IconName =
+  'leo' | 'lipa' | 'mkataba' | 'matumizi' | 'mimi' | 'back' | 'contract' | 'close' | 'camera';
 
 export function Icon({ name, size = 21, color }: { name: IconName; size?: number; color: string }) {
   const strokeWidth = STROKE_WIDTH[name] ?? 2;
@@ -56,8 +61,32 @@ export function Icon({ name, size = 21, color }: { name: IconName; size?: number
           />
         </>
       )}
+      {name === 'camera' && (
+        <>
+          <Rect
+            x={2}
+            y={6}
+            width={20}
+            height={14}
+            rx={2.5}
+            stroke={color}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Circle cx={12} cy={13} r={3.6} stroke={color} strokeWidth={1.8} />
+          <Path
+            d="M8 6l1.5-2h5L16 6"
+            stroke={color}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
       {name !== 'lipa' &&
         name !== 'mimi' &&
+        name !== 'camera' &&
         PATHS[name].map((d) => (
           <Path
             key={d}

@@ -41,6 +41,32 @@ export function formatDateHuman(iso: string): string {
   return `${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+const SWAHILI_MONTHS = [
+  'Januari',
+  'Februari',
+  'Machi',
+  'Aprili',
+  'Mei',
+  'Juni',
+  'Julai',
+  'Agosti',
+  'Septemba',
+  'Oktoba',
+  'Novemba',
+  'Desemba',
+];
+
+// Stage DM10 - Matumizi's "Madai yako" claim dates (mockup: "24 Julai", day
+// + full Swahili month, no year - unlike formatDateHuman's "24 Jul 2026").
+// A later stage will likely want this for Mimi's document-expiry dates too;
+// left as its own function rather than folded into formatDateHuman since
+// that one's English-month/year shape is still correct where it's already
+// used (Mkataba wangu).
+export function formatDateSwahiliShort(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
+  return `${d.getUTCDate()} ${SWAHILI_MONTHS[d.getUTCMonth()]}`;
+}
+
 /** Stage I1 - "last sent HH:MM" for the GPS consent row (StatusBanners).
  *  Manual computation, not toLocaleTimeString - same reasoning
  *  formatDateHuman already follows (consistent across web/native without
