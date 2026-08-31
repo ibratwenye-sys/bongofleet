@@ -22,6 +22,7 @@ import { TransportService } from './transport.service';
 import { TransportOperationsService } from './transport-operations.service';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
+import { UpdateTransportJobStatusDto } from './dto/update-transport-job-status.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
 
 @ApiTags('transport')
@@ -68,6 +69,21 @@ export class TransportController {
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
   get(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.transportService.getJob(id, actor);
+  }
+
+  // Stage DM12 - the narrow RIDER-facing status transition, must stay ahead
+  // of the plain PATCH :id below (same fixed-segment-first convention as
+  // operations-summary above). OWNER/MANAGER pass this @Roles override too,
+  // for consistency with the other RIDER-accessible routes, but they
+  // already have the full PATCH :id below for status changes.
+  @Patch(':id/status')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateTransportJobStatusDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.transportService.updateOwnStatus(id, dto, actor);
   }
 
   @Patch(':id')

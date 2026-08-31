@@ -342,6 +342,9 @@ export interface TransportJob {
   destination: string;
   cargo: string | null;
   revenue: string;
+  // Stage DM12 - what the job pays the driver; separate from revenue above
+  // and, unlike it, never omitted from a RIDER's response.
+  driverFee: string | null;
   status: TransportJobStatus;
   scheduledDate: string;
   pickedUpAt: string | null;
@@ -371,6 +374,7 @@ export interface CreateTransportJobPayload {
   destination: string;
   cargo?: string;
   revenue: number;
+  driverFee?: number;
   scheduledDate: string;
   expectedDistanceKm?: number | null;
 }
@@ -382,6 +386,7 @@ export interface UpdateTransportJobPayload {
   destination?: string;
   cargo?: string;
   revenue?: number;
+  driverFee?: number;
   scheduledDate?: string;
   status?: TransportJobStatus;
   expectedDistanceKm?: number | null;

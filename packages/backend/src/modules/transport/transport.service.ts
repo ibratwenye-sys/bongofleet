@@ -14,7 +14,9 @@ import { describeMismatch, isCompatible } from '../../common/driver-vehicle-comp
 import { describeOwnershipConflict } from '../../common/ownership-plan-conflict';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
+import { UpdateTransportJobStatusDto } from './dto/update-transport-job-status.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
+import { computeTransportProgress } from './transport-progress';
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
@@ -135,6 +137,7 @@ export class TransportService {
             destination: dto.destination,
             cargo: dto.cargo,
             revenue: dto.revenue,
+            driverFee: dto.driverFee,
             scheduledDate: new Date(dto.scheduledDate),
             expectedDistanceKm: dto.expectedDistanceKm,
             ...categoryOverride,
@@ -227,8 +230,39 @@ export class TransportService {
       new Prisma.Decimal(0),
     );
 
-    const withFigures = this.withPnl(job, expenseTotal);
+    const withFigures = {
+      ...this.withPnl(job, expenseTotal),
+      progress: await this.jobProgress(job),
+    };
     return actor.role === UserRole.RIDER ? omitOwnerFinancials(withFigures) : withFigures;
+  }
+
+  /**
+   * Stage DM12 - wires transport-progress.ts (Stage UI2, already used by
+   * TransportOperationsService.buildInTransitJob for the OWNER-side
+   * in-transit card) into the single-job detail response too, for both
+   * roles: trip progress is operational, not owner-only. Same query/
+   * arithmetic as buildInTransitJob, not reimplemented - pickedUpAt
+   * defaults to now for a job that hasn't been picked up yet, same as
+   * there, so this never throws for a SCHEDULED job.
+   */
+  private async jobProgress(job: {
+    motorcycleId: string;
+    pickedUpAt: Date | null;
+    expectedDistanceKm: Prisma.Decimal | null;
+  }) {
+    const pickedUpAt = job.pickedUpAt ?? new Date();
+    const fixes = await this.prisma.client.gpsLocation.findMany({
+      where: { motorcycleId: job.motorcycleId, recordedAt: { gte: pickedUpAt } },
+      orderBy: { recordedAt: 'asc' },
+      select: { latitude: true, longitude: true, recordedAt: true },
+    });
+    return computeTransportProgress(
+      fixes,
+      job.expectedDistanceKm ? job.expectedDistanceKm.toNumber() : null,
+      pickedUpAt,
+      new Date(),
+    );
   }
 
   async updateJob(id: string, dto: UpdateTransportJobDto, actor: AuthenticatedUser) {
@@ -301,6 +335,7 @@ export class TransportService {
     if (dto.destination !== undefined) data.destination = dto.destination;
     if (dto.cargo !== undefined) data.cargo = dto.cargo;
     if (dto.revenue !== undefined) data.revenue = dto.revenue;
+    if (dto.driverFee !== undefined) data.driverFee = dto.driverFee;
     if (dto.scheduledDate !== undefined) data.scheduledDate = new Date(dto.scheduledDate);
     if (dto.expectedDistanceKm !== undefined) data.expectedDistanceKm = dto.expectedDistanceKm;
 
@@ -316,6 +351,50 @@ export class TransportService {
     }
 
     return this.prisma.client.transportJob.update({ where: { id }, data });
+  }
+
+  /**
+   * Stage DM12 - a narrow, RIDER-scoped alternative to updateJob() above:
+   * a driver may move their own job forward (SCHEDULED -> IN_TRANSIT ->
+   * DELIVERED) but must never reassign drivers, edit revenue/driverFee, or
+   * rewrite the route - so this touches only status/pickedUpAt/deliveredAt,
+   * never the fields updateJob() also accepts. Same "404, not 403"
+   * convention as getJob()/listJobs() for a job that isn't the caller's own.
+   */
+  async updateOwnStatus(id: string, dto: UpdateTransportJobStatusDto, actor: AuthenticatedUser) {
+    const ownDriverId = await this.getOwnDriverId(actor);
+
+    const existing = await this.prisma.client.transportJob.findUnique({ where: { id } });
+    if (!existing || existing.driverId !== ownDriverId) {
+      throw new NotFoundException('Transport job not found');
+    }
+
+    const validTransition =
+      (existing.status === TransportJobStatus.SCHEDULED &&
+        dto.status === TransportJobStatus.IN_TRANSIT) ||
+      (existing.status === TransportJobStatus.IN_TRANSIT &&
+        dto.status === TransportJobStatus.DELIVERED);
+    if (!validTransition) {
+      throw new BadRequestException(
+        `Cannot move a transport job from ${existing.status} to ${dto.status}`,
+      );
+    }
+
+    const data: Prisma.TransportJobUpdateInput = { status: dto.status };
+    // Same "stamp only if not already set" logic as updateJob() above.
+    if (dto.status === TransportJobStatus.IN_TRANSIT && !existing.pickedUpAt) {
+      data.pickedUpAt = new Date();
+    }
+    if (dto.status === TransportJobStatus.DELIVERED && !existing.deliveredAt) {
+      data.deliveredAt = new Date();
+    }
+
+    const updated = await this.prisma.client.transportJob.update({ where: { id }, data });
+    const expenseTotal = (await this.sumExpensesByJob([id])).get(id);
+    return omitOwnerFinancials({
+      ...this.withPnl(updated, expenseTotal),
+      progress: await this.jobProgress(updated),
+    });
   }
 
   async deleteJob(id: string, actor: AuthenticatedUser): Promise<void> {

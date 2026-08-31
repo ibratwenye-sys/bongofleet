@@ -27,6 +27,7 @@ describe('TransportService', () => {
         delete: jest.Mock;
       };
       expense: { groupBy: jest.Mock };
+      gpsLocation: { findMany: jest.Mock };
     };
   };
 
@@ -82,6 +83,7 @@ describe('TransportService', () => {
           delete: jest.fn(),
         },
         expense: { groupBy: jest.fn() },
+        gpsLocation: { findMany: jest.fn().mockResolvedValue([]) },
       },
     };
     const moduleRef = await Test.createTestingModule({
@@ -317,6 +319,73 @@ describe('TransportService', () => {
       prisma.client.transportJob.findUnique.mockResolvedValue(null);
       await expect(service.getJob('nope', owner)).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('includes a progress field for both OWNER and RIDER', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        pickedUpAt: null,
+        expectedDistanceKm: null,
+        expenses: [],
+      });
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-1' });
+
+      const result = await service.getJob('job-1', driverActor);
+
+      expect(result).toHaveProperty('progress');
+    });
+  });
+
+  describe('driverFee', () => {
+    it('createJob persists driverFee alongside revenue', async () => {
+      prisma.client.motorcycle.findUnique.mockResolvedValue(truck);
+      prisma.client.transportJob.create.mockImplementation(({ data }) => ({
+        id: 'job-1',
+        ...data,
+      }));
+
+      await service.createJob({ ...dto, driverFee: 45000 }, owner);
+
+      const { data } = prisma.client.transportJob.create.mock.calls[0][0];
+      expect(data.driverFee).toBe(45000);
+    });
+
+    it('updateJob persists driverFee when provided', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        status: 'SCHEDULED',
+        ownerDriven: true,
+        pickedUpAt: null,
+        deliveredAt: null,
+      });
+      prisma.client.transportJob.update.mockImplementation(({ data }) => data);
+
+      const data = await service.updateJob('job-1', { driverFee: 50000 }, owner);
+
+      expect(data.driverFee).toBe(50000);
+    });
+
+    it('is never stripped from a RIDER response, unlike revenue', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        driverFee: '45000',
+        pickedUpAt: null,
+        expectedDistanceKm: null,
+        expenses: [],
+      });
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-1' });
+
+      const result = await service.getJob('job-1', driverActor);
+
+      expect((result as unknown as { driverFee: string }).driverFee).toBe('45000');
+      expect(result).not.toHaveProperty('revenue');
+      expect(result).not.toHaveProperty('netProfit');
+    });
   });
 
   describe('updateJob', () => {
@@ -338,6 +407,109 @@ describe('TransportService', () => {
 
       expect(data.status).toBe(TransportJobStatus.IN_TRANSIT);
       expect(data.pickedUpAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('updateOwnStatus', () => {
+    beforeEach(() => {
+      prisma.client.driver.findUnique.mockResolvedValue({ id: 'driver-1' });
+      prisma.client.expense.groupBy.mockResolvedValue([]);
+    });
+
+    it('moves SCHEDULED -> IN_TRANSIT and stamps pickedUpAt', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        status: 'SCHEDULED',
+        pickedUpAt: null,
+        deliveredAt: null,
+        expectedDistanceKm: null,
+      });
+      prisma.client.transportJob.update.mockImplementation(({ data }) => ({
+        id: 'job-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        expectedDistanceKm: null,
+        ...data,
+      }));
+
+      const result = await service.updateOwnStatus(
+        'job-1',
+        { status: TransportJobStatus.IN_TRANSIT },
+        driverActor,
+      );
+
+      const { data } = prisma.client.transportJob.update.mock.calls[0][0];
+      expect(data.status).toBe(TransportJobStatus.IN_TRANSIT);
+      expect(data.pickedUpAt).toBeInstanceOf(Date);
+      // RIDER-facing return, same privacy boundary as getJob().
+      expect(result).not.toHaveProperty('revenue');
+      expect(result).not.toHaveProperty('netProfit');
+    });
+
+    it('moves IN_TRANSIT -> DELIVERED and stamps deliveredAt', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'driver-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        status: 'IN_TRANSIT',
+        pickedUpAt: new Date('2026-07-01T00:00:00Z'),
+        deliveredAt: null,
+        expectedDistanceKm: null,
+      });
+      prisma.client.transportJob.update.mockImplementation(({ data }) => ({
+        id: 'job-1',
+        motorcycleId: 'veh-1',
+        revenue: '500000',
+        expectedDistanceKm: null,
+        ...data,
+      }));
+
+      await service.updateOwnStatus('job-1', { status: TransportJobStatus.DELIVERED }, driverActor);
+
+      const { data } = prisma.client.transportJob.update.mock.calls[0][0];
+      expect(data.status).toBe(TransportJobStatus.DELIVERED);
+      expect(data.deliveredAt).toBeInstanceOf(Date);
+      expect(data.pickedUpAt).toBeUndefined();
+    });
+
+    it('rejects a backward or terminal transition with 400, not a silent no-op', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'driver-1',
+        status: 'DELIVERED',
+        pickedUpAt: new Date(),
+        deliveredAt: new Date(),
+      });
+
+      await expect(
+        service.updateOwnStatus('job-1', { status: TransportJobStatus.IN_TRANSIT }, driverActor),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.client.transportJob.update).not.toHaveBeenCalled();
+    });
+
+    it("404s (not 403) for a job that is not the caller's own", async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        driverId: 'someone-elses-driver-id',
+        status: 'SCHEDULED',
+      });
+
+      await expect(
+        service.updateOwnStatus('job-1', { status: TransportJobStatus.IN_TRANSIT }, driverActor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.client.transportJob.update).not.toHaveBeenCalled();
+    });
+
+    it('404s for an unknown job id', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateOwnStatus('nope', { status: TransportJobStatus.IN_TRANSIT }, driverActor),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

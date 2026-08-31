@@ -622,6 +622,10 @@ async function seedTodaysLiveAssignment(prisma: PrismaClient, tenantId: string):
  *
  * Guarded on its own registration number, same convention as the other
  * showcase seeders.
+ *
+ * Stage DM12 added driverFee: 45000 to the job below, again cited as this
+ * same doc's own cast entry for John Mwakalinga - still unverifiable, same
+ * caveat as above.
  */
 async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
   const already = await prisma.motorcycle.findFirst({
@@ -674,6 +678,7 @@ async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): 
       destination: 'MOROGORO',
       cargo: '8 tonnes of cement',
       revenue: 450000,
+      driverFee: 45000,
       status: 'IN_TRANSIT',
       scheduledDate: today,
       pickedUpAt: today,

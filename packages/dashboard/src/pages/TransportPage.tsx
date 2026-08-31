@@ -140,6 +140,7 @@ interface JobFormState {
   destination: string;
   cargo: string;
   revenue: string;
+  driverFee: string;
   scheduledDate: string;
   expectedDistanceKm: string;
 }
@@ -155,6 +156,7 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
     destination: job?.destination ?? '',
     cargo: job?.cargo ?? '',
     revenue: job?.revenue ?? '',
+    driverFee: job?.driverFee ?? '',
     scheduledDate: job?.scheduledDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     expectedDistanceKm: job?.expectedDistanceKm ?? '',
   };
@@ -187,6 +189,10 @@ function JobFormModal({
     const revenue = Number(form.revenue);
     if (!form.revenue || Number.isNaN(revenue) || revenue <= 0)
       return setError('Enter a positive revenue.');
+    const driverFee = form.driverFee ? Number(form.driverFee) : undefined;
+    if (form.driverFee && (Number.isNaN(driverFee) || (driverFee ?? 0) <= 0)) {
+      return setError('Driver fee must be a positive number.');
+    }
     const expectedDistanceKm = form.expectedDistanceKm ? Number(form.expectedDistanceKm) : null;
     if (
       form.expectedDistanceKm &&
@@ -205,6 +211,7 @@ function JobFormModal({
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
           revenue,
+          driverFee,
           scheduledDate: form.scheduledDate,
           expectedDistanceKm,
         };
@@ -222,6 +229,7 @@ function JobFormModal({
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
           revenue,
+          driverFee,
           scheduledDate: form.scheduledDate,
           expectedDistanceKm,
         };
@@ -301,6 +309,17 @@ function JobFormModal({
               className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            Driver fee (TZS) <span className="text-txt-2">(optional)</span>
+          </label>
+          <input
+            type="number"
+            value={form.driverFee}
+            onChange={(e) => setForm({ ...form, driverFee: e.target.value })}
+            className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
+          />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">

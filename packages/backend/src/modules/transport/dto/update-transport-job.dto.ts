@@ -52,6 +52,12 @@ export class UpdateTransportJobDto {
   revenue?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @Max(100_000_000)
+  driverFee?: number;
+
+  @IsOptional()
   @IsDateString()
   scheduledDate?: string;
 
