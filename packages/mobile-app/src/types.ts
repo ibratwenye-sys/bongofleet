@@ -141,6 +141,10 @@ export interface TransportJob {
   origin: string;
   destination: string;
   cargo: string | null;
+  // Stage DM14 - who the trip is for. Free text, same optional pattern as
+  // cargo above - most jobs today won't have one.
+  customerName: string | null;
+  customerContactPhone: string | null;
   status: TransportJobStatus;
   scheduledDate: string;
   pickedUpAt: string | null;

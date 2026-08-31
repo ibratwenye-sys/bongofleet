@@ -139,6 +139,8 @@ interface JobFormState {
   origin: string;
   destination: string;
   cargo: string;
+  customerName: string;
+  customerContactPhone: string;
   revenue: string;
   driverFee: string;
   scheduledDate: string;
@@ -155,6 +157,8 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
     origin: job?.origin ?? '',
     destination: job?.destination ?? '',
     cargo: job?.cargo ?? '',
+    customerName: job?.customerName ?? '',
+    customerContactPhone: job?.customerContactPhone ?? '',
     revenue: job?.revenue ?? '',
     driverFee: job?.driverFee ?? '',
     scheduledDate: job?.scheduledDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
@@ -210,6 +214,8 @@ function JobFormModal({
           origin: form.origin.trim(),
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
+          customerName: form.customerName.trim() || undefined,
+          customerContactPhone: form.customerContactPhone.trim() || undefined,
           revenue,
           driverFee,
           scheduledDate: form.scheduledDate,
@@ -228,6 +234,8 @@ function JobFormModal({
           origin: form.origin.trim(),
           destination: form.destination.trim(),
           cargo: form.cargo.trim() || undefined,
+          customerName: form.customerName.trim() || undefined,
+          customerContactPhone: form.customerContactPhone.trim() || undefined,
           revenue,
           driverFee,
           scheduledDate: form.scheduledDate,
@@ -289,6 +297,28 @@ function JobFormModal({
             placeholder="e.g. 20 bags of cement, or a Toyota Vitz"
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              Customer name <span className="text-txt-2">(optional)</span>
+            </label>
+            <input
+              value={form.customerName}
+              onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              Customer phone <span className="text-txt-2">(optional)</span>
+            </label>
+            <input
+              value={form.customerContactPhone}
+              onChange={(e) => setForm({ ...form, customerContactPhone: e.target.value })}
+              className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
+            />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

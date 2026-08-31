@@ -693,6 +693,11 @@ model TransportJob {
   origin                   String
   destination              String
   cargo                    String?
+  // Stage DM14 - who the trip is for. Free text, same optional pattern as
+  // cargo above (not driverFee's Decimal pattern) - no phone-format
+  // validation, matching Driver.phone's own convention.
+  customerName             String?            @map("customer_name")
+  customerContactPhone     String?            @map("customer_contact_phone")
   revenue                  Decimal            @db.Decimal(12, 2)
   // Stage DM12 - what the job pays the driver, separate from the owner's
   // revenue above. Nullable: most jobs today don't record it.

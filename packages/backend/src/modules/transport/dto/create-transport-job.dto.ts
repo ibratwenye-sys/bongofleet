@@ -45,6 +45,18 @@ export class CreateTransportJobDto {
   @MaxLength(300)
   cargo?: string;
 
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  customerName?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(30)
+  customerContactPhone?: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Max(100_000_000)

@@ -638,6 +638,15 @@ async function seedTodaysLiveAssignment(prisma: PrismaClient, tenantId: string):
  * and one Fuel expense, whose 96,000 TZS amount is invented for demo
  * purposes only, not sourced from DESIGN_CANONICAL_DEMO_DATA.md the way
  * driverFee's 45,000 was.
+ *
+ * Stage DM14 adds customerName/customerContactPhone ('Mbeya Kilimo Ltd' /
+ * +255767220118) so the Job detail screen's "Mteja" card has real data to
+ * show. DESIGN_CANONICAL_DEMO_DATA.md's own cast entry for John Mwakalinga
+ * does not name a customer at all - this is flavor text taken from the
+ * mockup's own example content instead, same non-canonical treatment
+ * DM13 gave its one invented fuel expense above, not agreed canonical data.
+ * (That doc still doesn't exist anywhere in this repo, same finding as
+ * every prior stage that has looked for it.)
  */
 async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
   const already = await prisma.motorcycle.findFirst({
@@ -689,6 +698,8 @@ async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): 
       origin: 'DAR ES SALAAM',
       destination: 'MOROGORO',
       cargo: '8 tonnes of cement',
+      customerName: 'Mbeya Kilimo Ltd',
+      customerContactPhone: '+255767220118',
       revenue: 450000,
       driverFee: 45000,
       status: 'IN_TRANSIT',

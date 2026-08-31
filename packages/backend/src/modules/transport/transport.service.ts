@@ -137,6 +137,8 @@ export class TransportService {
             origin: dto.origin,
             destination: dto.destination,
             cargo: dto.cargo,
+            customerName: dto.customerName,
+            customerContactPhone: dto.customerContactPhone,
             revenue: dto.revenue,
             driverFee: dto.driverFee,
             scheduledDate: new Date(dto.scheduledDate),
@@ -364,6 +366,10 @@ export class TransportService {
     if (dto.origin !== undefined) data.origin = dto.origin;
     if (dto.destination !== undefined) data.destination = dto.destination;
     if (dto.cargo !== undefined) data.cargo = dto.cargo;
+    if (dto.customerName !== undefined) data.customerName = dto.customerName;
+    if (dto.customerContactPhone !== undefined) {
+      data.customerContactPhone = dto.customerContactPhone;
+    }
     if (dto.revenue !== undefined) data.revenue = dto.revenue;
     if (dto.driverFee !== undefined) data.driverFee = dto.driverFee;
     if (dto.scheduledDate !== undefined) data.scheduledDate = new Date(dto.scheduledDate);

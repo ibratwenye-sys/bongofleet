@@ -341,6 +341,10 @@ export interface TransportJob {
   origin: string;
   destination: string;
   cargo: string | null;
+  // Stage DM14 - who the trip is for. Free text, same optional pattern as
+  // cargo above.
+  customerName: string | null;
+  customerContactPhone: string | null;
   revenue: string;
   // Stage DM12 - what the job pays the driver; separate from revenue above
   // and, unlike it, never omitted from a RIDER's response.
@@ -373,6 +377,8 @@ export interface CreateTransportJobPayload {
   origin: string;
   destination: string;
   cargo?: string;
+  customerName?: string;
+  customerContactPhone?: string;
   revenue: number;
   driverFee?: number;
   scheduledDate: string;
@@ -385,6 +391,8 @@ export interface UpdateTransportJobPayload {
   origin?: string;
   destination?: string;
   cargo?: string;
+  customerName?: string;
+  customerContactPhone?: string;
   revenue?: number;
   driverFee?: number;
   scheduledDate?: string;

@@ -38,6 +38,9 @@ const PATHS = {
   // Stage DM13 - Today screen's "Thibitisha kufika" confirm button, ported
   // from the mockup's own inline check-glyph on that button.
   check: ['M5 12l5 5L20 7'],
+  // Stage DM14 - Job detail's "Mteja" (customer) call button, ported from
+  // the mockup's own screen-8 inline phone-handset glyph.
+  phone: ['M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 5a2 2 0 012-1z'],
 } as const;
 
 // Stage DM8 - the mockup's appbar back icon uses stroke-width 2.2, not the
@@ -67,7 +70,8 @@ export type IconName =
   | 'language'
   | 'logout'
   | 'check'
-  | 'truck';
+  | 'truck'
+  | 'phone';
 
 export function Icon({ name, size = 21, color }: { name: IconName; size?: number; color: string }) {
   const strokeWidth = STROKE_WIDTH[name] ?? 2;

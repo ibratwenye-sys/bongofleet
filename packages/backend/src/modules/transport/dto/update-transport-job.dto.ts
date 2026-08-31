@@ -46,6 +46,18 @@ export class UpdateTransportJobDto {
   cargo?: string;
 
   @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  customerName?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(30)
+  customerContactPhone?: string;
+
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Max(100_000_000)
