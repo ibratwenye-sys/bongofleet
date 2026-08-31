@@ -18,7 +18,9 @@ import { Icon, type IconName } from '../components/Icon';
 import { colors, radii, spacing, typography } from '../theme';
 import type { Assignment, DriverType, MyDocument, Payment } from '../types';
 
-const CATEGORY_LABELS: Record<DriverType, string> = {
+// Stage DM13 - exported so TodayScreen's greeting header ("T 908 ZAP ·
+// Truck driver") can reuse it rather than redeclaring the same map.
+export const CATEGORY_LABELS: Record<DriverType, string> = {
   RIDER: 'Rider',
   CAR_DRIVER: 'Car driver',
   TRUCK_DRIVER: 'Truck driver',

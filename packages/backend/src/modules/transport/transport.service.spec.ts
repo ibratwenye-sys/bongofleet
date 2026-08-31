@@ -26,7 +26,7 @@ describe('TransportService', () => {
         update: jest.Mock;
         delete: jest.Mock;
       };
-      expense: { groupBy: jest.Mock };
+      expense: { groupBy: jest.Mock; aggregate: jest.Mock };
       gpsLocation: { findMany: jest.Mock };
     };
   };
@@ -82,7 +82,10 @@ describe('TransportService', () => {
           update: jest.fn(),
           delete: jest.fn(),
         },
-        expense: { groupBy: jest.fn() },
+        expense: {
+          groupBy: jest.fn(),
+          aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+        },
         gpsLocation: { findMany: jest.fn().mockResolvedValue([]) },
       },
     };
@@ -335,6 +338,87 @@ describe('TransportService', () => {
       const result = await service.getJob('job-1', driverActor);
 
       expect(result).toHaveProperty('progress');
+    });
+  });
+
+  describe('getJob - fuelSpent', () => {
+    const job = {
+      id: 'job-1',
+      driverId: 'driver-1',
+      motorcycleId: 'veh-1',
+      revenue: '500000',
+      pickedUpAt: null,
+      expectedDistanceKm: null,
+      expenses: [],
+    };
+
+    it('sums only Fuel-category, APPROVED expenses on this job', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(job);
+      prisma.client.expense.aggregate.mockResolvedValue({ _sum: { amount: '92000' } });
+
+      const result = await service.getJob('job-1', owner);
+
+      expect(prisma.client.expense.aggregate).toHaveBeenCalledWith({
+        where: { transportJobId: 'job-1', category: 'Fuel', status: 'APPROVED' },
+        _sum: { amount: true },
+      });
+      expect((result as unknown as { fuelSpent: string }).fuelSpent).toBe('92000.00');
+    });
+
+    it('is "0.00" when there are no matching Fuel expenses', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(job);
+      prisma.client.expense.aggregate.mockResolvedValue({ _sum: { amount: null } });
+
+      const result = await service.getJob('job-1', owner);
+
+      expect((result as unknown as { fuelSpent: string }).fuelSpent).toBe('0.00');
+    });
+  });
+
+  describe('getJob - progress.lastSpeedKmh', () => {
+    const job = {
+      id: 'job-1',
+      driverId: 'driver-1',
+      motorcycleId: 'veh-1',
+      revenue: '500000',
+      pickedUpAt: new Date('2026-08-01T06:00:00Z'),
+      expectedDistanceKm: null,
+      expenses: [],
+    };
+
+    it('comes from the most recent fix', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(job);
+      prisma.client.gpsLocation.findMany.mockResolvedValue([
+        {
+          latitude: -6.79,
+          longitude: 39.2,
+          recordedAt: new Date('2026-08-01T06:30:00Z'),
+          speedKmh: 40,
+        },
+        {
+          latitude: -6.8,
+          longitude: 39.0,
+          recordedAt: new Date('2026-08-01T07:00:00Z'),
+          speedKmh: 58,
+        },
+      ]);
+
+      const result = await service.getJob('job-1', owner);
+
+      expect(
+        (result as unknown as { progress: { lastSpeedKmh: number | null } }).progress.lastSpeedKmh,
+      ).toBe(58);
+    });
+
+    it('is null when there are no fixes', async () => {
+      prisma.client.transportJob.findUnique.mockResolvedValue(job);
+      prisma.client.gpsLocation.findMany.mockResolvedValue([]);
+
+      const result = await service.getJob('job-1', owner);
+
+      expect(
+        (result as unknown as { progress: { lastSpeedKmh: number | null } }).progress.lastSpeedKmh,
+      ).toBeNull();
     });
   });
 

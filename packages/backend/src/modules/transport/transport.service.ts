@@ -17,6 +17,7 @@ import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { UpdateTransportJobStatusDto } from './dto/update-transport-job-status.dto';
 import { ListTransportJobsQueryDto } from './dto/list-transport-jobs-query.dto';
 import { computeTransportProgress } from './transport-progress';
+import { COUNTED_EXPENSE } from '../analytics/analytics.service';
 
 function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
@@ -232,9 +233,28 @@ export class TransportService {
 
     const withFigures = {
       ...this.withPnl(job, expenseTotal),
+      fuelSpent: money(await this.fuelSpent(id)),
       progress: await this.jobProgress(job),
     };
     return actor.role === UserRole.RIDER ? omitOwnerFinancials(withFigures) : withFigures;
+  }
+
+  /**
+   * Stage DM13 - the "Mafuta" stat on the driver app's Today screen. A
+   * sibling to sumExpensesByJob below, not a modification of it - that
+   * method intentionally sums every category, for P&L, and is used
+   * elsewhere; this one is scoped to Fuel only and to a single job. RIDER-
+   * safe like fuelSpent below: neither this nor lastSpeedKmh is revenue or
+   * netProfit, so omitOwnerFinancials never has to touch them. Single-job
+   * only, same N+1-avoidance reasoning as jobProgress - not added to
+   * listJobs() or updateOwnStatus().
+   */
+  private async fuelSpent(jobId: string): Promise<Prisma.Decimal> {
+    const result = await this.prisma.client.expense.aggregate({
+      where: { transportJobId: jobId, category: 'Fuel', ...COUNTED_EXPENSE },
+      _sum: { amount: true },
+    });
+    return new Prisma.Decimal(result._sum.amount ?? 0);
   }
 
   /**
@@ -245,6 +265,13 @@ export class TransportService {
    * arithmetic as buildInTransitJob, not reimplemented - pickedUpAt
    * defaults to now for a job that hasn't been picked up yet, same as
    * there, so this never throws for a SCHEDULED job.
+   *
+   * Stage DM13 - also returns lastSpeedKmh (the "Kasi" stat), read straight
+   * off the most recent fix rather than derived - null when there are no
+   * fixes, never a guessed speed. Flows into both getJob() and
+   * updateOwnStatus() automatically since both already call this.
+   * transport-progress.ts itself is untouched (pure, already tested) - the
+   * extra field is spread on here instead.
    */
   private async jobProgress(job: {
     motorcycleId: string;
@@ -255,14 +282,17 @@ export class TransportService {
     const fixes = await this.prisma.client.gpsLocation.findMany({
       where: { motorcycleId: job.motorcycleId, recordedAt: { gte: pickedUpAt } },
       orderBy: { recordedAt: 'asc' },
-      select: { latitude: true, longitude: true, recordedAt: true },
+      select: { latitude: true, longitude: true, recordedAt: true, speedKmh: true },
     });
-    return computeTransportProgress(
-      fixes,
-      job.expectedDistanceKm ? job.expectedDistanceKm.toNumber() : null,
-      pickedUpAt,
-      new Date(),
-    );
+    return {
+      ...computeTransportProgress(
+        fixes,
+        job.expectedDistanceKm ? job.expectedDistanceKm.toNumber() : null,
+        pickedUpAt,
+        new Date(),
+      ),
+      lastSpeedKmh: fixes[fixes.length - 1]?.speedKmh ?? null,
+    };
   }
 
   async updateJob(id: string, dto: UpdateTransportJobDto, actor: AuthenticatedUser) {

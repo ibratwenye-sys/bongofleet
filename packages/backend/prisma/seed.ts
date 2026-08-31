@@ -626,6 +626,18 @@ async function seedTodaysLiveAssignment(prisma: PrismaClient, tenantId: string):
  * Stage DM12 added driverFee: 45000 to the job below, again cited as this
  * same doc's own cast entry for John Mwakalinga - still unverifiable, same
  * caveat as above.
+ *
+ * Stage DM13 adds three more things, all so the Today screen's "Njiani"
+ * hero has real numbers to compute rather than empty/zero stats:
+ * expectedDistanceKm: 196 (a real, defensible Dar-Morogoro road-distance
+ * estimate, unlike driverFee's unverifiable figure above); a handful of
+ * synthetic GpsLocation fixes, interpolated along a straight line toward
+ * Morogoro so the progress bar and "Kasi" stat have something real to
+ * compute from (same spirit as seedTodaysLiveAssignment's own "so the app
+ * always has something to show" - these fixes are not from a real device);
+ * and one Fuel expense, whose 96,000 TZS amount is invented for demo
+ * purposes only, not sourced from DESIGN_CANONICAL_DEMO_DATA.md the way
+ * driverFee's 45,000 was.
  */
 async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): Promise<void> {
   const already = await prisma.motorcycle.findFirst({
@@ -667,7 +679,7 @@ async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): 
   });
 
   const today = dateOnly(0);
-  await prisma.transportJob.create({
+  const job = await prisma.transportJob.create({
     data: {
       tenantId,
       motorcycleId: truck.id,
@@ -683,6 +695,59 @@ async function seedTruckDriverShowcase(prisma: PrismaClient, tenantId: string): 
       scheduledDate: today,
       pickedUpAt: today,
       deliveredAt: null,
+      // Real road-distance estimate for Dar es Salaam -> Morogoro via the
+      // Dar-Morogoro highway (~196km); this is what "km X kati ya 196" on
+      // the Today screen's progress bar divides by.
+      expectedDistanceKm: 196,
+    },
+  });
+
+  // Synthetic GPS track: seven fixes linearly interpolated in lat/lon from
+  // Dar es Salaam (-6.7924, 39.2083) toward Morogoro (-6.8235, 37.6822),
+  // stopping around 60% of the way there - not a real device's track, just
+  // enough for the Today screen's progress bar and "Kasi" (speed) stat to
+  // compute a real, non-zero, non-complete number instead of showing
+  // nothing. Spread across the last two hours, ending now. Same spirit as
+  // seedTodaysLiveAssignment's own "so the app always has something to
+  // show." Only the last two fixes carry a plausible speedKmh - a real
+  // phone wouldn't report speed on every single fix either.
+  const now = Date.now();
+  const track: { minutesAgo: number; fraction: number; speedKmh: number | null }[] = [
+    { minutesAgo: 120, fraction: 0.0, speedKmh: null },
+    { minutesAgo: 100, fraction: 0.09, speedKmh: null },
+    { minutesAgo: 80, fraction: 0.18, speedKmh: null },
+    { minutesAgo: 60, fraction: 0.28, speedKmh: null },
+    { minutesAgo: 40, fraction: 0.38, speedKmh: null },
+    { minutesAgo: 20, fraction: 0.48, speedKmh: 58 },
+    { minutesAgo: 0, fraction: 0.6, speedKmh: 63 },
+  ];
+  const DAR = { lat: -6.7924, lon: 39.2083 };
+  const MOROGORO = { lat: -6.8235, lon: 37.6822 };
+  await prisma.gpsLocation.createMany({
+    data: track.map(({ minutesAgo, fraction, speedKmh }) => ({
+      tenantId,
+      motorcycleId: truck.id,
+      driverId: driver.id,
+      source: 'PHONE',
+      latitude: DAR.lat + fraction * (MOROGORO.lat - DAR.lat),
+      longitude: DAR.lon + fraction * (MOROGORO.lon - DAR.lon),
+      speedKmh,
+      recordedAt: new Date(now - minutesAgo * 60_000),
+    })),
+  });
+
+  // Fuel expense against the job - invented for demo purposes (unlike
+  // driverFee's 45,000 above, not sourced from
+  // DESIGN_CANONICAL_DEMO_DATA.md), so the Today screen's "Mafuta" stat
+  // shows a real number instead of TZS 0.
+  await prisma.expense.create({
+    data: {
+      tenantId,
+      motorcycleId: truck.id,
+      transportJobId: job.id,
+      category: 'Fuel',
+      amount: 96000,
+      incurredAt: today,
     },
   });
 

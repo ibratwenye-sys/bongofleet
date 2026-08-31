@@ -94,6 +94,15 @@ export const gradients = {
     start: { x: 0.33, y: 0.03 },
     end: { x: 0.67, y: 0.97 },
   },
+  // Stage DM13 - the Today screen's "Njiani" (in-transit) hero card:
+  // background:linear-gradient(160deg,rgba(59,130,246,.16),var(--card)).
+  // Same 160deg conversion and shape as planHero above, blue instead of
+  // green.
+  tripHero: {
+    colors: ['rgba(59,130,246,.16)', '#151E2E'] as [string, string],
+    start: { x: 0.33, y: 0.03 },
+    end: { x: 0.67, y: 0.97 },
+  },
 } as const;
 
 // The owed/cleared tile's own border and text colors - distinct from the

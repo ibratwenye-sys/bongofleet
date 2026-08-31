@@ -147,11 +147,53 @@ export interface TransportJob {
   deliveredAt: string | null;
   expensesTotal: string;
   motorcycle: Motorcycle;
+  // Stage DM12 - what the job pays the driver, separate from revenue (which
+  // stays stripped from every RIDER response). Nullable - most jobs today
+  // don't record it.
+  driverFee: string | null;
 }
 
-/** GET /transport-jobs/:id adds the per-job expense list on top of the list shape. */
+export interface LastKnownPosition {
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+}
+
+/**
+ * Stage DM13. GET /transport-jobs/:id's progress field, mirroring the
+ * backend's own TransportProgress union (transport-progress.ts) plus
+ * lastSpeedKmh, added the same stage. 'no-target' means the job has no
+ * expectedDistanceKm set - never render a progress bar for it, per that
+ * file's own "never a fabricated progress bar" rule.
+ */
+export type TransportProgress =
+  | {
+      kind: 'no-target';
+      elapsedMs: number;
+      lastPosition: LastKnownPosition | null;
+      lastSpeedKmh: number | null;
+    }
+  | {
+      kind: 'progress';
+      elapsedMs: number;
+      lastPosition: LastKnownPosition | null;
+      kmCovered: number;
+      kmRemaining: number;
+      expectedDistanceKm: number;
+      lastSpeedKmh: number | null;
+    };
+
+/**
+ * GET /transport-jobs/:id adds the per-job expense list, fuelSpent (Stage
+ * DM13's "Mafuta" stat - Fuel-category expenses only, distinct from
+ * expensesTotal above which sums every category), and progress on top of
+ * the list shape. Single-job only - listJobs() doesn't compute these (same
+ * N+1-avoidance reasoning as the backend's own jobProgress/fuelSpent).
+ */
 export interface TransportJobDetail extends TransportJob {
   expenses: TransportJobExpense[];
+  fuelSpent: string;
+  progress: TransportProgress;
 }
 
 /** A payment recorded while offline, waiting to be sent to the server. */

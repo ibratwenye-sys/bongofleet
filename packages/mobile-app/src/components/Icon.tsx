@@ -35,12 +35,17 @@ const PATHS = {
   // globe - ported as-is.
   language: ['M5 8h14M5 12h14M5 16h9'],
   logout: ['M15 17l5-5-5-5', 'M20 12H9', 'M12 3H5v18h7'],
+  // Stage DM13 - Today screen's "Thibitisha kufika" confirm button, ported
+  // from the mockup's own inline check-glyph on that button.
+  check: ['M5 12l5 5L20 7'],
 } as const;
 
 // Stage DM8 - the mockup's appbar back icon uses stroke-width 2.2, not the
 // tab icons' 2 - the one exception to the shared default. Stage DM10's
-// close icon uses the same 2.2 (its own appbar icon in the mockup).
-const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2, close: 2.2 };
+// close icon uses the same 2.2 (its own appbar icon in the mockup). Stage
+// DM13's check icon (Today screen's confirm button) uses 2.4, per its own
+// mockup svg.
+const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2, close: 2.2, check: 2.4 };
 
 export type IconName =
   | 'leo'
@@ -60,7 +65,9 @@ export type IconName =
   | 'history'
   | 'bell'
   | 'language'
-  | 'logout';
+  | 'logout'
+  | 'check'
+  | 'truck';
 
 export function Icon({ name, size = 21, color }: { name: IconName; size?: number; color: string }) {
   const strokeWidth = STROKE_WIDTH[name] ?? 2;
@@ -145,6 +152,30 @@ export function Icon({ name, size = 21, color }: { name: IconName; size?: number
           <Circle cx={9} cy={11} r={2} stroke={color} strokeWidth={2} />
         </>
       )}
+      {name === 'truck' && (
+        <>
+          <Rect
+            x={1}
+            y={7}
+            width={13}
+            height={9}
+            rx={1.5}
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M14 10h4l3 3v3h-7"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Circle cx={6} cy={18} r={1.8} stroke={color} strokeWidth={2} />
+          <Circle cx={18} cy={18} r={1.8} stroke={color} strokeWidth={2} />
+        </>
+      )}
       {name === 'history' && (
         <>
           <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
@@ -163,6 +194,7 @@ export function Icon({ name, size = 21, color }: { name: IconName; size?: number
         name !== 'settings' &&
         name !== 'idcard' &&
         name !== 'history' &&
+        name !== 'truck' &&
         PATHS[name].map((d) => (
           <Path
             key={d}

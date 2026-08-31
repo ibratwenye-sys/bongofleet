@@ -76,6 +76,36 @@ export function formatMonthYearSwahili(iso: string): string {
   return `${SWAHILI_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+const SWAHILI_WEEKDAYS = [
+  'Jumapili',
+  'Jumatatu',
+  'Jumanne',
+  'Jumatano',
+  'Alhamisi',
+  'Ijumaa',
+  'Jumamosi',
+];
+
+/**
+ * Stage DM13 - Today's "Safari zijazo" row dates (mockup: "Kesho",
+ * "Jumanne" - tomorrow / a weekday name). Sibling to formatDateSwahiliShort
+ * above (reused as the fallback for anything more than a week out), not a
+ * duplicate of it - the day-difference logic here is new. No time-of-day is
+ * ever appended, unlike the mockup's own "06:00"/"07:00" example text:
+ * TransportJob.scheduledDate is a date-only column with no time component,
+ * so showing one would be fabricating it.
+ */
+export function formatRelativeDaySwahili(iso: string): string {
+  const target = new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  if (diffDays === 0) return 'Leo';
+  if (diffDays === 1) return 'Kesho';
+  if (diffDays > 1 && diffDays < 7) return SWAHILI_WEEKDAYS[target.getUTCDay()];
+  return formatDateSwahiliShort(iso);
+}
+
 /** Stage I1 - "last sent HH:MM" for the GPS consent row (StatusBanners).
  *  Manual computation, not toLocaleTimeString - same reasoning
  *  formatDateHuman already follows (consistent across web/native without
