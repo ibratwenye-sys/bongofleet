@@ -84,6 +84,16 @@ export const gradients = {
     start: { x: 0.33, y: 0.03 },
     end: { x: 0.67, y: 0.97 },
   },
+  // Stage DM9 - Mkataba wangu's "Zimebaki" hero card:
+  // background:linear-gradient(160deg,rgba(34,197,94,.16),var(--card)).
+  // Same 160deg conversion as the two gradients above; a distinct, much
+  // lighter pair of stops (translucent green fading into the plain card
+  // color) - not close enough to owedClear to reuse.
+  planHero: {
+    colors: ['rgba(34,197,94,.16)', '#151E2E'] as [string, string],
+    start: { x: 0.33, y: 0.03 },
+    end: { x: 0.67, y: 0.97 },
+  },
 } as const;
 
 // The owed/cleared tile's own border and text colors - distinct from the

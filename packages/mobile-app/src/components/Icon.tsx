@@ -13,13 +13,16 @@ const PATHS = {
   mkataba: ['M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6z', 'M9 12l2 2 4-4'],
   matumizi: ['M3 3v18h18', 'M8 16l3-4 3 2 4-6'],
   back: ['M15 5l-7 7 7 7'],
+  // Stage DM9 - Mkataba wangu's appbar-right "view contract" icon (a tray
+  // + download arrow), ported from the mockup's own screen-4 appbar SVG.
+  contract: ['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4', 'M7 10l5 5 5-5M12 15V3'],
 } as const;
 
 // Stage DM8 - the mockup's appbar back icon uses stroke-width 2.2, not the
 // tab icons' 2 - the one exception to the shared default.
 const STROKE_WIDTH: Partial<Record<IconName, number>> = { back: 2.2 };
 
-export type IconName = 'leo' | 'lipa' | 'mkataba' | 'matumizi' | 'mimi' | 'back';
+export type IconName = 'leo' | 'lipa' | 'mkataba' | 'matumizi' | 'mimi' | 'back' | 'contract';
 
 export function Icon({ name, size = 21, color }: { name: IconName; size?: number; color: string }) {
   const strokeWidth = STROKE_WIDTH[name] ?? 2;

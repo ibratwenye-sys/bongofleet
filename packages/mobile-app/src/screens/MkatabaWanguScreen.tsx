@@ -7,26 +7,24 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type TextStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { apiFetch, ApiError, NetworkError } from '../api';
 import { openPlanContract } from '../contract';
-import { formatTZS } from '../format';
+import { formatDateHuman, formatTZS } from '../format';
+import { Icon } from '../components/Icon';
+import { colors, radii, spacing, typography, gradients, dayBarNeutral } from '../theme';
 import type { Assignment, OwnershipPlan, OwnershipPlanLedgerEntry } from '../types';
 
 // Stage DM4 - decoupled from RiderTabParamList for the same reason as
 // MimiScreen: this screen is now hosted as a hidden route on both
-// RiderTabNavigator and the new DriverTabNavigator.
+// RiderTabNavigator and the new DriverTabNavigator. Stage DM9 keeps this
+// loose typing and the 'Mimi' destination unchanged - DriverTabNavigator
+// has no 'Leo' route at all, so retyping this to navigate there would
+// break the truck-driver mode's use of the same screen.
 interface Props {
   navigation: { navigate: (screen: 'Mimi') => void };
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
-    </View>
-  );
 }
 
 /**
@@ -42,6 +40,10 @@ function Row({ label, value }: { label: string; value: string }) {
  * used here was read off the caller's OWN assignment, that 404 path is
  * never actually exercised in normal use; it exists as backend
  * defense-in-depth, verified in ownership-plan.e2e-spec.ts.
+ *
+ * Stage DM9 - rebuilt against the mockup's screen 4 ("Mkataba wangu") and
+ * the DM6-DM8 dark theme. Data fetching, contract download, and the ledger
+ * list's behaviour are all unchanged - visual rebuild only.
  */
 export function MkatabaWanguScreen({ navigation }: Props) {
   const [plan, setPlan] = useState<OwnershipPlan | null>(null);
@@ -112,10 +114,15 @@ export function MkatabaWanguScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.green} />
       </View>
     );
   }
+
+  const totalPrice = plan ? parseFloat(plan.totalPrice) : 0;
+  const amountPaid = plan ? parseFloat(plan.amountPaid) : 0;
+  const progress = totalPrice > 0 ? Math.min(1, Math.max(0, amountPaid / totalPrice)) : 0;
+  const completed = plan?.status === 'COMPLETED';
 
   return (
     <FlatList
@@ -129,49 +136,132 @@ export function MkatabaWanguScreen({ navigation }: Props) {
             setRefreshing(true);
             void load();
           }}
+          tintColor={colors.green}
         />
       }
       ListHeaderComponent={
         <View>
-          <TouchableOpacity onPress={() => navigation.navigate('Mimi')}>
-            <Text style={styles.back}>{'‹ Mimi'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Mkataba wangu</Text>
+          <View style={styles.appbar}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Mimi')}>
+              <Icon name="back" size={17} color={colors.txt2} />
+            </TouchableOpacity>
+            <Text style={styles.appbarTitle}>Mkataba wangu</Text>
+            {plan && (
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => void handleViewContract()}
+                disabled={contractLoading}
+              >
+                {contractLoading ? (
+                  <ActivityIndicator size="small" color={colors.txt2} />
+                ) : (
+                  <Icon name="contract" size={17} color={colors.txt2} />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
 
           {error && (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+          {contractError && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{contractError}</Text>
+            </View>
+          )}
 
           {plan ? (
             <>
-              <View style={styles.card}>
-                <Row label="Daily amount" value={formatTZS(plan.dailyAmount)} />
-                <Row label="Instalments" value={String(plan.instalmentCount)} />
-                <Row label="Start date" value={plan.startDate.slice(0, 10)} />
-                <Row label="Status" value={plan.status} />
-                <Row label="Paid so far" value={formatTZS(plan.amountPaid)} />
-                <Row label="Remaining to own" value={formatTZS(plan.remainingToOwn)} />
-                <Row label="Days left" value={String(plan.daysLeft)} />
-                <Row label="Projected completion" value={plan.projectedCompletion} />
+              <LinearGradient
+                colors={gradients.planHero.colors}
+                start={gradients.planHero.start}
+                end={gradients.planHero.end}
+                style={styles.heroCard}
+              >
+                <Text style={styles.heroLabel}>Zimebaki</Text>
+                <Text style={styles.heroNumber}>{plan.daysLeft}</Text>
+                <Text style={styles.heroUnit}>siku · days</Text>
+                <View style={styles.track}>
+                  <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
+                </View>
+                <View style={styles.heroFooterRow}>
+                  <Text style={styles.heroFooterText}>Umelipa {formatTZS(plan.amountPaid)}</Text>
+                  <Text style={styles.heroFooterText}>Bei {formatTZS(plan.totalPrice)}</Text>
+                </View>
+              </LinearGradient>
 
-                {contractError && (
-                  <View style={[styles.errorBanner, { marginTop: 12, marginHorizontal: 0 }]}>
-                    <Text style={styles.errorText}>{contractError}</Text>
+              <View style={styles.strip}>
+                <View style={styles.stripStat}>
+                  <Text style={styles.stripLabel}>Kila siku</Text>
+                  <Text style={styles.stripValue}>{formatTZS(plan.dailyAmount)}</Text>
+                </View>
+                <View style={styles.stripStat}>
+                  <Text style={styles.stripLabel}>Imebaki</Text>
+                  <Text style={styles.stripValue}>{formatTZS(plan.remainingToOwn)}</Text>
+                </View>
+                <View style={styles.stripStat}>
+                  <Text style={styles.stripLabel}>Umeanza</Text>
+                  <Text style={styles.stripValue}>{formatDateHuman(plan.startDate)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Itakapokamilika</Text>
+
+                {/* Judgment call (task spec leaves the exact dot styling to
+                    us): done = filled green; "next" = the single nearest
+                    milestone, green outline, unfilled - only step 1 when
+                    not completed; "plain" = every other not-done step,
+                    muted gray outline. Step 2 never goes done - nothing in
+                    the schema tracks document transfer. */}
+                <View style={styles.step}>
+                  <View style={styles.stepIndicator}>
+                    <View
+                      style={[styles.stepDot, completed ? styles.stepDotDone : styles.stepDotNext]}
+                    />
+                    <View style={styles.stepLine} />
                   </View>
-                )}
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => void handleViewContract()}
-                  disabled={contractLoading}
-                >
-                  {contractLoading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>View contract</Text>
-                  )}
-                </TouchableOpacity>
+                  <View style={styles.stepBody}>
+                    <Text style={styles.stepTitle}>Malipo ya mwisho</Text>
+                    <Text style={styles.stepSub}>{formatDateHuman(plan.projectedCompletion)}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.step}>
+                  <View style={styles.stepIndicator}>
+                    <View style={styles.stepDot} />
+                    <View style={styles.stepLine} />
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={styles.stepTitle}>Hati za umiliki</Text>
+                    <Text style={styles.stepSub}>Ownership documents transferred to your name</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.step, styles.stepLast]}>
+                  <View style={styles.stepIndicator}>
+                    <View style={[styles.stepDot, completed && styles.stepDotDone]} />
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={styles.stepTitle}>Pikipiki ni yako</Text>
+                    <Text style={styles.stepSub}>
+                      The motorcycle is yours. Tracking and service history stay in BongoFleet.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.noteCard}>
+                <Text style={styles.noteText}>
+                  <Text style={styles.noteTextBold}>Ukilipa zaidi, unamaliza mapema.</Text> Kila
+                  shilingi ya ziada inapunguza siku.
+                </Text>
+                <Text style={styles.noteTextMuted}>
+                  Every extra shilling shortens the plan — you can never be billed more than the
+                  price of the bike.
+                </Text>
               </View>
 
               <Text style={styles.sectionTitle}>Ledger</Text>
@@ -187,7 +277,7 @@ export function MkatabaWanguScreen({ navigation }: Props) {
       }
       renderItem={({ item }) => (
         <View style={styles.ledgerRow}>
-          <Text style={styles.ledgerDate}>{item.assignedDate}</Text>
+          <Text style={styles.ledgerDate}>{item.assignedDate.slice(0, 10)}</Text>
           <View style={styles.ledgerFigures}>
             <Text style={styles.ledgerOwed}>Owed {formatTZS(item.owed)}</Text>
             <Text style={styles.ledgerPaid}>Paid {formatTZS(item.paid)}</Text>
@@ -195,7 +285,7 @@ export function MkatabaWanguScreen({ navigation }: Props) {
           <Text
             style={[
               styles.ledgerPosition,
-              parseFloat(item.runningPosition) < 0 ? { color: '#b91c1c' } : { color: '#15803d' },
+              { color: parseFloat(item.runningPosition) < 0 ? colors.red : colors.green },
             ]}
           >
             {formatTZS(item.runningPosition)}
@@ -208,56 +298,153 @@ export function MkatabaWanguScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  container: { flex: 1, backgroundColor: colors.bg },
   center: { justifyContent: 'center', alignItems: 'center' },
-  back: { color: '#2563eb', fontSize: 15, fontWeight: '600', marginTop: 56 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 8, marginBottom: 16 },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 16,
-  },
-  errorText: { color: '#991b1b', textAlign: 'center', fontSize: 13 },
-  listContent: { padding: 16, paddingBottom: 40 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-  },
-  row: {
+  appbar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  rowLabel: { fontSize: 13, color: '#6b7280' },
-  rowValue: { fontSize: 13, fontWeight: '600', color: '#111827' },
-  button: {
-    backgroundColor: '#111827',
-    borderRadius: 8,
-    paddingVertical: 12,
     alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 56,
+    paddingBottom: spacing.lg,
+  },
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appbarTitle: {
+    flex: 1,
+    color: colors.txt,
+    fontSize: 17.5,
+    fontWeight: '750' as TextStyle['fontWeight'],
+    letterSpacing: -0.4,
+  },
+  errorBanner: {
+    backgroundColor: colors.redSoft,
+    borderRadius: 12,
+    padding: 10,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  errorText: { color: colors.red, textAlign: 'center', fontSize: 13 },
+  listContent: { paddingHorizontal: spacing.xl, paddingBottom: 40 },
+  heroCard: {
+    borderRadius: radii.card,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  heroLabel: { color: colors.txt2, fontSize: 11.5, fontWeight: '650' as TextStyle['fontWeight'] },
+  heroNumber: {
+    color: colors.green,
+    fontSize: 46,
+    fontWeight: '850' as TextStyle['fontWeight'],
+    marginTop: 6,
+    marginBottom: 2,
+    letterSpacing: -0.8,
+  },
+  heroUnit: { color: colors.green, fontSize: 14, fontWeight: '700' },
+  track: {
+    width: '100%',
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: dayBarNeutral,
+    overflow: 'hidden',
     marginTop: 16,
   },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  trackFill: { height: '100%', borderRadius: 5, backgroundColor: colors.green },
+  heroFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 9,
+  },
+  heroFooterText: { color: colors.txt3, fontSize: 11.5 },
+  strip: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  stripStat: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  stripLabel: { color: colors.txt3, fontSize: 10.5, fontWeight: '650' as TextStyle['fontWeight'] },
+  stripValue: {
+    color: colors.txt,
+    fontSize: typography.statValue.fontSize,
+    fontWeight: typography.statValue.fontWeight as TextStyle['fontWeight'],
+    marginTop: 5,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
+    borderRadius: radii.card,
+    padding: 16,
+    marginBottom: spacing.lg,
+  },
+  cardTitle: {
+    color: colors.txt,
+    fontSize: typography.cardTitle.fontSize,
+    fontWeight: typography.cardTitle.fontWeight as TextStyle['fontWeight'],
+    marginBottom: spacing.sm,
+  },
+  step: { flexDirection: 'row', gap: spacing.md, paddingBottom: spacing.lg },
+  stepLast: { paddingBottom: 0 },
+  stepIndicator: { alignItems: 'center', width: 13 },
+  stepDot: {
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    borderWidth: 3,
+    borderColor: colors.txt3,
+    backgroundColor: colors.bg,
+  },
+  stepDotNext: { borderColor: colors.green },
+  stepDotDone: { backgroundColor: colors.green, borderColor: colors.green },
+  stepLine: { width: 2, flex: 1, backgroundColor: colors.line, marginVertical: 4 },
+  stepBody: { flex: 1 },
+  stepTitle: { color: colors.txt, fontSize: 13, fontWeight: '700' },
+  stepSub: { color: colors.txt3, fontSize: 11.5, marginTop: 3, lineHeight: 16 },
+  noteCard: {
+    backgroundColor: colors.card2,
+    borderRadius: radii.card,
+    padding: 16,
+    marginBottom: spacing.lg,
+  },
+  noteText: { color: colors.txt2, fontSize: 11.5, lineHeight: 18 },
+  noteTextBold: { color: colors.txt, fontWeight: '700' },
+  noteTextMuted: { color: colors.txt3, fontSize: 11.5, lineHeight: 18 },
+  sectionTitle: {
+    color: colors.txt,
+    fontSize: typography.cardTitle.fontSize,
+    fontWeight: typography.cardTitle.fontWeight as TextStyle['fontWeight'],
+    marginBottom: spacing.sm,
+  },
   ledgerRow: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.lineSoft,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  ledgerDate: { fontSize: 13, color: '#374151', width: 90 },
+  ledgerDate: { fontSize: 13, color: colors.txt2, width: 90 },
   ledgerFigures: { flex: 1 },
-  ledgerOwed: { fontSize: 12, color: '#6b7280' },
-  ledgerPaid: { fontSize: 12, color: '#15803d', marginTop: 2 },
+  ledgerOwed: { fontSize: 12, color: colors.txt3 },
+  ledgerPaid: { fontSize: 12, color: colors.green, marginTop: 2 },
   ledgerPosition: { fontSize: 13, fontWeight: '700' },
-  empty: { color: '#6b7280', fontSize: 14 },
+  empty: { color: colors.txt2, fontSize: 14 },
 });
