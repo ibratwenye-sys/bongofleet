@@ -105,6 +105,67 @@ async function loginRider(app: INestApplication, email: string) {
   return res.body.accessToken as string;
 }
 
+/** Stage DM16 - a TRUCK_DRIVER + a compatible TRUCK, own copy mirroring
+ *  transport.e2e-spec.ts's seedCarDriverAndVehicle: this file's job-based
+ *  submission tests need a driver with no DailyAssignment at all. */
+async function setupTruckDriver(app: INestApplication, ownerToken: string, tag: string) {
+  const email = `truckdriver-${tag.toLowerCase()}@test.local`;
+  const driverRes = await request(app.getHttpServer())
+    .post('/drivers')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      firstName: 'Juma',
+      lastName: tag,
+      phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
+      email,
+      licenseNumber: `LIC-TRUCK-${tag}`,
+      initialPassword: 'truckpass123',
+      driverType: 'TRUCK_DRIVER',
+    })
+    .expect(201);
+  const motoRes = await request(app.getHttpServer())
+    .post('/motorcycles')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ registrationNumber: `TRK-${tag}`, vehicleType: 'TRUCK' })
+    .expect(201);
+  return {
+    driverId: driverRes.body.id as string,
+    driverEmail: email,
+    motorcycleId: motoRes.body.id as string,
+  };
+}
+
+async function createTransportJob(
+  app: INestApplication,
+  ownerToken: string,
+  motorcycleId: string,
+  driverId: string,
+  overrides: Partial<Record<string, unknown>> = {},
+) {
+  const res = await request(app.getHttpServer())
+    .post('/transport-jobs')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      motorcycleId,
+      driverId,
+      origin: 'Dar es Salaam',
+      destination: 'Morogoro',
+      revenue: 250000,
+      scheduledDate: '2026-08-01',
+      ...overrides,
+    })
+    .expect(201);
+  return res.body.id as string;
+}
+
+async function loginTruckDriver(app: INestApplication, email: string) {
+  const res = await request(app.getHttpServer())
+    .post('/auth/login')
+    .send({ email, password: 'truckpass123' })
+    .expect(200);
+  return res.body.accessToken as string;
+}
+
 describe('Expenses (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -588,6 +649,97 @@ describe('Expenses (e2e)', () => {
         .get(`/expenses/${noReceipt.body.id}/receipt`)
         .set('Authorization', `Bearer ${riderTokenA}`)
         .expect(404);
+    });
+  });
+
+  describe('Stage DM16 - truck/car-driver job-based submission', () => {
+    it("a TRUCK_DRIVER's POST /expenses/job-submissions attaches to their own IN_TRANSIT job, with dailyAssignmentId staying null", async () => {
+      const token = await signupOwner(app, 'owner-dm16a@fleet.test', 'Fleet DM16A');
+      const truck = await setupTruckDriver(app, token, 'DM16A1');
+      const jobId = await createTransportJob(app, token, truck.motorcycleId, truck.driverId);
+
+      // CreateTransportJobDto has no status field - move it to IN_TRANSIT
+      // via the OWNER's own PATCH :id, same path DM15's own task spec left
+      // deliberately unblocked for the dashboard.
+      await request(app.getHttpServer())
+        .patch(`/transport-jobs/${jobId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'IN_TRANSIT' })
+        .expect(200);
+
+      const driverToken = await loginTruckDriver(app, truck.driverEmail);
+
+      const res = await request(app.getHttpServer())
+        .post('/expenses/job-submissions')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ category: 'Fuel', amount: 15000, incurredAt: '2026-08-01' })
+        .expect(201);
+
+      expect(res.body.status).toBe('PENDING');
+      expect(res.body.transportJobId).toBe(jobId);
+      expect(res.body.motorcycleId).toBe(truck.motorcycleId);
+      expect(res.body.dailyAssignmentId).toBeNull();
+      expect(res.body.submittedByRiderId).toBe(truck.driverId);
+    });
+
+    it('falls back to the soonest SCHEDULED job when there is no IN_TRANSIT one', async () => {
+      const token = await signupOwner(app, 'owner-dm16b@fleet.test', 'Fleet DM16B');
+      const truck = await setupTruckDriver(app, token, 'DM16B1');
+      await createTransportJob(app, token, truck.motorcycleId, truck.driverId, {
+        scheduledDate: '2026-09-10',
+      });
+      const soonerJobId = await createTransportJob(app, token, truck.motorcycleId, truck.driverId, {
+        scheduledDate: '2026-09-05',
+      });
+
+      const driverToken = await loginTruckDriver(app, truck.driverEmail);
+      const res = await request(app.getHttpServer())
+        .post('/expenses/job-submissions')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ category: 'Repairs', amount: 5000, incurredAt: '2026-09-01' })
+        .expect(201);
+
+      expect(res.body.transportJobId).toBe(soonerJobId);
+      expect(res.body.motorcycleId).toBe(truck.motorcycleId);
+    });
+
+    it('a driver with neither an IN_TRANSIT nor a SCHEDULED job gets a 400 with the exact message', async () => {
+      const token = await signupOwner(app, 'owner-dm16c@fleet.test', 'Fleet DM16C');
+      const truck = await setupTruckDriver(app, token, 'DM16C1');
+      const driverToken = await loginTruckDriver(app, truck.driverEmail);
+
+      const res = await request(app.getHttpServer())
+        .post('/expenses/job-submissions')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ category: 'Fuel', amount: 1000, incurredAt: '2026-08-01' })
+        .expect(400);
+      expect(res.body.message).toBe('You have no active or upcoming job right now.');
+    });
+
+    it('a driver with two IN_TRANSIT jobs at once gets the ambiguity error, not a silent pick', async () => {
+      const token = await signupOwner(app, 'owner-dm16d@fleet.test', 'Fleet DM16D');
+      const truck = await setupTruckDriver(app, token, 'DM16D1');
+      const job1 = await createTransportJob(app, token, truck.motorcycleId, truck.driverId);
+      const job2 = await createTransportJob(app, token, truck.motorcycleId, truck.driverId, {
+        scheduledDate: '2026-08-02',
+      });
+      for (const jobId of [job1, job2]) {
+        await request(app.getHttpServer())
+          .patch(`/transport-jobs/${jobId}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ status: 'IN_TRANSIT' })
+          .expect(200);
+      }
+
+      const driverToken = await loginTruckDriver(app, truck.driverEmail);
+      const res = await request(app.getHttpServer())
+        .post('/expenses/job-submissions')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ category: 'Fuel', amount: 1000, incurredAt: '2026-08-01' })
+        .expect(400);
+      expect(res.body.message).toBe(
+        "You have more than one active job right now - this isn't supported yet.",
+      );
     });
   });
 });

@@ -16,6 +16,11 @@ import { Transform } from 'class-transformer';
  * CreateExpenseDto, but no motorcycleId/transportJobId: those are derived
  * server-side from the rider's own DailyAssignment on incurredAt
  * (ExpenseService.submit), never taken from the request body.
+ *
+ * Stage DM16 - this same body shape is also used by
+ * ExpenseService.submitForJob (a truck/car driver's current TransportJob,
+ * not a DailyAssignment) - nothing about the body itself differs between
+ * the two derivation paths.
  */
 export class SubmitExpenseDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

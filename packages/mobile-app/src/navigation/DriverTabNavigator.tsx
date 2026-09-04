@@ -3,7 +3,7 @@ import { TodayScreen } from '../screens/TodayScreen';
 import { SafariZanguScreen } from '../screens/SafariZanguScreen';
 import { SafariJobDetailScreen } from '../screens/SafariJobDetailScreen';
 import { ProofOfDeliveryScreen } from '../screens/ProofOfDeliveryScreen';
-import { ComingSoonScreen } from '../screens/ComingSoonScreen';
+import { TransportExpensesScreen } from '../screens/TransportExpensesScreen';
 import { MimiScreen } from '../screens/MimiScreen';
 import { MkatabaWanguScreen } from '../screens/MkatabaWanguScreen';
 import { Icon, type IconName } from '../components/Icon';
@@ -13,9 +13,7 @@ import { colors } from '../theme';
 // design doc's three-tab truck-driver layout). SafariDetail and Mkataba are
 // hidden routes (tabBarButton: () => null), same convention as
 // RiderTabNavigator's Lipa/Mkataba: a real navigable screen without a
-// visible fourth/fifth icon. Matumizi (driver-submitted expenses) stays a
-// ComingSoonScreen placeholder - genuinely Stage H scope, ExpenseController
-// has no RIDER route today.
+// visible fourth/fifth icon.
 //
 // Stage DM13 - per DESIGN_CANONICAL_DEMO_DATA.md's driver-app decision, the
 // truck/car bottom bar is Today/Jobs/Expenses/Me in ENGLISH, deliberately
@@ -24,8 +22,13 @@ import { colors } from '../theme';
 // navigation.navigate() call site elsewhere needed to change - only the
 // tabBarLabel/tabBarIcon shown for each visible tab, plus a new Today route
 // (Part 4's TodayScreen). Safari's own screen content (the plain job list,
-// no mockup design for it yet) and Matumizi's ComingSoonScreen are
-// otherwise untouched.
+// no mockup design for it yet) was otherwise untouched; Matumizi's
+// ComingSoonScreen placeholder stayed until DM16 closed it (see below).
+//
+// Stage DM16 - Matumizi is no longer a placeholder: TransportExpensesScreen
+// posts to the new POST /expenses/job-submissions path (a TRUCK_DRIVER/
+// CAR_DRIVER has no DailyAssignment, so MatumiziScreen's own rider endpoint
+// is permanently unreachable for them). Route name/tab label unchanged.
 export type DriverTabParamList = {
   Today: undefined;
   Safari: undefined;
@@ -81,7 +84,7 @@ export function DriverTabNavigator() {
     >
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Safari" component={SafariZanguScreen} />
-      <Tab.Screen name="Matumizi">{() => <ComingSoonScreen label="Matumizi" />}</Tab.Screen>
+      <Tab.Screen name="Matumizi" component={TransportExpensesScreen} />
       <Tab.Screen name="Mimi" component={MimiScreen} />
       <Tab.Screen
         name="SafariDetail"

@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ExpenseStatus, Prisma, UserRole } from '@prisma/client';
+import { ExpenseStatus, Prisma, TransportJobStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { CreateExpenseDto } from './dto/create-expense.dto';
@@ -150,6 +150,12 @@ export class ExpenseService {
    * already uses. No assignment that day means there is nothing for this
    * expense to attach to, and the driver is told exactly that rather than
    * silently creating an unattributed row.
+   *
+   * Stage DM16 - SubmitExpenseDto's own body shape (category/amount/
+   * incurredAt/description) is now shared by two derivation paths: this one
+   * (a rental rider's DailyAssignment) and submitForJob() below (a truck/
+   * car driver's current TransportJob) - only how the job/assignment is
+   * resolved differs.
    */
   async submit(dto: SubmitExpenseDto, actor: AuthenticatedUser) {
     const ownDriverId = await this.getOwnDriverId(actor);
@@ -170,6 +176,75 @@ export class ExpenseService {
         category: dto.category,
         amount: dto.amount,
         incurredAt: assignedDate,
+        description: dto.description,
+        status: ExpenseStatus.PENDING,
+        submittedByUserId: actor.userId,
+        submittedByRiderId: ownDriverId,
+      },
+    });
+  }
+
+  /**
+   * Stage DM16 - the same "current job" TodayScreen.tsx's own load() already
+   * defines for a truck/car driver: their one IN_TRANSIT TransportJob, else
+   * their soonest-scheduled SCHEDULED one (scheduledDate ascending, createdAt
+   * ascending as a same-day tiebreaker). Two-plus IN_TRANSIT is a genuine
+   * ambiguity - updateOwnStatus() has no guard against two jobs being
+   * IN_TRANSIT for the same driver at once - so this refuses to guess rather
+   * than silently picking one.
+   */
+  private async resolveCurrentJobForDriver(
+    ownDriverId: string,
+  ): Promise<{ id: string; motorcycleId: string }> {
+    const inTransit = await this.prisma.client.transportJob.findMany({
+      where: { driverId: ownDriverId, status: TransportJobStatus.IN_TRANSIT },
+      select: { id: true, motorcycleId: true },
+    });
+    if (inTransit.length === 1) {
+      return inTransit[0];
+    }
+    if (inTransit.length > 1) {
+      throw new BadRequestException(
+        "You have more than one active job right now - this isn't supported yet.",
+      );
+    }
+
+    const [soonestScheduled] = await this.prisma.client.transportJob.findMany({
+      where: { driverId: ownDriverId, status: TransportJobStatus.SCHEDULED },
+      orderBy: [{ scheduledDate: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, motorcycleId: true },
+      take: 1,
+    });
+    if (soonestScheduled) {
+      return soonestScheduled;
+    }
+
+    throw new BadRequestException('You have no active or upcoming job right now.');
+  }
+
+  /**
+   * Stage DM16 - the truck/car-driver-mode counterpart to submit() above. A
+   * TRUCK_DRIVER/CAR_DRIVER never has a DailyAssignment (that's rental-only),
+   * so submit()'s own derivation is permanently unreachable for them; this
+   * resolves motorcycleId/transportJobId from the caller's own current job
+   * instead (resolveCurrentJobForDriver above). A deliberately separate
+   * method, not a branch on submit() - same "parallel, not generalized"
+   * convention getOwnDriverId/updateOwnStatus/fuelSpent/expenseQueue.ts
+   * already follow throughout this codebase. dailyAssignmentId is never set
+   * on this path.
+   */
+  async submitForJob(dto: SubmitExpenseDto, actor: AuthenticatedUser) {
+    const ownDriverId = await this.getOwnDriverId(actor);
+    const job = await this.resolveCurrentJobForDriver(ownDriverId);
+
+    return this.prisma.client.expense.create({
+      data: {
+        tenantId: actor.tenantId,
+        motorcycleId: job.motorcycleId,
+        transportJobId: job.id,
+        category: dto.category,
+        amount: dto.amount,
+        incurredAt: new Date(`${dto.incurredAt}T00:00:00.000Z`),
         description: dto.description,
         status: ExpenseStatus.PENDING,
         submittedByUserId: actor.userId,

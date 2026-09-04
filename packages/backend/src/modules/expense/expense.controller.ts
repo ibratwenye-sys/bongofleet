@@ -63,6 +63,16 @@ export class ExpenseController {
     return this.expenseService.submit(dto, actor);
   }
 
+  // Stage DM16 - the truck/car-driver-mode counterpart: same body shape,
+  // resolved against the caller's current TransportJob instead of a
+  // DailyAssignment. Same fixed-segment-before-:id routing-order reason as
+  // submissions/mine/pending-count above.
+  @Post('job-submissions')
+  @Roles(UserRole.RIDER)
+  submitForJob(@Body() dto: SubmitExpenseDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.expenseService.submitForJob(dto, actor);
+  }
+
   @Get('mine')
   @Roles(UserRole.RIDER)
   mine(@CurrentUser() actor: AuthenticatedUser) {

@@ -18,6 +18,11 @@ const EXPENSE_QUEUE_KEY = 'bf.expenseQueue';
 const PENDING_RECEIPTS_KEY = 'bf.expensePendingReceipts';
 // Stage I1 - same reasoning again: gpsQueue.ts is its own module, own key.
 const GPS_QUEUE_KEY = 'bf.gpsQueue';
+// Stage DM16 - jobExpenseQueue.ts's own pair, same reasoning again: a
+// separate module, separate keys, never sharing storage with the rider
+// screen's EXPENSE_QUEUE_KEY/PENDING_RECEIPTS_KEY above.
+const JOB_EXPENSE_QUEUE_KEY = 'bf.jobExpenseQueue';
+const JOB_EXPENSE_PENDING_RECEIPTS_KEY = 'bf.jobExpensePendingReceipts';
 
 export async function saveTokens(tokens: TokenResponse): Promise<void> {
   await AsyncStorage.multiSet([
@@ -81,6 +86,36 @@ export async function getPendingReceipts(): Promise<PendingReceiptUpload[]> {
 
 export async function setPendingReceipts(list: PendingReceiptUpload[]): Promise<void> {
   await AsyncStorage.setItem(PENDING_RECEIPTS_KEY, JSON.stringify(list));
+}
+
+export async function getJobExpenseQueue(): Promise<QueuedExpense[]> {
+  const raw = await AsyncStorage.getItem(JOB_EXPENSE_QUEUE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as QueuedExpense[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setJobExpenseQueue(queue: QueuedExpense[]): Promise<void> {
+  await AsyncStorage.setItem(JOB_EXPENSE_QUEUE_KEY, JSON.stringify(queue));
+}
+
+export async function getPendingJobReceipts(): Promise<PendingReceiptUpload[]> {
+  const raw = await AsyncStorage.getItem(JOB_EXPENSE_PENDING_RECEIPTS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as PendingReceiptUpload[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setPendingJobReceipts(list: PendingReceiptUpload[]): Promise<void> {
+  await AsyncStorage.setItem(JOB_EXPENSE_PENDING_RECEIPTS_KEY, JSON.stringify(list));
 }
 
 export async function getGpsQueue(): Promise<QueuedGpsFix[]> {
