@@ -288,6 +288,18 @@ export function SafariJobDetailScreen({ route, navigation }: Props) {
                 </View>
               </>
             )}
+
+            {job.status === 'IN_TRANSIT' && (
+              // Stage DM15 - exact button styling/icon reused from
+              // TodayScreen.tsx's own confirmButton/confirmButtonText.
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => navigation.navigate('SafariProofOfDelivery', { jobId: job.id })}
+              >
+                <Icon name="check" size={19} color="#fff" />
+                <Text style={styles.confirmButtonText}>Thibitisha kufika · Confirm delivery</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </ScrollView>
@@ -410,4 +422,17 @@ const styles = StyleSheet.create({
     color: colors.txt2,
   },
   rowValue: { fontSize: 13.5, fontWeight: '750' as TextStyle['fontWeight'], color: colors.txt },
+  // Stage DM15 - verbatim copy of TodayScreen.tsx's confirmButton/
+  // confirmButtonText (same blue, same padding/radius/icon gap).
+  confirmButton: {
+    backgroundColor: colors.blue,
+    borderRadius: radii.card,
+    paddingVertical: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    marginTop: spacing.sm,
+  },
+  confirmButtonText: { color: '#fff', fontSize: 15.5, fontWeight: '800' },
 });

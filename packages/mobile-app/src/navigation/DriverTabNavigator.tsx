@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { TodayScreen } from '../screens/TodayScreen';
 import { SafariZanguScreen } from '../screens/SafariZanguScreen';
 import { SafariJobDetailScreen } from '../screens/SafariJobDetailScreen';
+import { ProofOfDeliveryScreen } from '../screens/ProofOfDeliveryScreen';
 import { ComingSoonScreen } from '../screens/ComingSoonScreen';
 import { MimiScreen } from '../screens/MimiScreen';
 import { MkatabaWanguScreen } from '../screens/MkatabaWanguScreen';
@@ -31,6 +32,10 @@ export type DriverTabParamList = {
   Matumizi: undefined;
   Mimi: undefined;
   SafariDetail: { jobId: string };
+  // Stage DM15 - hidden route, same convention as SafariDetail/Mkataba
+  // above: reached only from SafariDetail's "Thibitisha kufika" button, no
+  // tab icon.
+  SafariProofOfDelivery: { jobId: string };
   Mkataba: undefined;
 };
 
@@ -81,6 +86,11 @@ export function DriverTabNavigator() {
       <Tab.Screen
         name="SafariDetail"
         component={SafariJobDetailScreen}
+        options={{ tabBarButton: () => null }}
+      />
+      <Tab.Screen
+        name="SafariProofOfDelivery"
+        component={ProofOfDeliveryScreen}
         options={{ tabBarButton: () => null }}
       />
       <Tab.Screen

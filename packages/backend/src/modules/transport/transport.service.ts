@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
+import { promises as fs } from 'node:fs';
 import {
   BadRequestException,
   ConflictException,
@@ -6,6 +9,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OwnershipPlanStatus, Prisma, TransportJobStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -23,6 +27,28 @@ function assertOwnerOrManager(actor: AuthenticatedUser): void {
   if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
     throw new ForbiddenException('Only OWNER or MANAGER may manage transport jobs');
   }
+}
+
+// Stage DM15 - a camera photo, not a receipt scan: JPEG/PNG only, no PDF.
+// MAX_RECEIPT_SIZE_BYTES is reused from expense.service.ts (not redefined)
+// per this stage's own task spec - the one deliberate exception to this
+// codebase's usual per-module-copy convention for these upload constants.
+export const ALLOWED_DELIVERY_PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
+
+export function deliveryPhotoFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+): void {
+  if (!ALLOWED_DELIVERY_PHOTO_MIME_TYPES.has(file.mimetype)) {
+    callback(new BadRequestException('Only JPEG or PNG delivery photos are allowed'), false);
+    return;
+  }
+  callback(null, true);
+}
+
+function sanitizeFileName(originalName: string): string {
+  return originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 /**
@@ -60,8 +86,14 @@ function netProfit(
 @Injectable()
 export class TransportService {
   private readonly logger = new Logger(TransportService.name);
+  private readonly uploadsDir: string;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
+    this.uploadsDir = this.config.get<string>('UPLOADS_DIR', './uploads');
+  }
 
   async createJob(dto: CreateTransportJobDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
@@ -431,6 +463,92 @@ export class TransportService {
       ...this.withPnl(updated, expenseTotal),
       progress: await this.jobProgress(updated),
     });
+  }
+
+  /**
+   * Stage DM15 - mirrors ExpenseService.uploadReceipt almost verbatim (same
+   * UPLOADS_DIR-relative storage, same orphaned-file-unlink-on-replace
+   * behavior), with two differences: (1) the job is resolved the same way
+   * updateOwnStatus() does - 404 (not 403) when it doesn't exist or isn't
+   * the caller's own; (2) upload is only allowed while IN_TRANSIT - a job
+   * that hasn't started or is already done has nothing to attach proof to.
+   */
+  async uploadDeliveryPhoto(id: string, file: Express.Multer.File, actor: AuthenticatedUser) {
+    const ownDriverId = await this.getOwnDriverId(actor);
+    const existing = await this.prisma.client.transportJob.findUnique({ where: { id } });
+    if (!existing || existing.driverId !== ownDriverId) {
+      throw new NotFoundException('Transport job not found');
+    }
+    if (existing.status !== TransportJobStatus.IN_TRANSIT) {
+      throw new BadRequestException('A delivery photo can only be added to a job in transit');
+    }
+
+    const fileName = `${randomUUID()}-${sanitizeFileName(file.originalname)}`;
+    const storageKey = path.join(actor.tenantId, 'delivery-photos', fileName);
+    const absolutePath = path.join(this.uploadsDir, storageKey);
+
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, file.buffer);
+
+    try {
+      // Selected, not the raw row: this endpoint is RIDER-only and a plain
+      // update() result carries revenue - unlike getJob/listJobs/
+      // updateOwnStatus, there's no omitOwnerFinancials() call on this path
+      // (it's typed to require netProfit, which nothing here computes), so
+      // the fix is to never fetch the owner-only columns back in the first
+      // place rather than strip them after the fact.
+      const updated = await this.prisma.client.transportJob.update({
+        where: { id },
+        data: {
+          deliveryPhotoStorageKey: storageKey,
+          deliveryPhotoFileName: file.originalname,
+          deliveryPhotoMimeType: file.mimetype,
+          deliveryPhotoSizeBytes: file.size,
+          deliveryPhotoUploadedAt: new Date(),
+        },
+        select: { deliveryPhotoUploadedAt: true },
+      });
+      // Replacing an earlier photo? drop the now-orphaned file.
+      if (existing.deliveryPhotoStorageKey && existing.deliveryPhotoStorageKey !== storageKey) {
+        await fs
+          .unlink(path.join(this.uploadsDir, existing.deliveryPhotoStorageKey))
+          .catch(() => undefined);
+      }
+      return updated;
+    } catch (error) {
+      await fs.unlink(absolutePath).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Stage DM15 - mirrors ExpenseService.getReceiptFile: reachable by all
+   * three roles, a RIDER sees only their own job (not-found, not forbidden,
+   * on someone else's), OWNER/MANAGER see any job. No assertOwnerOrManager
+   * call, same as the receipt version - the RIDER branch is the only
+   * role-conditional check.
+   */
+  async getDeliveryPhotoFile(id: string, actor: AuthenticatedUser) {
+    const job = await this.prisma.client.transportJob.findUnique({ where: { id } });
+    if (!job) {
+      throw new NotFoundException('Transport job not found');
+    }
+    if (actor.role === UserRole.RIDER) {
+      const ownDriverId = await this.getOwnDriverId(actor);
+      if (job.driverId !== ownDriverId) {
+        throw new NotFoundException('Transport job not found');
+      }
+    }
+    if (!job.deliveryPhotoStorageKey) {
+      throw new NotFoundException('No delivery photo uploaded for this job');
+    }
+    const absolutePath = path.join(this.uploadsDir, job.deliveryPhotoStorageKey);
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      throw new NotFoundException('Delivery photo file not found');
+    }
+    return { job, absolutePath };
   }
 
   async deleteJob(id: string, actor: AuthenticatedUser): Promise<void> {

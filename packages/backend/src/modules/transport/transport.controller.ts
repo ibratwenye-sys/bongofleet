@@ -1,4 +1,6 @@
+import { createReadStream } from 'node:fs';
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,17 +11,24 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { TransportService } from './transport.service';
+import { TransportService, deliveryPhotoFileFilter } from './transport.service';
 import { TransportOperationsService } from './transport-operations.service';
+import { MAX_RECEIPT_SIZE_BYTES } from '../expense/expense.service';
 import { CreateTransportJobDto } from './dto/create-transport-job.dto';
 import { UpdateTransportJobDto } from './dto/update-transport-job.dto';
 import { UpdateTransportJobStatusDto } from './dto/update-transport-job-status.dto';
@@ -93,6 +102,42 @@ export class TransportController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.transportService.updateJob(id, dto, actor);
+  }
+
+  // Stage DM15 - proof-of-delivery cargo photo. Same RIDER-only-upload/
+  // three-role-download split as expense.controller.ts's receipt routes.
+  @Post(':id/delivery-photo')
+  @Roles(UserRole.RIDER)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_RECEIPT_SIZE_BYTES },
+      fileFilter: deliveryPhotoFileFilter,
+    }),
+  )
+  uploadDeliveryPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('A delivery photo file is required');
+    }
+    return this.transportService.uploadDeliveryPhoto(id, file, actor);
+  }
+
+  @Get(':id/delivery-photo')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.RIDER)
+  async downloadDeliveryPhoto(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { job, absolutePath } = await this.transportService.getDeliveryPhotoFile(id, actor);
+    res.set({
+      'Content-Type': job.deliveryPhotoMimeType ?? 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${job.deliveryPhotoFileName ?? 'delivery-photo'}"`,
+    });
+    return new StreamableFile(createReadStream(absolutePath));
   }
 
   @Delete(':id')

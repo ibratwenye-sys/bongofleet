@@ -716,6 +716,15 @@ model TransportJob {
   categoryOverrideReason   String?            @map("category_override_reason")
   categoryOverrideByUserId String?            @map("category_override_by_user_id")
   categoryOverrideAt       DateTime?          @map("category_override_at")
+  // Stage DM15 - proof-of-delivery cargo photo. Mirrors Expense's own
+  // receipt* columns exactly (same names/types, "delivery" instead of
+  // "receipt"), minus a description field - there's nothing free-text to
+  // attach here.
+  deliveryPhotoStorageKey  String?            @map("delivery_photo_storage_key")
+  deliveryPhotoFileName    String?            @map("delivery_photo_file_name")
+  deliveryPhotoMimeType    String?            @map("delivery_photo_mime_type")
+  deliveryPhotoSizeBytes   Int?               @map("delivery_photo_size_bytes")
+  deliveryPhotoUploadedAt  DateTime?          @map("delivery_photo_uploaded_at")
   createdAt                DateTime           @default(now()) @map("created_at")
   updatedAt                DateTime           @updatedAt @map("updated_at")
 

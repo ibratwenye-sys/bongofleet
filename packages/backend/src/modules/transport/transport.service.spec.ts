@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
   ConflictException,
@@ -90,7 +91,11 @@ describe('TransportService', () => {
       },
     };
     const moduleRef = await Test.createTestingModule({
-      providers: [TransportService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        TransportService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: () => './uploads' } },
+      ],
     }).compile();
     service = moduleRef.get(TransportService);
   });
