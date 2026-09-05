@@ -1,11 +1,120 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
-import type { Driver, Expense, Motorcycle } from '../lib/types';
+import type { Driver, Expense, ExpenseCategoryCap, Motorcycle } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { formatDateTime, formatTZS } from '../lib/format';
 import { PageChassis } from '../components/chassis/PageChassis';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { useAuth } from '../lib/auth-context';
+
+/** DESIGN_RIDER_EXPENSES.md step 5 - both advisory-only signals get the
+ *  same amber-pill treatment (StatusBadge.tsx's own PENDING/EXPIRING_SOON
+ *  convention), not a new visual language: neither is more or less severe
+ *  than the other, just two independent "worth a second look" flags. */
+function OverCapBadge() {
+  return (
+    <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800">
+      Over cap
+    </span>
+  );
+}
+
+function PossibleDuplicateBadge() {
+  return (
+    <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800">
+      Possible duplicate
+    </span>
+  );
+}
+
+/**
+ * Stage (DESIGN_RIDER_EXPENSES.md step 5) - one row per rider category,
+ * always all 7 (the caps prop already comes from GET in that fixed
+ * shape). OWNER gets an editable number input per category (blank = no
+ * cap) and a single Save button that PUTs the whole set; MANAGER sees the
+ * same 7 rows read-only, same "OWNER edits, MANAGER views" split as the
+ * rest of this stage's role gating.
+ */
+function CategoryCapsCard({
+  caps,
+  isOwner,
+  onSaved,
+}: {
+  caps: ExpenseCategoryCap[];
+  isOwner: boolean;
+  onSaved: (caps: ExpenseCategoryCap[], message: string) => void;
+}) {
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Re-syncs both on first load and after a successful save (the parent
+  // passes the PUT response's own fresh caps back down as this same prop).
+  useEffect(() => {
+    setInputs(Object.fromEntries(caps.map((c) => [c.category, c.dailyCapAmount ?? ''])));
+  }, [caps]);
+
+  async function handleSave() {
+    setError(null);
+    setSaving(true);
+    try {
+      const body = {
+        caps: caps.map((c) => {
+          const raw = (inputs[c.category] ?? '').trim();
+          return { category: c.category, dailyCapAmount: raw === '' ? null : Number(raw) };
+        }),
+      };
+      const saved = await apiFetch<ExpenseCategoryCap[]>('/expense-category-caps', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      onSaved(saved, 'Category caps saved.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save category caps.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card title="Category caps" subtitle="Daily, per rider">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {caps.map((c) => (
+          <div key={c.category}>
+            <label className="mb-1 block text-xs font-medium text-txt-2">{c.category}</label>
+            {isOwner ? (
+              <input
+                type="number"
+                min="0"
+                value={inputs[c.category] ?? ''}
+                onChange={(e) => setInputs({ ...inputs, [c.category]: e.target.value })}
+                placeholder="No cap"
+                className="w-full rounded border border-line px-2 py-1.5 text-sm"
+              />
+            ) : (
+              <p className="text-sm text-txt">
+                {c.dailyCapAmount ? formatTZS(c.dailyCapAmount) : 'No cap'}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      {error && <p className="mt-3 text-sm text-crit">{error}</p>}
+      {isOwner && (
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /**
  * Stage H3 - the receipt column. An image gets an actual thumbnail (fetched
@@ -195,9 +304,11 @@ function pendingKpis(expenses: Expense[]): KpiTile[] {
 }
 
 export function ApprovalsPage() {
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
+  const [caps, setCaps] = useState<ExpenseCategoryCap[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -213,6 +324,11 @@ export function ApprovalsPage() {
     }
   }
 
+  function handleCapsSaved(saved: ExpenseCategoryCap[], message: string) {
+    setCaps(saved);
+    setSuccessMessage(message);
+  }
+
   useEffect(() => {
     void load();
     apiFetch<Driver[]>('/drivers')
@@ -221,6 +337,9 @@ export function ApprovalsPage() {
     apiFetch<Motorcycle[]>('/motorcycles')
       .then(setMotorcycles)
       .catch(() => setMotorcycles([]));
+    apiFetch<ExpenseCategoryCap[]>('/expense-category-caps')
+      .then(setCaps)
+      .catch(() => setCaps([]));
   }, []);
 
   useEffect(() => {
@@ -270,6 +389,10 @@ export function ApprovalsPage() {
       )}
       {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
+      {caps && (
+        <CategoryCapsCard caps={caps} isOwner={user?.role === 'OWNER'} onSaved={handleCapsSaved} />
+      )}
+
       <Card
         title="Pending expense claims"
         subtitle={expenses ? String(expenses.length) : undefined}
@@ -316,7 +439,13 @@ export function ApprovalsPage() {
                       <td className="px-4 py-2 text-txt-2">
                         {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'}
                       </td>
-                      <td className="px-4 py-2 text-txt">{e.category}</td>
+                      <td className="px-4 py-2 text-txt">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{e.category}</span>
+                          {e.overCapFlag && <OverCapBadge />}
+                          {e.possibleDuplicateFlag && <PossibleDuplicateBadge />}
+                        </div>
+                      </td>
                       <td className="px-4 py-2 text-right text-txt-2">{formatTZS(e.amount)}</td>
                       <td className="px-4 py-2 text-txt-2">{e.incurredAt.slice(0, 10)}</td>
                       <td className="px-4 py-2 text-txt-2">{formatDateTime(e.createdAt)}</td>
@@ -367,6 +496,12 @@ export function ApprovalsPage() {
                     </span>
                     <span className="text-xs text-txt-2">{e.category}</span>
                   </div>
+                  {(e.overCapFlag || e.possibleDuplicateFlag) && (
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {e.overCapFlag && <OverCapBadge />}
+                      {e.possibleDuplicateFlag && <PossibleDuplicateBadge />}
+                    </div>
+                  )}
                   <p className="mt-1 text-xs text-txt-2">
                     {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'} ·{' '}
                     {formatTZS(e.amount)}

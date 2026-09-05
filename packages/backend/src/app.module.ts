@@ -21,6 +21,7 @@ import { DocumentModule } from './modules/document/document.module';
 import { GuarantorModule } from './modules/guarantor/guarantor.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { ExpenseModule } from './modules/expense/expense.module';
+import { ExpenseCategoryCapModule } from './modules/expense-category-cap/expense-category-cap.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { TransportModule } from './modules/transport/transport.module';
@@ -66,6 +67,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     GuarantorModule,
     NotificationModule,
     ExpenseModule,
+    ExpenseCategoryCapModule,
     AnalyticsModule,
     MaintenanceModule,
     TransportModule,

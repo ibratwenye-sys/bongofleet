@@ -277,6 +277,19 @@ export interface Expense {
   receiptMimeType: string | null;
   receiptSizeBytes: number | null;
   receiptUploadedAt: string | null;
+  // DESIGN_RIDER_EXPENSES.md step 5 - advisory only, the operator always
+  // decides; only ever true when this row came from GET /expenses?
+  // status=PENDING (ApprovalsPage.tsx's own request shape) - false, not
+  // absent, everywhere else, same as other boolean-ish fields on this type.
+  overCapFlag: boolean;
+  possibleDuplicateFlag: boolean;
+}
+
+// DESIGN_RIDER_EXPENSES.md step 5. GET/PUT /expense-category-caps' shape -
+// always all 7 rider categories, dailyCapAmount null where uncapped.
+export interface ExpenseCategoryCap {
+  category: string;
+  dailyCapAmount: string | null;
 }
 
 export interface CreateExpensePayload {

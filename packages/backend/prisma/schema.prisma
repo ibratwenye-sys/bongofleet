@@ -237,6 +237,7 @@ model Tenant {
   dayExcusals          DayExcusal[]
   trackingLinks        TrackingLink[]
   gpsProviderConfigs   GpsProviderConfig[]
+  expenseCategoryCaps  ExpenseCategoryCap[]
 
   @@map("tenants")
 }
@@ -703,6 +704,31 @@ model Expense {
   @@index([tenantId])
   @@index([transportJobId])
   @@map("expenses")
+}
+
+/// DESIGN_RIDER_EXPENSES.md's build-order step 5 - a per-tenant, per-
+/// category daily cap, advisory only (the Approvals queue read path uses
+/// this to flag a PENDING claim, never to block/auto-reject anything).
+/// category is one of the rider app's fixed 7 categories (see
+/// RIDER_EXPENSE_CATEGORIES) - not the free-text value
+/// Expense.category otherwise accepts, since dashboard-created expenses
+/// (any category, auto-APPROVED) never reach the Approvals queue this
+/// exists to annotate. No row for a given [tenantId, category] simply
+/// means uncapped - never a flag.
+///
+/// Ordinary tenant-scoped data, same as every other model here (NOT
+/// excluded from tenant-scoping.extension.ts's EXCLUDED_MODELS).
+model ExpenseCategoryCap {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  category       String
+  dailyCapAmount Decimal  @map("daily_cap_amount") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, category])
+  @@map("expense_category_caps")
 }
 
 enum ExpenseStatus {

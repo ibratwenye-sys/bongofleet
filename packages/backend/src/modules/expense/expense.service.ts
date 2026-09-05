@@ -44,6 +44,81 @@ export function buildDateRangeFilter(
   return filter;
 }
 
+// --- Approvals queue advisory flags (DESIGN_RIDER_EXPENSES.md build-order
+// step 5). Pure derivation logic, DB-free on purpose, same "pass in what
+// you've already fetched" convention as gps/current-position.ts's
+// resolveCurrentPosition - testable without Prisma mock plumbing. The
+// batched Prisma fetching that builds capByCategory/sumByTriple/
+// idsByTuple lives on the service below, in computeOverCapFlags/
+// computeDuplicateFlags. ---
+
+export interface ExpenseAdvisoryCandidate {
+  id: string;
+  submittedByRiderId: string | null;
+  category: string;
+  amount: Prisma.Decimal;
+  incurredAt: Date;
+}
+
+function tripleKey(riderId: string, category: string, incurredAt: Date): string {
+  return `${riderId}|${category}|${incurredAt.toISOString()}`;
+}
+
+function tupleKey(
+  riderId: string,
+  category: string,
+  amount: Prisma.Decimal,
+  incurredAt: Date,
+): string {
+  return `${riderId}|${category}|${amount.toString()}|${incurredAt.toISOString()}`;
+}
+
+/**
+ * Which candidates exceed their category's configured cap once their
+ * running daily total (sumByTriple, any status except REJECTED, already
+ * including the candidate's own row) is compared against it. A candidate
+ * whose category has no configured cap is never flagged - not present in
+ * capByCategory at all, per computeOverCapFlags below skipping the sum
+ * query entirely when nothing is capped.
+ */
+export function deriveOverCapFlags(
+  candidates: ExpenseAdvisoryCandidate[],
+  capByCategory: Map<string, Prisma.Decimal>,
+  sumByTriple: Map<string, Prisma.Decimal>,
+): Map<string, boolean> {
+  const flags = new Map<string, boolean>();
+  for (const c of candidates) {
+    if (!c.submittedByRiderId) continue;
+    const cap = capByCategory.get(c.category);
+    if (!cap) continue;
+    const sum =
+      sumByTriple.get(tripleKey(c.submittedByRiderId, c.category, c.incurredAt)) ??
+      new Prisma.Decimal(0);
+    flags.set(c.id, sum.greaterThan(cap));
+  }
+  return flags;
+}
+
+/**
+ * Which candidates share their exact (rider, category, amount, incurredAt)
+ * tuple with at least one OTHER expense (idsByTuple carries every id
+ * matching that tuple, any status, including the candidate's own row) -
+ * flagged true iff more than one id shares it.
+ */
+export function deriveDuplicateFlags(
+  candidates: ExpenseAdvisoryCandidate[],
+  idsByTuple: Map<string, string[]>,
+): Map<string, boolean> {
+  const flags = new Map<string, boolean>();
+  for (const c of candidates) {
+    if (!c.submittedByRiderId) continue;
+    const key = tupleKey(c.submittedByRiderId, c.category, c.amount, c.incurredAt);
+    const ids = idsByTuple.get(key) ?? [c.id];
+    flags.set(c.id, ids.length > 1);
+  }
+  return flags;
+}
+
 // Stage H2 - mirrors payment.service.ts's own receipt-upload constants
 // exactly (same size cap, same allowed types). Each module keeps its own
 // copy rather than importing from another feature module - the established
@@ -275,11 +350,21 @@ export class ExpenseService {
     return { count };
   }
 
+  /**
+   * Stage (DESIGN_RIDER_EXPENSES.md step 5) - when the caller asks
+   * specifically for status=PENDING (exactly ApprovalsPage.tsx's own
+   * request shape), each row also carries overCapFlag/possibleDuplicateFlag
+   * - both advisory only, the operator always decides, neither ever
+   * blocks/changes approve/reject itself. Not computed for any other
+   * status filter or an unfiltered list - ExpensesPage.tsx's ledger view
+   * has no use for either and it would be wasted work over whatever date
+   * range it's showing.
+   */
   async list(query: ListExpensesQueryDto, actor: AuthenticatedUser) {
     assertOwnerOrManager(actor);
 
     const incurredAt = buildDateRangeFilter(query.from, query.to);
-    return this.prisma.client.expense.findMany({
+    const expenses = await this.prisma.client.expense.findMany({
       where: {
         ...(query.status ? { status: query.status } : {}),
         ...(query.motorcycleId ? { motorcycleId: query.motorcycleId } : {}),
@@ -289,6 +374,129 @@ export class ExpenseService {
       },
       orderBy: { incurredAt: 'desc' },
     });
+
+    if (query.status !== ExpenseStatus.PENDING) {
+      return expenses;
+    }
+
+    const [overCapById, duplicateById] = await Promise.all([
+      this.computeOverCapFlags(expenses),
+      this.computeDuplicateFlags(expenses),
+    ]);
+    return expenses.map((e) => ({
+      ...e,
+      overCapFlag: overCapById.get(e.id) ?? false,
+      possibleDuplicateFlag: duplicateById.get(e.id) ?? false,
+    }));
+  }
+
+  /**
+   * Batched: ONE query for which of the candidates' categories even have a
+   * configured cap (skips the sum query entirely if none do), then ONE
+   * groupBy query for the (rider, category, incurredAt) running totals -
+   * never one query per row, same discipline as
+   * OwnershipPlanService.batchDerivedFigures / TransportService.fuelSpent.
+   * The `in` filters on the groupBy overfetch some (rider, category, date)
+   * combinations that don't correspond to any real candidate - harmless,
+   * deriveOverCapFlags matches back by the exact triple, never trusting
+   * the cross-product blindly.
+   */
+  private async computeOverCapFlags(
+    candidates: ExpenseAdvisoryCandidate[],
+  ): Promise<Map<string, boolean>> {
+    const eligible = candidates.filter((c) => c.submittedByRiderId !== null);
+    if (eligible.length === 0) {
+      return new Map();
+    }
+
+    const distinctCategories = [...new Set(eligible.map((c) => c.category))];
+    const caps = await this.prisma.client.expenseCategoryCap.findMany({
+      where: { category: { in: distinctCategories } },
+    });
+    if (caps.length === 0) {
+      return new Map();
+    }
+    const capByCategory = new Map(caps.map((c) => [c.category, c.dailyCapAmount]));
+
+    const capped = eligible.filter((c) => capByCategory.has(c.category));
+    if (capped.length === 0) {
+      return new Map();
+    }
+
+    const riderIds = [...new Set(capped.map((c) => c.submittedByRiderId as string))];
+    const categories = [...new Set(capped.map((c) => c.category))];
+    const dates = [...new Set(capped.map((c) => c.incurredAt.getTime()))].map((t) => new Date(t));
+
+    const sums = await this.prisma.client.expense.groupBy({
+      by: ['submittedByRiderId', 'category', 'incurredAt'],
+      where: {
+        submittedByRiderId: { in: riderIds },
+        category: { in: categories },
+        incurredAt: { in: dates },
+        status: { not: ExpenseStatus.REJECTED },
+      },
+      _sum: { amount: true },
+    });
+
+    const sumByTriple = new Map<string, Prisma.Decimal>();
+    for (const row of sums) {
+      if (!row.submittedByRiderId) continue;
+      sumByTriple.set(
+        tripleKey(row.submittedByRiderId, row.category, row.incurredAt),
+        new Prisma.Decimal(row._sum.amount ?? 0),
+      );
+    }
+
+    return deriveOverCapFlags(capped, capByCategory, sumByTriple);
+  }
+
+  /**
+   * Batched: ONE findMany for every expense (any status) sharing a
+   * (rider, category, amount, incurredAt) tuple with any of the
+   * candidates - never one query per row. Same overfetch-then-match-exact
+   * approach as computeOverCapFlags above.
+   */
+  private async computeDuplicateFlags(
+    candidates: ExpenseAdvisoryCandidate[],
+  ): Promise<Map<string, boolean>> {
+    const eligible = candidates.filter((c) => c.submittedByRiderId !== null);
+    if (eligible.length === 0) {
+      return new Map();
+    }
+
+    const riderIds = [...new Set(eligible.map((c) => c.submittedByRiderId as string))];
+    const categories = [...new Set(eligible.map((c) => c.category))];
+    const amounts = [...new Set(eligible.map((c) => c.amount.toString()))].map(
+      (s) => new Prisma.Decimal(s),
+    );
+    const dates = [...new Set(eligible.map((c) => c.incurredAt.getTime()))].map((t) => new Date(t));
+
+    const matches = await this.prisma.client.expense.findMany({
+      where: {
+        submittedByRiderId: { in: riderIds },
+        category: { in: categories },
+        amount: { in: amounts },
+        incurredAt: { in: dates },
+      },
+      select: {
+        id: true,
+        submittedByRiderId: true,
+        category: true,
+        amount: true,
+        incurredAt: true,
+      },
+    });
+
+    const idsByTuple = new Map<string, string[]>();
+    for (const m of matches) {
+      if (!m.submittedByRiderId) continue;
+      const key = tupleKey(m.submittedByRiderId, m.category, m.amount, m.incurredAt);
+      const list = idsByTuple.get(key) ?? [];
+      list.push(m.id);
+      idsByTuple.set(key, list);
+    }
+
+    return deriveDuplicateFlags(eligible, idsByTuple);
   }
 
   async get(id: string, actor: AuthenticatedUser) {

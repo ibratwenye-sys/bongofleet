@@ -742,4 +742,80 @@ describe('Expenses (e2e)', () => {
       );
     });
   });
+
+  describe('Approvals queue advisory flags (over-cap / possible-duplicate)', () => {
+    it("flags a rider's PENDING claims that push their daily category total over the configured cap, and flags an exact-duplicate resubmission, end to end against the real DB", async () => {
+      const token = await signupOwner(app, 'owner-flags@fleet.test', 'Fleet Flags');
+      const a = await setupRider(app, token, 'Flags1');
+      await assignDay(app, token, a.driverId, a.motorcycleId, '2026-08-20');
+      const riderToken = await loginRider(app, a.driverEmail);
+
+      await request(app.getHttpServer())
+        .put('/expense-category-caps')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ caps: [{ category: 'Fuel', dailyCapAmount: 5000 }] })
+        .expect(200);
+
+      // Two Fuel claims same day, DIFFERENT amounts (so this pair never
+      // trips the possible-duplicate check on each other) - individually
+      // under the 5000 cap, but their running total (6500) exceeds it.
+      const first = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ category: 'Fuel', amount: 3000, incurredAt: '2026-08-20' })
+        .expect(201);
+      const second = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ category: 'Fuel', amount: 3500, incurredAt: '2026-08-20' })
+        .expect(201);
+
+      // A Repairs claim, no cap configured for it - never flagged over-cap
+      // however large, and this is also the possible-duplicate probe: an
+      // identical resubmission below should flag both of these.
+      const repairsOriginal = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ category: 'Repairs', amount: 999999, incurredAt: '2026-08-20' })
+        .expect(201);
+      const repairsDuplicate = await request(app.getHttpServer())
+        .post('/expenses/submissions')
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ category: 'Repairs', amount: 999999, incurredAt: '2026-08-20' })
+        .expect(201);
+
+      const pending = await request(app.getHttpServer())
+        .get('/expenses')
+        .query({ status: 'PENDING' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      type FlaggedExpense = { id: string; overCapFlag: boolean; possibleDuplicateFlag: boolean };
+      const byId = new Map<string, FlaggedExpense>(
+        (pending.body as FlaggedExpense[]).map((e) => [e.id, e]),
+      );
+      function flagsFor(id: string): FlaggedExpense {
+        const found = byId.get(id);
+        if (!found) throw new Error(`Expected expense ${id} in the PENDING list`);
+        return found;
+      }
+
+      expect(flagsFor(first.body.id).overCapFlag).toBe(true);
+      expect(flagsFor(second.body.id).overCapFlag).toBe(true);
+      expect(flagsFor(first.body.id).possibleDuplicateFlag).toBe(false);
+
+      expect(flagsFor(repairsOriginal.body.id).overCapFlag).toBe(false);
+      expect(flagsFor(repairsDuplicate.body.id).overCapFlag).toBe(false);
+      expect(flagsFor(repairsOriginal.body.id).possibleDuplicateFlag).toBe(true);
+      expect(flagsFor(repairsDuplicate.body.id).possibleDuplicateFlag).toBe(true);
+
+      // A non-PENDING request never carries either field at all.
+      const approvedList = await request(app.getHttpServer())
+        .get('/expenses')
+        .query({ status: 'APPROVED' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(approvedList.body.every((e: object) => !('overCapFlag' in e))).toBe(true);
+    });
+  });
 });
