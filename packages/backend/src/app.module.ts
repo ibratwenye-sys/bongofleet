@@ -28,6 +28,7 @@ import { OwnershipPlanModule } from './modules/ownership-plan/ownership-plan.mod
 import { PaymentAccountModule } from './modules/payment-account/payment-account.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { GpsModule } from './modules/gps/gps.module';
+import { GpsProviderConfigModule } from './modules/gps-provider-config/gps-provider-config.module';
 import { TrackingLinkModule } from './modules/tracking-link/tracking-link.module';
 import { BulkImportModule } from './modules/bulk-import/bulk-import.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -72,6 +73,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     PaymentAccountModule,
     TenantModule,
     GpsModule,
+    GpsProviderConfigModule,
     TrackingLinkModule,
     BulkImportModule,
     DashboardModule,

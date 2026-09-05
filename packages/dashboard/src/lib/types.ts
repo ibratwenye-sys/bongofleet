@@ -484,6 +484,18 @@ export interface TenantBilling {
   billingExempt: boolean;
 }
 
+// Stage 1b (DESIGN_GPS_TRACKING.md §5). GET/PUT/PATCH /gps-provider-config's
+// shape - never a token or any decrypted value; hasCredentials is the only
+// signal a token is on file.
+export interface GpsProviderConfig {
+  baseUrl: string;
+  isActive: boolean;
+  lastPolledAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorMessage: string | null;
+  hasCredentials: boolean;
+}
+
 // --- Hire-purchase ownership plans (Stage G Part 4) ---
 // money fields are Prisma Decimals -> strings, same convention as the rest
 // of this file. driver/motorcycle here are the OwnershipPlanService's own

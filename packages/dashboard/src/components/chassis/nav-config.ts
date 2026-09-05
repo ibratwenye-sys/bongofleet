@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Admin',
     items: [
       { to: '/settings/billing', label: 'Billing', roles: ['OWNER'] },
+      { to: '/settings/gps-provider', label: 'GPS Provider', roles: ['OWNER'] },
       { to: '/settings/tracking-links', label: 'Links', roles: ['OWNER', 'MANAGER'] },
       { to: '/settings/bulk-import', label: 'Import', roles: ['OWNER'] },
     ],

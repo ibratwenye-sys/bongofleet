@@ -18,6 +18,7 @@ import { MaintenancePage } from './pages/MaintenancePage';
 import { OwnershipPage } from './pages/OwnershipPage';
 import { OwnershipPlanDetailPage } from './pages/OwnershipPlanDetailPage';
 import { BillingPage } from './pages/BillingPage';
+import { GpsProviderSettingsPage } from './pages/GpsProviderSettingsPage';
 import { TrackingLinksPage } from './pages/TrackingLinksPage';
 import { BulkImportPage } from './pages/BulkImportPage';
 
@@ -78,6 +79,7 @@ function App() {
                 <Route path="/maintenance" element={<MaintenancePage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings/billing" element={<BillingPage />} />
+                <Route path="/settings/gps-provider" element={<GpsProviderSettingsPage />} />
                 <Route path="/settings/bulk-import" element={<BulkImportPage />} />
                 <Route path="/settings/tracking-map" element={<TrackingMapPage />} />
                 <Route path="/settings/tracking-links" element={<TrackingLinksPage />} />

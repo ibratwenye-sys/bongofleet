@@ -110,6 +110,18 @@ enum TrackingMode {
   @@map("tracking_mode")
 }
 
+/// Stage 1b (DESIGN_GPS_TRACKING.md §5). Which box-tracking provider a
+/// tenant's GpsProviderConfig talks to. One member today - Traccar is the
+/// only provider this codebase integrates with - kept as an enum (not a
+/// hardcoded assumption) so a second provider is additive later, same
+/// "settle the shape now" reasoning GpsSource/TrackingMode above already
+/// used for DEVICE/BOTH before they had real data.
+enum GpsProvider {
+  TRACCAR
+
+  @@map("gps_provider")
+}
+
 enum DocumentOwnerType {
   RIDER
   MOTORCYCLE
@@ -224,6 +236,7 @@ model Tenant {
   paymentAccounts      PaymentAccount[]
   dayExcusals          DayExcusal[]
   trackingLinks        TrackingLink[]
+  gpsProviderConfigs   GpsProviderConfig[]
 
   @@map("tenants")
 }
@@ -558,6 +571,37 @@ model GpsLocation {
   @@index([tenantId, recordedAt])
   @@index([tenantId, motorcycleId, source, recordedAt])
   @@map("gps_locations")
+}
+
+/// Stage 1b (DESIGN_GPS_TRACKING.md §5) - a tenant's own connection to a
+/// box-tracking provider (Traccar today). credentialsEncrypted stores
+/// encryptCredentials(JSON.stringify({token})) - a JSON envelope even
+/// though only one field exists today, so a future provider needing more
+/// than a bare token doesn't need a shape change. Never store or return the
+/// decrypted value anywhere outside GpsProviderConfigService/the polling
+/// service that actually calls Traccar.
+///
+/// Ordinary tenant-scoped data, same as every other model here (NOT
+/// excluded from tenant-scoping.extension.ts's EXCLUDED_MODELS, unlike
+/// Tenant/SubscriptionPricingTier - those two have no tenantId column at
+/// all to scope on; this one does, and getting that backwards would let
+/// one tenant see another's GPS credentials).
+model GpsProviderConfig {
+  id                   String      @id @default(cuid())
+  tenantId             String      @map("tenant_id")
+  tenant               Tenant      @relation(fields: [tenantId], references: [id])
+  provider             GpsProvider @default(TRACCAR)
+  baseUrl              String      @map("base_url")
+  credentialsEncrypted Bytes       @map("credentials_encrypted")
+  isActive             Boolean     @default(true) @map("is_active")
+  lastPolledAt         DateTime?   @map("last_polled_at")
+  lastSuccessAt        DateTime?   @map("last_success_at")
+  lastErrorMessage     String?     @map("last_error_message")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  @@unique([tenantId, provider])
+  @@map("gps_provider_configs")
 }
 
 model MaintenanceLog {

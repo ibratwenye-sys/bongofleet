@@ -72,6 +72,14 @@ export const envValidationSchema = Joi.object({
   ABANDONED_SIGNUP_RETENTION_DAYS: Joi.number().integer().min(1).max(90).default(7),
   ABANDONED_SIGNUP_CLEANUP_CRON: Joi.string().default('30 3 * * *'),
 
+  // --- Stage 1b: credentials-at-rest encryption + GPS box-ingestion polling ---
+  // Base64-encoded 32 raw bytes, checked for real (decode + exact length) by
+  // credentials-encryption.ts itself, lazily on first use - this Joi rule is
+  // just the same "required, present" gate every other secret here gets,
+  // not a substitute for that stricter check.
+  CREDENTIALS_ENCRYPTION_KEY: Joi.string().required().min(1),
+  GPS_DEVICE_POLL_INTERVAL_MINUTES: Joi.number().integer().min(1).max(60).default(3),
+
   // --- API docs (Swagger/OpenAPI) ---
   // Same fail-safe-by-default pattern as CORS_ORIGINS: off unless explicitly
   // turned on. main.ts only mounts /api/docs when NODE_ENV !== 'production'
