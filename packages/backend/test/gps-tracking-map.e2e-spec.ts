@@ -174,6 +174,10 @@ describe('GPS fleet map (e2e, Stage I3, DESIGN_GPS_TRACKING.md §7)', () => {
         motorcycleId: neverId,
         registrationNumber: 'KDA-NEVER',
         vehicleType: 'TRUCK',
+        // Stage (DESIGN_GPS_TRACKING.md §6) - trackingMode is a new, additive
+        // field on this response; PHONE is Motorcycle's own schema default,
+        // never set explicitly by createMotorcycle() in this test.
+        trackingMode: 'PHONE',
         offline: true,
         lastRecordedAt: null,
       });

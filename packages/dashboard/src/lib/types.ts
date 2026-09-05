@@ -712,10 +712,16 @@ export type PublicVehiclePosition =
 // PublicVehiclePosition above - carries motorcycleId/vehicleType too, for
 // the map to key markers and filter by category client-side.
 
+export type TrackingMode = 'NONE' | 'PHONE' | 'DEVICE' | 'BOTH';
+
 export type FleetVehiclePosition = {
   motorcycleId: string;
   registrationNumber: string;
   vehicleType: VehicleType;
+  // DESIGN_GPS_TRACKING.md §6 - additive field, so the "Currently offline"
+  // card (TrackingMapPage.tsx) can apply the same trackingMode !== 'NONE'
+  // filter the backend's own offline-alert scan uses.
+  trackingMode: TrackingMode;
 } & (
   | {
       offline: false;

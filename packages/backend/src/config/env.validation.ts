@@ -53,6 +53,11 @@ export const envValidationSchema = Joi.object({
   MAINTENANCE_REMINDER_DAYS: Joi.number().integer().min(1).max(365).default(14),
   MAINTENANCE_REMINDER_MILEAGE: Joi.number().integer().min(0).max(100000).default(500),
 
+  // --- GPS "offline vehicle" health alert (DESIGN_GPS_TRACKING.md §6) ---
+  // Shares DOCUMENT_EXPIRY_TZ for its timezone, same as every other daily
+  // scan here - not a second timezone env var.
+  GPS_OFFLINE_ALERT_CRON: Joi.string().default('0 8 * * *'),
+
   // --- Ownership-plan nightly instalment generator ---
   OWNERSHIP_PLAN_GENERATOR_CRON: Joi.string().default('5 0 * * *'),
   OWNERSHIP_PLAN_BACKFILL_LOOKBACK_DAYS: Joi.number().integer().min(1).max(90).default(14),

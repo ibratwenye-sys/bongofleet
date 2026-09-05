@@ -238,6 +238,7 @@ model Tenant {
   trackingLinks        TrackingLink[]
   gpsProviderConfigs   GpsProviderConfig[]
   expenseCategoryCaps  ExpenseCategoryCap[]
+  gpsOfflineAlerts     GpsOfflineAlert[]
 
   @@map("tenants")
 }
@@ -438,6 +439,7 @@ model Motorcycle {
   expenses         Expense[]
   transportJobs    TransportJob[]
   trackingLinks    TrackingLink[]
+  gpsOfflineAlerts GpsOfflineAlert[]
 
   @@unique([tenantId, registrationNumber])
   @@unique([tenantId, gpsDeviceId])
@@ -539,6 +541,40 @@ model AssignmentAlert {
 
   @@index([tenantId])
   @@map("assignment_alerts")
+}
+
+/// DESIGN_GPS_TRACKING.md §6 - the "offline vehicle" health alert: one row
+/// per (motorcycle, calendar day) the daily scan finds it still offline.
+/// Deliberately NOT AssignmentAlert's "once ever per parent" dedup shape -
+/// Ibrahim confirmed (2026-09-05) that while a vehicle stays offline the
+/// owner wants a fresh email EVERY day it's still found offline, not just
+/// once per episode, so @@unique is keyed on [motorcycleId, alertDate], not
+/// motorcycleId alone: a vehicle offline for 5 straight days gets 5 alert
+/// rows and 5 emails, one per day. Cascade-deletes with its vehicle, same
+/// "history tied to a hard-deleted parent has nothing left to be history
+/// of" precedent AssignmentAlert already sets.
+model GpsOfflineAlert {
+  id             String     @id @default(cuid())
+  tenantId       String     @map("tenant_id")
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  motorcycleId   String     @map("motorcycle_id")
+  motorcycle     Motorcycle @relation(fields: [motorcycleId], references: [id], onDelete: Cascade)
+  /// The Africa/Dar_es_Salaam calendar date (midnight UTC-stored, same
+  /// convention as DailyAssignment.assignedDate) this alert covers - the
+  /// dedup mechanism is keyed on this, not on the vehicle alone.
+  alertDate      DateTime   @map("alert_date") @db.Date
+  /// The vehicle's last known fix at the moment this alert fired. Nullable
+  /// for honesty rather than asserting a non-null invariant the type
+  /// system can't back up - in practice this should never be null, since a
+  /// vehicle that has never reported a single fix is excluded from
+  /// alerting entirely before a row here is ever written.
+  lastRecordedAt DateTime?  @map("last_recorded_at")
+  sentTo         String     @map("sent_to")
+  sentAt         DateTime   @default(now()) @map("sent_at")
+
+  @@unique([motorcycleId, alertDate])
+  @@index([tenantId])
+  @@map("gps_offline_alerts")
 }
 
 /// Append-only GPS ping log for live tracking. No partitioning/retention

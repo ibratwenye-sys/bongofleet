@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { GpsSource, Prisma, UserRole } from '@prisma/client';
+import { GpsSource, Prisma, TrackingMode, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { dateOnlyInDarEsSalaam } from '../ownership-plan/ownership-plan.derivation';
@@ -36,6 +36,13 @@ export type FleetVehiclePosition = {
   motorcycleId: string;
   registrationNumber: string;
   vehicleType: string;
+  // Stage (DESIGN_GPS_TRACKING.md §6) - additive: the dashboard's "Currently
+  // offline" card (tracking-map page) needs this to apply the same
+  // trackingMode !== 'NONE' filter the backend's own offline-alert scan
+  // uses, so a deliberately-untracked vehicle never shows there either.
+  // Every other existing caller of this endpoint already ignores fields it
+  // doesn't ask for, so this is not a breaking change to the response shape.
+  trackingMode: TrackingMode;
 } & (
   | { offline: false; latitude: number; longitude: number; recordedAt: string; source: GpsSource }
   | { offline: true; lastRecordedAt: string | null }
@@ -156,6 +163,7 @@ export class GpsService {
         id: true,
         registrationNumber: true,
         vehicleType: true,
+        trackingMode: true,
         gpsLocations: {
           orderBy: { recordedAt: 'desc' },
           take: CURRENT_POSITION_FIX_LOOKBACK,
@@ -171,6 +179,7 @@ export class GpsService {
         motorcycleId: m.id,
         registrationNumber: m.registrationNumber,
         vehicleType: m.vehicleType,
+        trackingMode: m.trackingMode,
       };
       if (resolved.offline) {
         return {

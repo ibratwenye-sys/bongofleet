@@ -118,6 +118,17 @@ export function TrackingMapPage() {
   const visiblePositions = (positions ?? []).filter(
     (p) => categoryFilter === 'ALL' || p.vehicleType === categoryFilter,
   );
+  // DESIGN_GPS_TRACKING.md §6 - the dashboard half of the "offline vehicle"
+  // health alert (the map's own colour-coded offline markers, Stage I3, are
+  // the other half). Same three-part filter as the backend's own
+  // GpsOfflineAlertNotificationService, kept visibly in sync: offline, not
+  // deliberately untracked, and has actually reported at least once before
+  // (excludes a never-configured vehicle, same "not configured != offline"
+  // reasoning).
+  const currentlyOffline = (positions ?? []).filter(
+    (p): p is Extract<FleetVehiclePosition, { offline: true }> =>
+      p.offline && p.trackingMode !== 'NONE' && p.lastRecordedAt !== null,
+  );
   const markerPoints: [number, number][] = visiblePositions
     .filter((p): p is Extract<FleetVehiclePosition, { offline: false }> => !p.offline)
     .map((p) => [p.latitude, p.longitude]);
@@ -193,6 +204,24 @@ export function TrackingMapPage() {
         ))}
         <span>📱 Phone · 📡 Device</span>
       </div>
+
+      {currentlyOffline.length > 0 && (
+        <div className="rounded-lg border border-line bg-panel p-4">
+          <h3 className="mb-2 text-sm font-semibold text-txt">
+            Currently offline ({currentlyOffline.length})
+          </h3>
+          <ul className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+            {currentlyOffline.map((p) => (
+              <li key={p.motorcycleId} className="flex items-center gap-2">
+                <span className="font-medium text-txt">{p.registrationNumber}</span>
+                <span className="text-txt-2">
+                  offline since {p.lastRecordedAt ? formatDateTime(p.lastRecordedAt) : '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
         <div className="lg:col-span-2">
