@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import type {
   Assignment,
@@ -12,21 +14,33 @@ import { DriverPicker } from './DriverPicker';
 
 const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'BANK_TRANSFER'];
 
-function driverName(drivers: Driver[], driverId: string): string {
+// Stage L3 - the displayed label only; the value submitted to the backend
+// stays the raw enum string (see the `<option value={m}>` below).
+const PAYMENT_METHOD_LABEL_KEY: Record<string, string> = {
+  CASH: 'methodCash',
+  MOBILE_MONEY: 'methodMobileMoney',
+  BANK_TRANSFER: 'methodBankTransfer',
+};
+
+function driverName(drivers: Driver[], driverId: string, t: TFunction<'payments'>): string {
   const driver = drivers.find((d) => d.id === driverId);
-  return driver ? `${driver.user.firstName} ${driver.user.lastName}` : 'Unknown driver';
+  return driver ? `${driver.user.firstName} ${driver.user.lastName}` : t('unknownDriver');
 }
 
 function assignmentLabel(
   assignment: Assignment,
   drivers: Driver[],
   motorcycles: Motorcycle[],
+  t: TFunction<'payments'>,
 ): string {
   const motorcycle = motorcycles.find((m) => m.id === assignment.motorcycleId);
   const target = Number(assignment.targetAmount).toLocaleString();
-  return `${assignment.assignedDate.slice(0, 10)} — ${driverName(drivers, assignment.driverId)} — ${
-    motorcycle?.registrationNumber ?? 'Unknown bike'
-  } — target ${target} TZS`;
+  return t('assignmentLabel', {
+    date: assignment.assignedDate.slice(0, 10),
+    driver: driverName(drivers, assignment.driverId, t),
+    registration: motorcycle?.registrationNumber ?? t('unknownBike'),
+    amount: target,
+  });
 }
 
 export function PaymentFormModal({
@@ -44,6 +58,11 @@ export function PaymentFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('payments');
+  // Stage L3 - cancel/save/saving live in `common` (see i18n.ts's comment
+  // on why: byte-identical to ExpensesPage's own future modal footer, so
+  // defined once rather than duplicated per page namespace).
+  const { t: tCommon } = useTranslation('common');
   // Stage G6 Part 2 - "rent-to-own" (search a driver, pay against their
   // hire-purchase plan) vs "regular" (the original flat assignment picker,
   // unchanged). Both still resolve to one dailyAssignmentId at submit time -
@@ -80,14 +99,14 @@ export function PaymentFormModal({
     if (!selectedAssignment) {
       setError(
         mode === 'rentToOwn' && !lockedAssignment
-          ? 'Search for and select a driver with a rent-to-own charge.'
-          : 'Select an assignment.',
+          ? t('errorSelectDriver')
+          : t('errorSelectAssignment'),
       );
       return;
     }
     const amountNumber = Number(amount);
     if (!amount || Number.isNaN(amountNumber) || amountNumber <= 0) {
-      setError('Enter a valid amount.');
+      setError(t('errorInvalidAmount'));
       return;
     }
 
@@ -100,20 +119,20 @@ export function PaymentFormModal({
         paymentMethod: paymentMethod || undefined,
       };
       await apiFetch('/payments', { method: 'POST', body: JSON.stringify(payload) });
-      onSaved('Payment recorded.');
+      onSaved(t('paymentRecorded'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="Record payment" onClose={onClose}>
+    <Modal title={t('recordPayment')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {lockedAssignment ? (
           <div className="rounded bg-panel-2 px-3 py-2 text-sm text-txt">
-            {assignmentLabel(lockedAssignment, drivers, motorcycles)}
+            {assignmentLabel(lockedAssignment, drivers, motorcycles, t)}
           </div>
         ) : (
           <>
@@ -125,7 +144,7 @@ export function PaymentFormModal({
                   mode === 'rentToOwn' ? 'bg-panel text-txt shadow-sm' : 'text-txt-2'
                 }`}
               >
-                Rent-to-own
+                {t('modeRentToOwn')}
               </button>
               <button
                 type="button"
@@ -134,13 +153,15 @@ export function PaymentFormModal({
                   mode === 'regular' ? 'bg-panel text-txt shadow-sm' : 'text-txt-2'
                 }`}
               >
-                Regular assignment
+                {t('modeRegularAssignment')}
               </button>
             </div>
 
             {mode === 'rentToOwn' ? (
               <div>
-                <label className="mb-1 block text-sm font-medium text-txt">Driver</label>
+                <label className="mb-1 block text-sm font-medium text-txt">
+                  {t('fieldDriver')}
+                </label>
                 {/* Stage DS1 - includeInactive: recording a payment is exactly the
                     "driver who was let go" case DriverService.search's includeInactive
                     exists for - the owner still needs to find them to record a final
@@ -150,28 +171,30 @@ export function PaymentFormModal({
                 <DriverPicker value={selectedDriver} onSelect={setSelectedDriver} includeInactive />
                 {selectedDriver && rentToOwnAssignment && (
                   <p className="mt-1 text-xs text-txt-2">
-                    Latest charge: {rentToOwnAssignment.assignedDate.slice(0, 10)} — target{' '}
-                    {Number(rentToOwnAssignment.targetAmount).toLocaleString()} TZS
+                    {t('latestCharge', {
+                      date: rentToOwnAssignment.assignedDate.slice(0, 10),
+                      amount: Number(rentToOwnAssignment.targetAmount).toLocaleString(),
+                    })}
                   </p>
                 )}
                 {selectedDriver && !rentToOwnAssignment && (
-                  <p className="mt-1 text-xs text-amber-700">
-                    This driver has no rent-to-own plan charge to record against.
-                  </p>
+                  <p className="mt-1 text-xs text-amber-700">{t('noRentToOwnCharge')}</p>
                 )}
               </div>
             ) : (
               <div>
-                <label className="mb-1 block text-sm font-medium text-txt">Assignment</label>
+                <label className="mb-1 block text-sm font-medium text-txt">
+                  {t('fieldAssignment')}
+                </label>
                 <select
                   value={assignmentId}
                   onChange={(e) => setAssignmentId(e.target.value)}
                   className="w-full rounded border border-line px-3 py-2 text-sm"
                 >
-                  <option value="">Select an assignment…</option>
+                  <option value="">{t('selectAssignmentPlaceholder')}</option>
                   {assignments.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {assignmentLabel(a, drivers, motorcycles)}
+                      {assignmentLabel(a, drivers, motorcycles, t)}
                     </option>
                   ))}
                 </select>
@@ -181,7 +204,7 @@ export function PaymentFormModal({
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Amount (TZS)</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldAmount')}</label>
           <input
             type="number"
             min="0"
@@ -193,16 +216,18 @@ export function PaymentFormModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Payment method</label>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            {t('fieldPaymentMethod')}
+          </label>
           <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
             className="w-full rounded border border-line px-3 py-2 text-sm"
           >
-            <option value="">Unspecified</option>
+            <option value="">{t('methodUnspecified')}</option>
             {PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {t(PAYMENT_METHOD_LABEL_KEY[m])}
               </option>
             ))}
           </select>
@@ -216,14 +241,14 @@ export function PaymentFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>

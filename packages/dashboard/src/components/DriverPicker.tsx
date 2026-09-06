@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DRIVER_SEARCH_DEBOUNCE_MS } from '@bongofleet/shared-lib';
 import { apiFetch, ApiError } from '../lib/api';
 import type { DriverSearchResponse, DriverSearchResult } from '../lib/types';
@@ -17,16 +18,23 @@ import type { DriverSearchResponse, DriverSearchResult } from '../lib/types';
 export function DriverPicker({
   value,
   onSelect,
-  placeholder = 'Search by name, phone, or plate…',
+  placeholder,
   includeInactive = false,
 }: {
   value: DriverSearchResult | null;
   onSelect: (driver: DriverSearchResult | null) => void;
+  /** Stage L3 - defaults to the translated payments.driverSearchPlaceholder
+   *  (not a literal default value here, since evaluating it needs the
+   *  hook below) - see PaymentFormModal, the only current call site. */
   placeholder?: string;
   /** Stage DS1 - opt in per call site; see PaymentFormModal for why its
    *  rent-to-own flow passes true. */
   includeInactive?: boolean;
 }) {
+  // Stage L3 - `payments`, not a new namespace: DriverPicker isn't used
+  // anywhere else yet (see PaymentFormModal, its only current caller). Move
+  // these into `common` once a second page actually reuses this component.
+  const { t } = useTranslation('payments');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DriverSearchResult[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -62,7 +70,7 @@ export function DriverPicker({
         .catch((err) => {
           setResults([]);
           setHasMore(false);
-          setError(err instanceof ApiError ? err.message : 'Could not search drivers.');
+          setError(err instanceof ApiError ? err.message : t('driverSearchError'));
         })
         .finally(() => setLoading(false));
     }, DRIVER_SEARCH_DEBOUNCE_MS);
@@ -111,11 +119,11 @@ export function DriverPicker({
           {value.firstName} {value.lastName}
           {!value.isActive && (
             <span className="ml-2 rounded bg-panel-2 px-1.5 py-0.5 text-xs font-medium text-txt-2">
-              Inactive
+              {t('driverInactive')}
             </span>
           )}
           {' — '}
-          {value.registrationNumber ?? 'no vehicle on file'}
+          {value.registrationNumber ?? t('driverNoVehicleInline')}
           {' — '}
           {value.phone}
         </span>
@@ -124,7 +132,7 @@ export function DriverPicker({
           onClick={() => onSelect(null)}
           className="ml-3 shrink-0 text-sm font-medium text-txt-2 hover:underline"
         >
-          Change
+          {t('driverChange')}
         </button>
       </div>
     );
@@ -144,18 +152,18 @@ export function DriverPicker({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('driverSearchPlaceholder')}
         className="w-full rounded border border-line px-3 py-2 text-sm"
       />
       {open && query.trim() !== '' && (
         <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded border border-line bg-panel shadow-lg">
           {loading ? (
-            <p className="px-3 py-2 text-sm text-txt-2">Searching…</p>
+            <p className="px-3 py-2 text-sm text-txt-2">{t('driverSearching')}</p>
           ) : error ? (
             <p className="px-3 py-2 text-sm text-crit">{error}</p>
           ) : results.length === 0 ? (
             <p className="px-3 py-2 text-sm text-txt-2">
-              No drivers match &quot;{query.trim()}&quot;.
+              {t('driverNoMatches', { query: query.trim() })}
             </p>
           ) : (
             <>
@@ -173,18 +181,18 @@ export function DriverPicker({
                     {driver.firstName} {driver.lastName}
                     {!driver.isActive && (
                       <span className="ml-2 rounded bg-panel-2 px-1.5 py-0.5 text-xs font-medium text-txt-2">
-                        Inactive
+                        {t('driverInactive')}
                       </span>
                     )}
                   </div>
                   <div className="text-xs text-txt-2">
-                    {driver.registrationNumber ?? 'No vehicle on file'} · {driver.phone}
+                    {driver.registrationNumber ?? t('driverNoVehicleOnFile')} · {driver.phone}
                   </div>
                 </button>
               ))}
               {hasMore && (
                 <p className="border-t border-line-soft px-3 py-2 text-xs text-txt-2">
-                  More matches than shown — refine your search.
+                  {t('driverMoreMatches')}
                 </p>
               )}
             </>

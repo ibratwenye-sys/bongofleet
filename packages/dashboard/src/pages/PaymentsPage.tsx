@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS, formatAge, today, toDateInput } from '../lib/format';
 import type {
@@ -24,6 +26,14 @@ const STATUS_OPTIONS: PaymentStatus[] = ['PENDING', 'COMPLETED', 'FAILED'];
 const COLLECTION_SERIES_DAYS = 14;
 const NEEDS_RECONCILING_LIMIT = 8;
 
+// Stage L3 - the only label mapping for this enum anywhere in the app; see
+// StatusBadge.tsx's new optional `label` prop.
+const PAYMENT_STATUS_LABEL_KEY: Record<PaymentStatus, string> = {
+  PENDING: 'paymentStatusPending',
+  COMPLETED: 'paymentStatusCompleted',
+  FAILED: 'paymentStatusFailed',
+};
+
 function monthStart(): string {
   const d = new Date();
   return toDateInput(new Date(d.getFullYear(), d.getMonth(), 1));
@@ -35,19 +45,23 @@ function daysAgo(n: number): string {
   return toDateInput(d);
 }
 
-function kpisToTiles(data: PaymentSummaryResponse): KpiTile[] {
+function kpisToTiles(data: PaymentSummaryResponse, t: TFunction<'payments'>): KpiTile[] {
   const k = data.kpis;
   return [
-    { label: 'Due today', value: formatTZS(k.dueToday), accentColor: 'c1' },
-    { label: 'Received today', value: formatTZS(k.receivedToday), accentColor: 'good' },
+    { label: t('kpiDueToday'), value: formatTZS(k.dueToday), accentColor: 'c1' },
+    { label: t('kpiReceivedToday'), value: formatTZS(k.receivedToday), accentColor: 'good' },
     {
-      label: 'Still outstanding',
+      label: t('kpiStillOutstanding'),
       value: String(k.stillOutstanding.count),
       delta: formatTZS(k.stillOutstanding.amount),
       accentColor: k.stillOutstanding.count > 0 ? 'crit' : 'good',
     },
-    { label: 'Due this month', value: formatTZS(k.dueThisMonth), accentColor: 'c1' },
-    { label: 'Received this month', value: formatTZS(k.receivedThisMonth), accentColor: 'good' },
+    { label: t('kpiDueThisMonth'), value: formatTZS(k.dueThisMonth), accentColor: 'c1' },
+    {
+      label: t('kpiReceivedThisMonth'),
+      value: formatTZS(k.receivedThisMonth),
+      accentColor: 'good',
+    },
   ];
 }
 
@@ -62,6 +76,7 @@ function DueVsReceivedRow({
   due: string;
   received: string;
 }) {
+  const { t } = useTranslation('payments');
   const dueN = parseFloat(due);
   const receivedN = parseFloat(received);
   const max = Math.max(dueN, receivedN, 1);
@@ -70,14 +85,14 @@ function DueVsReceivedRow({
       <p className="text-xs font-medium text-txt-2">{label}</p>
       <div className="mt-1.5 space-y-1.5">
         <div className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-xs text-txt-3">Due</span>
+          <span className="w-16 shrink-0 text-xs text-txt-3">{t('rowDue')}</span>
           <div className="h-3 flex-1 overflow-hidden rounded-full bg-panel-2">
             <div className="h-full bg-c1" style={{ width: `${(dueN / max) * 100}%` }} />
           </div>
           <span className="w-24 shrink-0 text-right text-xs text-txt-2">{formatTZS(due)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-xs text-txt-3">Received</span>
+          <span className="w-16 shrink-0 text-xs text-txt-3">{t('rowReceived')}</span>
           <div className="h-3 flex-1 overflow-hidden rounded-full bg-panel-2">
             <div className="h-full bg-good" style={{ width: `${(receivedN / max) * 100}%` }} />
           </div>
@@ -89,8 +104,9 @@ function DueVsReceivedRow({
 }
 
 function MethodBreakdownTable({ rows }: { rows: MethodBreakdownRow[] }) {
+  const { t } = useTranslation('payments');
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-txt-2">No payments in this period.</p>;
+    return <p className="p-4 text-sm text-txt-2">{t('methodBreakdownEmpty')}</p>;
   }
   return (
     <>
@@ -98,10 +114,10 @@ function MethodBreakdownTable({ rows }: { rows: MethodBreakdownRow[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-              <th className="px-4 py-2 font-medium">Method</th>
-              <th className="px-4 py-2 text-right font-medium">Count</th>
-              <th className="px-4 py-2 text-right font-medium">Amount</th>
-              <th className="px-4 py-2 text-right font-medium">Pending</th>
+              <th className="px-4 py-2 font-medium">{t('tableMethod')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableCount')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableAmount')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tablePending')}</th>
             </tr>
           </thead>
           <tbody>
@@ -149,6 +165,7 @@ function MethodBreakdownTable({ rows }: { rows: MethodBreakdownRow[] }) {
 }
 
 export function PaymentsPage() {
+  const { t } = useTranslation('payments');
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
@@ -207,7 +224,7 @@ export function PaymentsPage() {
       setCollectionSeries(seriesData);
       setError(null);
     } catch {
-      setError('Could not load payments. Please try again.');
+      setError(t('loadError'));
     }
   }
 
@@ -258,10 +275,10 @@ export function PaymentsPage() {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
-      setSuccessMessage(status === 'COMPLETED' ? 'Payment reconciled.' : 'Payment marked failed.');
+      setSuccessMessage(status === 'COMPLETED' ? t('paymentReconciled') : t('paymentMarkedFailed'));
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update payment.');
+      setError(err instanceof ApiError ? err.message : t('updateError'));
     } finally {
       setUpdatingId(null);
     }
@@ -271,7 +288,7 @@ export function PaymentsPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!summary || !payments) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   // Real, computed from real numbers already fetched: whichever method
@@ -284,10 +301,10 @@ export function PaymentsPage() {
 
   return (
     <PageChassis
-      title="Payments"
-      statusPill={{ mode: 'live', text: 'LIVE' }}
-      primaryAction={{ label: 'Record payment', onClick: () => setShowRecordPayment(true) }}
-      kpis={kpisToTiles(summary)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: t('statusLive') }}
+      primaryAction={{ label: t('recordPayment'), onClick: () => setShowRecordPayment(true) }}
+      kpis={kpisToTiles(summary, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -296,15 +313,15 @@ export function PaymentsPage() {
 
       <ChassisGrid
         main={
-          <Card title="Due vs received">
+          <Card title={t('dueVsReceivedTitle')}>
             <div className="space-y-4 p-4">
               <DueVsReceivedRow
-                label="Today"
+                label={t('dueVsReceivedToday')}
                 due={summary.kpis.dueToday}
                 received={summary.kpis.receivedToday}
               />
               <DueVsReceivedRow
-                label="This month"
+                label={t('dueVsReceivedThisMonth')}
                 due={summary.kpis.dueThisMonth}
                 received={summary.kpis.receivedThisMonth}
               />
@@ -313,20 +330,26 @@ export function PaymentsPage() {
         }
         rail={
           <>
-            <Card title="Reconciliation status" subtitle="this month">
+            <Card
+              title={t('reconciliationStatusTitle')}
+              subtitle={t('reconciliationStatusSubtitle')}
+            >
               <MethodBreakdownTable rows={monthMethodBreakdown} />
               <p className="border-t border-line-soft px-4 py-3 text-xs text-txt-2">
                 {biggestPending
-                  ? `${biggestPending.method} currently accounts for the most pending reconciliation (${formatTZS(biggestPending.pendingAmount)}).`
-                  : 'Nothing is currently pending reconciliation.'}
+                  ? t('biggestPendingSentence', {
+                      method: biggestPending.method,
+                      amount: formatTZS(biggestPending.pendingAmount),
+                    })
+                  : t('noPendingReconciliation')}
               </p>
             </Card>
             <Card
-              title="Needs reconciling"
+              title={t('needsReconcilingTitle')}
               subtitle={needsReconciling.length > 0 ? String(needsReconciling.length) : undefined}
             >
               {needsReconciling.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing waiting on reconciliation.</p>
+                <p className="p-4 text-sm text-txt-2">{t('needsReconcilingEmpty')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {needsReconciling.map((r) => (
@@ -347,17 +370,17 @@ export function PaymentsPage() {
         }
       />
 
-      <Card title="All payments" subtitle={`${filtered.length} shown`}>
+      <Card title={t('allPaymentsTitle')} subtitle={t('shownCount', { count: filtered.length })}>
         <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as PaymentStatus | 'ALL')}
             className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
           >
-            <option value="ALL">All statuses</option>
+            <option value="ALL">{t('allStatuses')}</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {t(PAYMENT_STATUS_LABEL_KEY[s])}
               </option>
             ))}
           </select>
@@ -366,19 +389,19 @@ export function PaymentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Driver</th>
-                <th className="px-4 py-2 font-medium">Amount</th>
-                <th className="px-4 py-2 font-medium">Method</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableAmount')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableMethod')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    No payments found.
+                    {t('noPaymentsFound')}
                   </td>
                 </tr>
               ) : (
@@ -390,12 +413,16 @@ export function PaymentsPage() {
                       <td className="px-4 py-2 text-txt">
                         {driver
                           ? `${driver.user.firstName} ${driver.user.lastName}`
-                          : 'Unknown driver'}
+                          : t('unknownDriver')}
                       </td>
                       <td className="px-4 py-2 text-txt-2">{formatTZS(p.amount)}</td>
                       <td className="px-4 py-2 text-txt-2">{p.paymentMethod ?? '—'}</td>
                       <td className="px-4 py-2">
-                        <StatusBadge status={p.status} styles={PAYMENT_STATUS_STYLES} />
+                        <StatusBadge
+                          status={p.status}
+                          styles={PAYMENT_STATUS_STYLES}
+                          label={t(PAYMENT_STATUS_LABEL_KEY[p.status])}
+                        />
                       </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">
                         {p.status === 'PENDING' && (
@@ -405,14 +432,14 @@ export function PaymentsPage() {
                               onClick={() => void handleUpdateStatus(p, 'COMPLETED')}
                               className="mr-3 text-sm font-medium text-txt hover:underline disabled:opacity-50"
                             >
-                              Reconcile
+                              {t('reconcile')}
                             </button>
                             <button
                               disabled={updatingId === p.id}
                               onClick={() => void handleUpdateStatus(p, 'FAILED')}
                               className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
                             >
-                              Mark failed
+                              {t('markFailed')}
                             </button>
                           </>
                         )}
@@ -427,7 +454,7 @@ export function PaymentsPage() {
 
         <div className="md:hidden">
           {filtered.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No payments found.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noPaymentsFound')}</p>
           ) : (
             filtered.map((p) => {
               const driver = driverById.get(p.driverId);
@@ -437,7 +464,7 @@ export function PaymentsPage() {
                     <span className="font-medium text-txt">
                       {driver
                         ? `${driver.user.firstName} ${driver.user.lastName}`
-                        : 'Unknown driver'}
+                        : t('unknownDriver')}
                     </span>
                     <span className="text-xs text-txt-2">{p.createdAt.slice(0, 10)}</span>
                   </div>
@@ -445,7 +472,11 @@ export function PaymentsPage() {
                     <span className="text-txt-2">
                       {formatTZS(p.amount)} · {p.paymentMethod ?? '—'}
                     </span>
-                    <StatusBadge status={p.status} styles={PAYMENT_STATUS_STYLES} />
+                    <StatusBadge
+                      status={p.status}
+                      styles={PAYMENT_STATUS_STYLES}
+                      label={t(PAYMENT_STATUS_LABEL_KEY[p.status])}
+                    />
                   </div>
                   {p.status === 'PENDING' && (
                     <div className="mt-2 flex min-h-11 items-center justify-end gap-4">
@@ -454,14 +485,14 @@ export function PaymentsPage() {
                         onClick={() => void handleUpdateStatus(p, 'COMPLETED')}
                         className="text-sm font-medium text-txt hover:underline disabled:opacity-50"
                       >
-                        Reconcile
+                        {t('reconcile')}
                       </button>
                       <button
                         disabled={updatingId === p.id}
                         onClick={() => void handleUpdateStatus(p, 'FAILED')}
                         className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
                       >
-                        Mark failed
+                        {t('markFailed')}
                       </button>
                     </div>
                   )}
@@ -475,7 +506,7 @@ export function PaymentsPage() {
       <ClosingRow
         left={
           <Card
-            title="Reconciliation by method"
+            title={t('reconciliationByMethodTitle')}
             subtitle={
               <span className="flex items-center gap-1.5 text-xs">
                 <input
@@ -484,7 +515,7 @@ export function PaymentsPage() {
                   onChange={(e) => setPeriodFrom(e.target.value)}
                   className="rounded border border-line bg-panel px-1.5 py-0.5 text-txt"
                 />
-                <span className="text-txt-3">to</span>
+                <span className="text-txt-3">{t('dateRangeTo')}</span>
                 <input
                   type="date"
                   value={periodTo}
@@ -498,7 +529,10 @@ export function PaymentsPage() {
           </Card>
         }
         right={
-          <Card title="Collection rate" subtitle={`last ${COLLECTION_SERIES_DAYS} days`}>
+          <Card
+            title={t('collectionRateTitle')}
+            subtitle={t('collectionRateSubtitle', { count: COLLECTION_SERIES_DAYS })}
+          >
             <div className="flex h-32 items-end gap-1 px-4 pb-4">
               {collectionSeries.map((point) => {
                 const max = Math.max(...collectionSeries.map((p) => parseFloat(p.amount)), 1);

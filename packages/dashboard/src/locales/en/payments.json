@@ -1,0 +1,92 @@
+{
+  "title": "Payments",
+  "statusLive": "LIVE",
+  "recordPayment": "Record payment",
+  "loading": "Loading…",
+  "loadError": "Could not load payments. Please try again.",
+  "updateError": "Could not update payment.",
+  "paymentReconciled": "Payment reconciled.",
+  "paymentMarkedFailed": "Payment marked failed.",
+
+  "kpiDueToday": "Due today",
+  "kpiReceivedToday": "Received today",
+  "kpiStillOutstanding": "Still outstanding",
+  "kpiDueThisMonth": "Due this month",
+  "kpiReceivedThisMonth": "Received this month",
+
+  "dueVsReceivedToday": "Today",
+  "dueVsReceivedThisMonth": "This month",
+  "rowDue": "Due",
+  "rowReceived": "Received",
+
+  "methodBreakdownEmpty": "No payments in this period.",
+  "tableMethod": "Method",
+  "tableCount": "Count",
+  "tableAmount": "Amount",
+  "tablePending": "Pending",
+
+  "dueVsReceivedTitle": "Due vs received",
+  "reconciliationStatusTitle": "Reconciliation status",
+  "reconciliationStatusSubtitle": "this month",
+  "biggestPendingSentence": "{{method}} currently accounts for the most pending reconciliation ({{amount}}).",
+  "noPendingReconciliation": "Nothing is currently pending reconciliation.",
+
+  "needsReconcilingTitle": "Needs reconciling",
+  "needsReconcilingEmpty": "Nothing waiting on reconciliation.",
+
+  "allPaymentsTitle": "All payments",
+  "shownCount": "{{count}} shown",
+  "allStatuses": "All statuses",
+
+  "tableDate": "Date",
+  "tableDriver": "Driver",
+  "tableStatus": "Status",
+  "tableActions": "Actions",
+  "noPaymentsFound": "No payments found.",
+  "unknownDriver": "Unknown driver",
+
+  "reconcile": "Reconcile",
+  "markFailed": "Mark failed",
+
+  "reconciliationByMethodTitle": "Reconciliation by method",
+  "dateRangeTo": "to",
+  "collectionRateTitle": "Collection rate",
+  "collectionRateSubtitle": "last {{count}} days",
+
+  "paymentStatusPending": "Pending",
+  "paymentStatusCompleted": "Completed",
+  "paymentStatusFailed": "Failed",
+
+  "modeRentToOwn": "Rent-to-own",
+  "modeRegularAssignment": "Regular assignment",
+  "fieldDriver": "Driver",
+  "fieldAssignment": "Assignment",
+  "selectAssignmentPlaceholder": "Select an assignment…",
+  "latestCharge": "Latest charge: {{date}} — target {{amount}} TZS",
+  "noRentToOwnCharge": "This driver has no rent-to-own plan charge to record against.",
+  "fieldAmount": "Amount (TZS)",
+  "fieldPaymentMethod": "Payment method",
+  "methodUnspecified": "Unspecified",
+  "methodCash": "Cash",
+  "methodMobileMoney": "Mobile money",
+  "methodBankTransfer": "Bank transfer",
+
+  "errorSelectDriver": "Search for and select a driver with a rent-to-own charge.",
+  "errorSelectAssignment": "Select an assignment.",
+  "errorInvalidAmount": "Enter a valid amount.",
+  "paymentRecorded": "Payment recorded.",
+  "genericError": "Something went wrong. Please try again.",
+
+  "assignmentLabel": "{{date}} — {{driver}} — {{registration}} — target {{amount}} TZS",
+  "unknownBike": "Unknown bike",
+
+  "driverSearchPlaceholder": "Search by name, phone, or plate…",
+  "driverInactive": "Inactive",
+  "driverNoVehicleOnFile": "No vehicle on file",
+  "driverNoVehicleInline": "no vehicle on file",
+  "driverChange": "Change",
+  "driverSearching": "Searching…",
+  "driverNoMatches": "No drivers match \"{{query}}\".",
+  "driverMoreMatches": "More matches than shown — refine your search.",
+  "driverSearchError": "Could not search drivers."
+}

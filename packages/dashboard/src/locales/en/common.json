@@ -5,5 +5,8 @@
   "logout": "Logout",
   "statusLive": "Live",
   "statusStale": "Stale",
-  "statusOffline": "Offline"
+  "statusOffline": "Offline",
+  "cancel": "Cancel",
+  "save": "Save",
+  "saving": "Saving…"
 }

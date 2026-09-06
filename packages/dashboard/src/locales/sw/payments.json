@@ -1,0 +1,92 @@
+{
+  "title": "Malipo",
+  "statusLive": "HAI",
+  "recordPayment": "Rekodi malipo",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia malipo. Tafadhali jaribu tena.",
+  "updateError": "Imeshindikana kusasisha malipo.",
+  "paymentReconciled": "Malipo yamethibitishwa.",
+  "paymentMarkedFailed": "Malipo yametajwa kushindwa.",
+
+  "kpiDueToday": "Inayodaiwa Leo",
+  "kpiReceivedToday": "Iliyopokelewa Leo",
+  "kpiStillOutstanding": "Bado Haijalipwa",
+  "kpiDueThisMonth": "Inayodaiwa Mwezi Huu",
+  "kpiReceivedThisMonth": "Iliyopokelewa Mwezi Huu",
+
+  "dueVsReceivedToday": "Leo",
+  "dueVsReceivedThisMonth": "Mwezi Huu",
+  "rowDue": "Inadaiwa",
+  "rowReceived": "Imepokelewa",
+
+  "methodBreakdownEmpty": "Hakuna malipo katika kipindi hiki.",
+  "tableMethod": "Njia",
+  "tableCount": "Idadi",
+  "tableAmount": "Kiasi",
+  "tablePending": "Inasubiri",
+
+  "dueVsReceivedTitle": "Kinachodaiwa dhidi ya Kilichopokelewa",
+  "reconciliationStatusTitle": "Hali ya Uthibitishaji",
+  "reconciliationStatusSubtitle": "mwezi huu",
+  "biggestPendingSentence": "{{method}} ndiyo inayoongoza kwa malipo yanayosubiri uthibitishaji ({{amount}}).",
+  "noPendingReconciliation": "Hakuna kinachosubiri uthibitishaji kwa sasa.",
+
+  "needsReconcilingTitle": "Yanayohitaji Uthibitishaji",
+  "needsReconcilingEmpty": "Hakuna kinachosubiri uthibitishaji.",
+
+  "allPaymentsTitle": "Malipo Yote",
+  "shownCount": "{{count}} yanaonyeshwa",
+  "allStatuses": "Hali Zote",
+
+  "tableDate": "Tarehe",
+  "tableDriver": "Dereva",
+  "tableStatus": "Hali",
+  "tableActions": "Vitendo",
+  "noPaymentsFound": "Hakuna malipo yaliyopatikana.",
+  "unknownDriver": "Dereva Hajulikani",
+
+  "reconcile": "Thibitisha",
+  "markFailed": "Weka Kushindwa",
+
+  "reconciliationByMethodTitle": "Uthibitishaji kwa Njia",
+  "dateRangeTo": "hadi",
+  "collectionRateTitle": "Kiwango cha Makusanyo",
+  "collectionRateSubtitle": "siku {{count}} zilizopita",
+
+  "paymentStatusPending": "Inasubiri",
+  "paymentStatusCompleted": "Imekamilika",
+  "paymentStatusFailed": "Imeshindwa",
+
+  "modeRentToOwn": "Kumiliki kwa Kukodisha",
+  "modeRegularAssignment": "Kazi ya Kawaida",
+  "fieldDriver": "Dereva",
+  "fieldAssignment": "Kazi",
+  "selectAssignmentPlaceholder": "Chagua kazi…",
+  "latestCharge": "Malipo ya Hivi Karibuni: {{date}} — lengo {{amount}} TZS",
+  "noRentToOwnCharge": "Dereva huyu hana mpango wa kumiliki kwa kukodisha wa kulipia.",
+  "fieldAmount": "Kiasi (TZS)",
+  "fieldPaymentMethod": "Njia ya Malipo",
+  "methodUnspecified": "Haijabainishwa",
+  "methodCash": "Fedha Taslimu",
+  "methodMobileMoney": "Pesa za Simu",
+  "methodBankTransfer": "Uhamisho wa Benki",
+
+  "errorSelectDriver": "Tafuta na uchague dereva mwenye malipo ya kumiliki kwa kukodisha.",
+  "errorSelectAssignment": "Chagua kazi.",
+  "errorInvalidAmount": "Weka kiasi sahihi.",
+  "paymentRecorded": "Malipo yamerekodiwa.",
+  "genericError": "Hitilafu imetokea. Tafadhali jaribu tena.",
+
+  "assignmentLabel": "{{date}} — {{driver}} — {{registration}} — lengo {{amount}} TZS",
+  "unknownBike": "Gari Halijulikani",
+
+  "driverSearchPlaceholder": "Tafuta kwa jina, simu, au namba ya gari…",
+  "driverInactive": "Haifanyi Kazi",
+  "driverNoVehicleOnFile": "Hakuna Gari Lililosajiliwa",
+  "driverNoVehicleInline": "hakuna gari lililosajiliwa",
+  "driverChange": "Badilisha",
+  "driverSearching": "Inatafuta…",
+  "driverNoMatches": "Hakuna dereva anayelingana na \"{{query}}\".",
+  "driverMoreMatches": "Kuna matokeo mengine zaidi ya yanayoonyeshwa — boresha utafutaji wako.",
+  "driverSearchError": "Imeshindikana kutafuta madereva."
+}

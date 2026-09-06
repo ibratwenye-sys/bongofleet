@@ -37,15 +37,21 @@ export const TRANSPORT_PAYMENT_STATUS_STYLES: Record<string, string> = {
 export function StatusBadge({
   status,
   styles,
+  label,
 }: {
   status: string;
   styles: Record<string, string>;
+  /** Stage L3 - when a call site has a real translated label for this
+   *  status (see PaymentsPage.tsx), render that instead of the raw enum
+   *  value. Omitted, every other untranslated call site keeps rendering
+   *  `status` verbatim exactly as before. */
+  label?: string;
 }) {
   return (
     <span
       className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-gray-100 text-gray-600'}`}
     >
-      {status}
+      {label ?? status}
     </span>
   );
 }

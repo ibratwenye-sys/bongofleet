@@ -5,5 +5,8 @@
   "logout": "Toka",
   "statusLive": "Hai",
   "statusStale": "Zamani",
-  "statusOffline": "Haipo Mtandaoni"
+  "statusOffline": "Haipo Mtandaoni",
+  "cancel": "Ghairi",
+  "save": "Hifadhi",
+  "saving": "Inahifadhi…"
 }
