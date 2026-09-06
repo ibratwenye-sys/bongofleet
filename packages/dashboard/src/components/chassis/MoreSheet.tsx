@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../lib/auth-context';
 import { ThemeToggle } from '../ThemeToggle';
+import { LanguageToggle } from '../LanguageToggle';
 import type { CurrentUser } from '../../lib/types';
 import { filterVisibleGroups } from './nav-visibility';
 
@@ -18,28 +20,29 @@ function initials(user: CurrentUser): string {
  */
 export function MoreSheet({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const adminGroup = filterVisibleGroups(user).find((g) => g.label === 'Admin');
 
   return (
     <div className="fixed inset-0 z-40 md:hidden">
       <button
         type="button"
-        aria-label="Close more menu"
+        aria-label={t('closeMoreMenu')}
         className="absolute inset-0 bg-shadow"
         onClick={onClose}
       />
       <div
         id="more-sheet"
         role="dialog"
-        aria-label="More"
+        aria-label={t('more')}
         className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-lg border-t border-line bg-side pb-[env(safe-area-inset-bottom)] shadow-lg"
       >
         <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
-          <span className="text-base font-semibold text-txt">More</span>
+          <span className="text-base font-semibold text-txt">{t('more')}</span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('close')}
             className="flex h-11 w-11 items-center justify-center text-txt-2"
           >
             <span aria-hidden="true" className="text-xl leading-none">
@@ -69,6 +72,7 @@ export function MoreSheet({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center justify-between gap-2 border-t border-line-soft px-4 py-3">
           <ThemeToggle />
+          <LanguageToggle />
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-line-soft px-4 py-3">
@@ -89,7 +93,7 @@ export function MoreSheet({ onClose }: { onClose: () => void }) {
             onClick={() => void logout()}
             className="shrink-0 rounded border border-line px-2 py-1 text-xs font-medium text-txt-2 hover:bg-panel-2"
           >
-            Logout
+            {t('logout')}
           </button>
         </div>
       </div>

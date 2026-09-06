@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { apiFetch, refreshTokens } from './api';
 import { tokenStore } from './token-store';
 import { applyTheme } from './theme';
-import type { CurrentUser, Theme, TokenResponse } from './types';
+import { applyLanguage } from './i18n';
+import type { CurrentUser, Language, Theme, TokenResponse } from './types';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -15,6 +16,9 @@ interface AuthContextValue {
    *  attribute together, so every token-driven colour on screen swaps in
    *  one render, not just the toggle's own icon. */
   setTheme: (theme: Theme) => Promise<void>;
+  /** Stage L1 - same shape as setTheme, but drives i18next instead of a
+   *  DOM attribute. */
+  setLanguage: (language: Language) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -45,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const me = await apiFetch<CurrentUser>('/auth/me');
         applyTheme(me.theme);
+        applyLanguage(me.language);
         setUser(me);
         setStatus('authenticated');
       } catch {
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.setTokens(tokens);
     const me = await apiFetch<CurrentUser>('/auth/me');
     applyTheme(me.theme);
+    applyLanguage(me.language);
     setUser(me);
     setStatus('authenticated');
   }, []);
@@ -76,6 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((current) => (current ? { ...current, theme: result.theme } : current));
   }, []);
 
+  const setLanguage = useCallback(async (language: Language) => {
+    const result = await apiFetch<{ language: Language }>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ language }),
+    });
+    applyLanguage(result.language);
+    setUser((current) => (current ? { ...current, language: result.language } : current));
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiFetch('/auth/logout', { method: 'POST' });
@@ -85,13 +100,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.clear();
     setUser(null);
     setStatus('unauthenticated');
-    // Back to the deliberate dark default (DESIGN_THEMING.md) - a logged-out
-    // visitor has no account to read a theme choice off.
+    // Back to the deliberate dark/English defaults (DESIGN_THEMING.md /
+    // DESIGN_SWAHILI_UI.md) - a logged-out visitor has no account to read a
+    // theme or language choice off.
     applyTheme(null);
+    applyLanguage(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, status, login, logout, setTheme }}>
+    <AuthContext.Provider value={{ user, status, login, logout, setTheme, setLanguage }}>
       {children}
     </AuthContext.Provider>
   );

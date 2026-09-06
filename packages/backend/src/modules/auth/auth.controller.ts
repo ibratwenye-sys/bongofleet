@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { PasswordResetChannel, Theme } from '@prisma/client';
+import { Language, PasswordResetChannel, Theme } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { SignupVerificationService } from './signup-verification.service';
@@ -25,7 +25,7 @@ import { AuthenticatedUser, AuthenticatedUserWithTenantLock } from './auth.types
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { ConfirmSignupVerificationDto } from './dto/confirm-signup-verification.dto';
-import { UpdateThemeDto } from './dto/update-theme.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -106,27 +106,28 @@ export class AuthController {
   @AllowWhenLocked()
   @ApiBearerAuth()
   async me(@CurrentUser() user: AuthenticatedUserWithTenantLock): Promise<UserResponseDto> {
-    const [driverType, theme] = await Promise.all([
+    const [driverType, theme, language] = await Promise.all([
       this.authService.getDriverType(user),
       this.authService.getTheme(user),
+      this.authService.getLanguage(user),
     ]);
-    return UserResponseDto.fromProfile({ ...user, driverType, theme });
+    return UserResponseDto.fromProfile({ ...user, driverType, theme, language });
   }
 
-  // Stage UI1 - the theme choice belongs on the account (DESIGN_THEMING.md),
-  // not browser storage, so it's the same across devices. Allow-listed for
-  // the same reason GET is: a locked owner can still toggle their own theme
-  // while looking at the locked-account screen.
+  // Stage UI1/L1 - the theme and language choices both belong on the
+  // account (DESIGN_THEMING.md / DESIGN_SWAHILI_UI.md), not browser
+  // storage, so they're the same across devices. Allow-listed for the same
+  // reason GET is: a locked owner can still change either one while
+  // looking at the locked-account screen.
   @Patch('me')
   @UseGuards(JwtAuthGuard)
   @AllowWhenLocked()
   @ApiBearerAuth()
   async updateMe(
     @CurrentUser() user: AuthenticatedUserWithTenantLock,
-    @Body() dto: UpdateThemeDto,
-  ): Promise<{ theme: Theme }> {
-    const theme = await this.authService.updateTheme(user, dto.theme);
-    return { theme };
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<{ theme: Theme | null; language: Language | null }> {
+    return this.authService.updatePreferences(user, dto);
   }
 
   // Stage S1 - allow-listed: leaving must always work, locked or not.

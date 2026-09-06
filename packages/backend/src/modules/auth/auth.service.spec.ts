@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { DriverType, UserRole } from '@prisma/client';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { DriverType, Language, Theme, UserRole } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -17,6 +17,7 @@ describe('AuthService', () => {
         findFirst: jest.Mock;
         findMany: jest.Mock;
         findUnique: jest.Mock;
+        update: jest.Mock;
       };
       driver: {
         findUnique: jest.Mock;
@@ -41,7 +42,12 @@ describe('AuthService', () => {
   beforeEach(async () => {
     prisma = {
       client: {
-        user: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+        user: {
+          findFirst: jest.fn(),
+          findMany: jest.fn(),
+          findUnique: jest.fn(),
+          update: jest.fn(),
+        },
         driver: { findUnique: jest.fn() },
         $transaction: jest.fn(),
       },
@@ -244,6 +250,81 @@ describe('AuthService', () => {
       prisma.client.driver.findUnique.mockResolvedValue(null);
 
       await expect(service.getDriverType(riderActor)).resolves.toBeNull();
+    });
+  });
+
+  describe('getTheme / getLanguage / updatePreferences', () => {
+    const actor = {
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      role: UserRole.OWNER,
+      email: 'owner@example.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      jti: 'jti-1',
+    };
+
+    it('getTheme returns the stored theme, or null if never chosen', async () => {
+      prisma.client.user.findUnique.mockResolvedValue({ theme: Theme.LIGHT });
+      await expect(service.getTheme(actor)).resolves.toBe(Theme.LIGHT);
+
+      prisma.client.user.findUnique.mockResolvedValue({ theme: null });
+      await expect(service.getTheme(actor)).resolves.toBeNull();
+    });
+
+    it('getLanguage returns the stored language, or null if never chosen', async () => {
+      prisma.client.user.findUnique.mockResolvedValue({ language: Language.SW });
+      await expect(service.getLanguage(actor)).resolves.toBe(Language.SW);
+
+      prisma.client.user.findUnique.mockResolvedValue({ language: null });
+      await expect(service.getLanguage(actor)).resolves.toBeNull();
+    });
+
+    it('updatePreferences rejects a body with neither field', async () => {
+      await expect(service.updatePreferences(actor, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.client.user.update).not.toHaveBeenCalled();
+    });
+
+    it('updatePreferences accepts theme alone, in a single Prisma update call', async () => {
+      prisma.client.user.update.mockResolvedValue({ theme: Theme.LIGHT, language: null });
+
+      const result = await service.updatePreferences(actor, { theme: Theme.LIGHT });
+
+      expect(prisma.client.user.update).toHaveBeenCalledTimes(1);
+      expect(prisma.client.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { theme: Theme.LIGHT, language: undefined },
+        select: { theme: true, language: true },
+      });
+      expect(result).toEqual({ theme: Theme.LIGHT, language: null });
+    });
+
+    it('updatePreferences accepts language alone, in a single Prisma update call', async () => {
+      prisma.client.user.update.mockResolvedValue({ theme: null, language: Language.SW });
+
+      const result = await service.updatePreferences(actor, { language: Language.SW });
+
+      expect(prisma.client.user.update).toHaveBeenCalledTimes(1);
+      expect(prisma.client.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { theme: undefined, language: Language.SW },
+        select: { theme: true, language: true },
+      });
+      expect(result).toEqual({ theme: null, language: Language.SW });
+    });
+
+    it('updatePreferences accepts both fields together, in a single Prisma update call', async () => {
+      prisma.client.user.update.mockResolvedValue({ theme: Theme.DARK, language: Language.EN });
+
+      const result = await service.updatePreferences(actor, {
+        theme: Theme.DARK,
+        language: Language.EN,
+      });
+
+      expect(prisma.client.user.update).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ theme: Theme.DARK, language: Language.EN });
     });
   });
 });

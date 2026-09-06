@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { DriverType, TenantStatus, Theme, UserRole } from '@prisma/client';
+import { DriverType, Language, TenantStatus, Theme, UserRole } from '@prisma/client';
 import { AuthController } from './auth.controller';
 import { PasswordResetService } from './password-reset.service';
 import { SignupVerificationService } from './signup-verification.service';
@@ -14,7 +14,8 @@ describe('AuthController', () => {
     logout: jest.Mock;
     getDriverType: jest.Mock;
     getTheme: jest.Mock;
-    updateTheme: jest.Mock;
+    getLanguage: jest.Mock;
+    updatePreferences: jest.Mock;
   };
   let signupVerificationService: {
     sendCode: jest.Mock;
@@ -32,7 +33,8 @@ describe('AuthController', () => {
       logout: jest.fn().mockResolvedValue(undefined),
       getDriverType: jest.fn().mockResolvedValue(null),
       getTheme: jest.fn().mockResolvedValue(null),
-      updateTheme: jest.fn().mockResolvedValue('LIGHT'),
+      getLanguage: jest.fn().mockResolvedValue(null),
+      updatePreferences: jest.fn().mockResolvedValue({ theme: 'LIGHT', language: 'EN' }),
     };
     signupVerificationService = {
       sendCode: jest.fn().mockResolvedValue(undefined),
@@ -105,6 +107,7 @@ describe('AuthController', () => {
 
     expect(service.getDriverType).toHaveBeenCalledWith(user);
     expect(service.getTheme).toHaveBeenCalledWith(user);
+    expect(service.getLanguage).toHaveBeenCalledWith(user);
     expect(result).toEqual({
       id: 'u1',
       tenantId: 't1',
@@ -116,6 +119,7 @@ describe('AuthController', () => {
       trialEndsAt: null,
       driverType: null,
       theme: null,
+      language: null,
     });
     expect(result).not.toHaveProperty('passwordHash');
   });
@@ -140,7 +144,7 @@ describe('AuthController', () => {
     expect(result.driverType).toBe(DriverType.TRUCK_DRIVER);
   });
 
-  it('updateMe delegates to AuthService.updateTheme and returns the saved theme', async () => {
+  it('updateMe delegates to AuthService.updatePreferences and returns both current values', async () => {
     const user = {
       userId: 'u1',
       tenantId: 't1',
@@ -153,12 +157,15 @@ describe('AuthController', () => {
       trialEndsAt: null,
       billingExemptAt: null,
     };
-    service.updateTheme.mockResolvedValueOnce(Theme.LIGHT);
+    service.updatePreferences.mockResolvedValueOnce({ theme: Theme.LIGHT, language: Language.SW });
 
-    const result = await controller.updateMe(user, { theme: Theme.LIGHT });
+    const result = await controller.updateMe(user, { theme: Theme.LIGHT, language: Language.SW });
 
-    expect(service.updateTheme).toHaveBeenCalledWith(user, Theme.LIGHT);
-    expect(result).toEqual({ theme: Theme.LIGHT });
+    expect(service.updatePreferences).toHaveBeenCalledWith(user, {
+      theme: Theme.LIGHT,
+      language: Language.SW,
+    });
+    expect(result).toEqual({ theme: Theme.LIGHT, language: Language.SW });
   });
 
   it('logout delegates to AuthService.logout with userId and jti', async () => {

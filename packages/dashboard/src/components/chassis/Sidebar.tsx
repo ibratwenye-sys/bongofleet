@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../lib/auth-context';
 import { ThemeToggle } from '../ThemeToggle';
+import { LanguageToggle } from '../LanguageToggle';
 import type { CurrentUser } from '../../lib/types';
 import { filterVisibleGroups } from './nav-visibility';
 
@@ -36,6 +38,7 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
 
   const visibleGroups = filterVisibleGroups(user);
 
@@ -77,6 +80,7 @@ export function Sidebar({
 
       <div className="flex items-center justify-between gap-2 border-t border-line-soft px-3 py-2">
         <ThemeToggle />
+        <LanguageToggle />
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-line-soft px-3 py-3">
@@ -97,7 +101,7 @@ export function Sidebar({
           onClick={() => void logout()}
           className="shrink-0 rounded border border-line px-2 py-1 text-xs font-medium text-txt-2 hover:bg-panel-2"
         >
-          Logout
+          {t('logout')}
         </button>
       </div>
     </div>

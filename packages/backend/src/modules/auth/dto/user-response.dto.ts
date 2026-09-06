@@ -1,4 +1,4 @@
-import { DriverType, TenantStatus, Theme, UserRole } from '@prisma/client';
+import { DriverType, Language, TenantStatus, Theme, UserRole } from '@prisma/client';
 
 export class UserResponseDto {
   id: string;
@@ -22,6 +22,10 @@ export class UserResponseDto {
   // (see the Theme enum's own schema comment), never guessing from OS
   // preference.
   theme: Theme | null;
+  // Stage L1 - null means "never chosen"; the dashboard falls back to
+  // English (see the Language enum's own schema comment), never guessing
+  // from browser/OS locale.
+  language: Language | null;
 
   static fromProfile(profile: {
     userId: string;
@@ -34,6 +38,7 @@ export class UserResponseDto {
     trialEndsAt: Date | null;
     driverType: DriverType | null;
     theme: Theme | null;
+    language: Language | null;
   }): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = profile.userId;
@@ -46,6 +51,7 @@ export class UserResponseDto {
     dto.trialEndsAt = profile.trialEndsAt;
     dto.driverType = profile.driverType;
     dto.theme = profile.theme;
+    dto.language = profile.language;
     return dto;
   }
 }

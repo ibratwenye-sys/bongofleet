@@ -148,6 +148,85 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer()).get('/auth/me').expect(401);
   });
 
+  // Stage L1 (DESIGN_SWAHILI_UI.md) - PATCH /auth/me extended from
+  // theme-only to also carry the language choice.
+  describe('PATCH /auth/me - theme and language preferences', () => {
+    async function signIn(): Promise<string> {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send(signupBody)
+        .expect(201);
+      return res.body.accessToken as string;
+    }
+
+    it('persists language alone, and GET /auth/me reflects it', async () => {
+      const accessToken = await signIn();
+
+      const patchRes = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ language: 'SW' })
+        .expect(200);
+      expect(patchRes.body).toEqual({ theme: null, language: 'SW' });
+
+      const meRes = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(meRes.body.language).toBe('SW');
+    });
+
+    it('persists theme alone, leaving language untouched', async () => {
+      const accessToken = await signIn();
+
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ language: 'SW' })
+        .expect(200);
+
+      const patchRes = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ theme: 'LIGHT' })
+        .expect(200);
+
+      // Both current values come back, not just the one just changed.
+      expect(patchRes.body).toEqual({ theme: 'LIGHT', language: 'SW' });
+    });
+
+    it('persists both fields together in one call', async () => {
+      const accessToken = await signIn();
+
+      const patchRes = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ theme: 'DARK', language: 'EN' })
+        .expect(200);
+      expect(patchRes.body).toEqual({ theme: 'DARK', language: 'EN' });
+    });
+
+    it('rejects an empty body with neither field', async () => {
+      const accessToken = await signIn();
+
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({})
+        .expect(400);
+    });
+
+    it('rejects an invalid language value', async () => {
+      const accessToken = await signIn();
+
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ language: 'FR' })
+        .expect(400);
+    });
+  });
+
   /**
    * Stage H0g. email is unique per tenant (@@unique([tenantId, email])), not
    * globally - two unrelated fleet owners can each onboard a rider using the

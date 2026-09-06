@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { DriverType, Theme, UserRole } from '@prisma/client';
+import { DriverType, Language, Theme, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { requestContext } from '../../common/context/request-context';
@@ -251,17 +256,48 @@ export class AuthService {
     return record?.theme ?? null;
   }
 
-  /** Stage UI1 - PATCH /auth/me. The theme choice belongs on the account
-   *  (DESIGN_THEMING.md), not browser storage, so it reads the same on
-   *  every device the owner signs into. */
-  async updateTheme(user: AuthenticatedUser, theme: Theme): Promise<Theme> {
-    const updated = await this.prisma.client.user.update({
+  /** Stage L1 - same reasoning as getTheme above. */
+  async getLanguage(user: AuthenticatedUser): Promise<Language | null> {
+    const record = await this.prisma.client.user.findUnique({
       where: { id: user.userId },
-      data: { theme },
-      select: { theme: true },
+      select: { language: true },
     });
-    // theme was just set to a non-null Theme above - never actually null.
-    return updated.theme as Theme;
+    return record?.language ?? null;
+  }
+
+  /**
+   * Stage L1 - PATCH /auth/me, extended from theme-only (updateTheme) to
+   * also carry the language choice (DESIGN_SWAHILI_UI.md), both belonging
+   * on the account rather than browser storage so they read the same on
+   * every device. Either field alone, or both together, in one Prisma
+   * call - Prisma skips an undefined key, so passing only one is a normal
+   * partial update. Returns BOTH current values afterward (not just
+   * whichever changed) so the caller's local state stays fully in sync in
+   * one round trip.
+   *
+   * Deliberately returns `Theme | null` / `Language | null`, not the
+   * non-null `Theme`/`Language` a narrower reading of the spec might
+   * suggest: unlike the old theme-only DTO (where theme was mandatory, so
+   * the field was always freshly set by the time this returned), either
+   * field here can still be genuinely unset - e.g. a call that only sends
+   * `language` when this account has never chosen a theme. Manufacturing a
+   * non-null fallback value at this layer would misrepresent "never
+   * chosen" as an explicit choice, which is exactly the invariant the
+   * Language/Theme enums' own nullability exists to protect. The client
+   * already knows how to apply the fallback (see dashboard's applyTheme).
+   */
+  async updatePreferences(
+    user: AuthenticatedUser,
+    changes: { theme?: Theme; language?: Language },
+  ): Promise<{ theme: Theme | null; language: Language | null }> {
+    if (changes.theme === undefined && changes.language === undefined) {
+      throw new BadRequestException('Provide a theme, a language, or both.');
+    }
+    return this.prisma.client.user.update({
+      where: { id: user.userId },
+      data: { theme: changes.theme, language: changes.language },
+      select: { theme: true, language: true },
+    });
   }
 
   private async issueTokenPair(profile: Omit<AuthenticatedUser, 'jti'>): Promise<TokenResponseDto> {

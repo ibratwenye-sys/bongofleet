@@ -29,6 +29,20 @@ enum Theme {
   @@map("theme")
 }
 
+/// Stage L1 (DESIGN_SWAHILI_UI.md) - the dashboard's English/Swahili choice.
+/// Belongs on the account, not browser storage, so it's the same across
+/// devices. Nullable rather than defaulted to EN: null means "never chosen"
+/// and the client falls back to English (the deliberate default, never
+/// guessed from browser/OS locale) - an explicit EN row would be
+/// indistinguishable from that same fallback, so there is nothing to gain
+/// from a non-null default here.
+enum Language {
+  EN
+  SW
+
+  @@map("language")
+}
+
 /// Stage S1. Where a tenant sits in the signup/billing lifecycle - checked
 /// on every authenticated request via tenant-lock.util.ts's checkTenantLock,
 /// which is the one place this enum's meaning is actually decided.
@@ -247,20 +261,23 @@ model Tenant {
 /// Anyone who logs in: owner, manager, driver, or mechanic. Drivers get an
 /// additional Driver profile (1:1) holding driver-specific fields.
 model User {
-  id           String   @id @default(cuid())
-  tenantId     String   @map("tenant_id")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
   email        String
   phone        String
-  passwordHash String   @map("password_hash")
+  passwordHash String    @map("password_hash")
   role         UserRole
-  firstName    String   @map("first_name")
-  lastName     String   @map("last_name")
-  isActive     Boolean  @default(true) @map("is_active")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  isActive     Boolean   @default(true) @map("is_active")
   // Stage UI1 - see the Theme enum's own comment. Every role (OWNER/
   // MANAGER/RIDER/MECHANIC) has a User row, so this lives here rather than
   // on Driver - a fleet owner's own theme choice has nowhere else to go.
   theme        Theme?
+  // Stage L1 - see the Language enum's own comment. Same reasoning as theme
+  // above: every role has a User row, so this is where the choice lives.
+  language     Language?
 
   /// When this address was last PROVEN to reach the person who owns the
   /// account - set only when they complete a self-service password reset

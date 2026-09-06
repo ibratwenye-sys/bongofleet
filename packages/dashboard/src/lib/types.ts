@@ -9,6 +9,11 @@ export type UserRole = 'OWNER' | 'MANAGER' | 'RIDER' | 'MECHANIC';
 // so it reads the same on every device.
 export type Theme = 'DARK' | 'LIGHT';
 
+// Stage L1 - null means "never chosen"; the dashboard falls back to English
+// (DESIGN_SWAHILI_UI.md's deliberate default), never guessing from browser/
+// OS locale. Same account-not-browser-storage reasoning as Theme above.
+export type Language = 'EN' | 'SW';
+
 export interface CurrentUser {
   id: string;
   tenantId: string;
@@ -17,6 +22,7 @@ export interface CurrentUser {
   firstName: string;
   lastName: string;
   theme: Theme | null;
+  language: Language | null;
 }
 
 export interface TokenResponse {

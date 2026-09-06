@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Stage H0d - this component had no height limit, no overflow handling, no
@@ -48,6 +49,7 @@ export function Modal({
    *  needs more room, e.g. a table with several columns. */
   maxWidth?: string;
 }) {
+  const { t } = useTranslation();
   // Call sites pass an inline arrow for onClose, so it is a new function on
   // every render. Held in a ref and read at call time, the effect below can
   // stay mount-only - otherwise it would tear down and re-run on every
@@ -111,7 +113,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('close')}
             className="text-txt-3 hover:text-txt"
           >
             ✕
