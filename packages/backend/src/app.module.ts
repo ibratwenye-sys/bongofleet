@@ -25,6 +25,7 @@ import { ExpenseCategoryCapModule } from './modules/expense-category-cap/expense
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { TransportModule } from './modules/transport/transport.module';
+import { TransportReconciliationModule } from './modules/transport-reconciliation/transport-reconciliation.module';
 import { OwnershipPlanModule } from './modules/ownership-plan/ownership-plan.module';
 import { PaymentAccountModule } from './modules/payment-account/payment-account.module';
 import { TenantModule } from './modules/tenant/tenant.module';
@@ -71,6 +72,7 @@ import { RequestContextInterceptor } from './common/interceptors/request-context
     AnalyticsModule,
     MaintenanceModule,
     TransportModule,
+    TransportReconciliationModule,
     OwnershipPlanModule,
     PaymentAccountModule,
     TenantModule,

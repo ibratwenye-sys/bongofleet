@@ -26,6 +26,14 @@ export const TRACKING_LINK_STATUS_STYLES: Record<string, string> = {
   REVOKED: 'bg-red-100 text-red-700',
 };
 
+// TRANSPORT_DESIGN.md §6 - TransportPaymentStatus values from
+// @bongofleet/shared-lib's transportPaymentStatus().
+export const TRANSPORT_PAYMENT_STATUS_STYLES: Record<string, string> = {
+  UNPAID: 'bg-red-100 text-red-700',
+  PARTIALLY_PAID: 'bg-amber-100 text-amber-800',
+  PAID: 'bg-green-100 text-green-800',
+};
+
 export function StatusBadge({
   status,
   styles,

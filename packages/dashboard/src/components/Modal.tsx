@@ -38,10 +38,15 @@ export function Modal({
   title,
   onClose,
   children,
+  maxWidth = 'max-w-md',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Tailwind max-width class - defaults to the original fixed width every
+   *  existing call site relies on. Widen it for content that genuinely
+   *  needs more room, e.g. a table with several columns. */
+  maxWidth?: string;
 }) {
   // Call sites pass an inline arrow for onClose, so it is a new function on
   // every render. Held in a ref and read at call time, the effect below can
@@ -98,7 +103,9 @@ export function Modal({
           scrolling internally instead of the panel growing past the edges.
           min-h-0 on the body is required - without it a flex child refuses
           to shrink below its content and the overflow returns. */}
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg bg-panel shadow-lg">
+      <div
+        className={`flex max-h-[calc(100vh-2rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-lg bg-panel shadow-lg`}
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
           <h2 className="text-lg font-semibold text-txt">{title}</h2>
           <button

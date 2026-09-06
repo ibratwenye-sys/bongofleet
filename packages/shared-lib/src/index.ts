@@ -21,3 +21,5 @@ export {
   DRIVER_SEARCH_RESULT_LIMIT,
   normalizeSearchQuery,
 } from './driver-search/driver-search';
+export { transportPaymentStatus } from './transport/payment-status';
+export type { TransportPaymentStatus } from './transport/payment-status';

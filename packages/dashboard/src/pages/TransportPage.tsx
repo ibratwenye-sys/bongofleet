@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { transportPaymentStatus, type TransportPaymentStatus } from '@bongofleet/shared-lib';
 import { apiFetch, ApiError } from '../lib/api';
+import { useAuth } from '../lib/auth-context';
 import { formatTZS, formatDateTime } from '../lib/format';
 import type {
   CreateTransportJobPayload,
@@ -11,6 +13,8 @@ import type {
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { TransportReconciliationModal } from '../components/TransportReconciliationModal';
+import { TRANSPORT_PAYMENT_STATUS_STYLES } from '../components/StatusBadge';
 import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
@@ -127,6 +131,36 @@ function InTransitCard({ job }: { job: TransportOperationsResponse['inTransitJob
         </p>
       </div>
     </Card>
+  );
+}
+
+const PAYMENT_STATUS_LABEL: Record<TransportPaymentStatus, string> = {
+  UNPAID: 'Unpaid',
+  PARTIALLY_PAID: 'Partially paid',
+  PAID: 'Paid',
+};
+
+// TRANSPORT_DESIGN.md §6 - purely additive collection-status indicator next
+// to the existing revenue/expense/profit figures, which it never changes.
+// Only rendered once the full TransportJob (with amountReceived) has loaded
+// via jobsById - the lighter tripsThisMonth summary row doesn't carry it.
+function CollectionStatusPill({ job }: { job: TransportJob }) {
+  const revenue = parseFloat(job.revenue);
+  const amountReceived = parseFloat(job.amountReceived);
+  const status = transportPaymentStatus(revenue, amountReceived);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span
+        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${TRANSPORT_PAYMENT_STATUS_STYLES[status]}`}
+      >
+        {PAYMENT_STATUS_LABEL[status]}
+      </span>
+      {status === 'PARTIALLY_PAID' && (
+        <span className="text-xs whitespace-nowrap text-txt-2">
+          Collected {formatTZS(amountReceived)} of {formatTZS(revenue)}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -520,6 +554,7 @@ function LogExpenseModal({
 }
 
 export function TransportPage() {
+  const { user } = useAuth();
   const [data, setData] = useState<TransportOperationsResponse | null>(null);
   const [vehicles, setVehicles] = useState<Motorcycle[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
@@ -529,6 +564,11 @@ export function TransportPage() {
   const [formTarget, setFormTarget] = useState<'new' | TransportJob | null>(null);
   const [expenseTarget, setExpenseTarget] = useState<TransportJob | null>(null);
   const [deleting, setDeleting] = useState<TransportJob | null>(null);
+  const [reconciling, setReconciling] = useState(false);
+  // TRANSPORT_DESIGN.md §6 - same role gate as the backend's
+  // /transport-reconciliation endpoints (OWNER or MANAGER, not bulk-import's
+  // OWNER-only - this touches at most a handful of jobs per upload).
+  const canReconcile = user?.role === 'OWNER' || user?.role === 'MANAGER';
 
   async function load() {
     try {
@@ -610,6 +650,17 @@ export function TransportPage() {
     >
       {success && <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{success}</p>}
       {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
+
+      {canReconcile && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setReconciling(true)}
+            className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2"
+          >
+            Reconcile payments
+          </button>
+        </div>
+      )}
 
       <ChassisGrid
         main={
@@ -755,6 +806,7 @@ export function TransportPage() {
                 <th className="px-4 py-2 text-right font-medium">Revenue</th>
                 <th className="px-4 py-2 text-right font-medium">Cost</th>
                 <th className="px-4 py-2 text-right font-medium">Profit</th>
+                <th className="px-4 py-2 font-medium">Collection</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
@@ -762,7 +814,7 @@ export function TransportPage() {
             <tbody>
               {data.tripsThisMonth.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-txt-2">
+                  <td colSpan={9} className="px-4 py-6 text-center text-txt-2">
                     No trips yet this month.
                   </td>
                 </tr>
@@ -785,6 +837,9 @@ export function TransportPage() {
                         className={`px-4 py-2 text-right font-medium ${net >= 0 ? 'text-good' : 'text-crit'}`}
                       >
                         {formatTZS(trip.netProfit)}
+                      </td>
+                      <td className="px-4 py-2">
+                        {job ? <CollectionStatusPill job={job} /> : '—'}
                       </td>
                       <td className="px-4 py-2">
                         {job ? (
@@ -861,6 +916,11 @@ export function TransportPage() {
                       {formatTZS(trip.netProfit)}
                     </span>
                   </div>
+                  {job && (
+                    <div className="mt-1.5">
+                      <CollectionStatusPill job={job} />
+                    </div>
+                  )}
                   <div className="mt-2">
                     {job ? (
                       <select
@@ -998,6 +1058,16 @@ export function TransportPage() {
           danger
           onConfirm={handleDelete}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+      {reconciling && (
+        <TransportReconciliationModal
+          onClose={() => setReconciling(false)}
+          onCommitted={(message) => {
+            setReconciling(false);
+            setSuccess(message);
+            void load();
+          }}
         />
       )}
     </PageChassis>

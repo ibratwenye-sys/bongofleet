@@ -371,6 +371,54 @@ export interface TransportJob {
   // Stage UI2 - optional, set at job creation, revisable until the job
   // completes. See TransportJob.expectedDistanceKm's own schema comment.
   expectedDistanceKm: string | null;
+  // TRANSPORT_DESIGN.md §6 - collection status, purely additive alongside
+  // revenue/expensesTotal/netProfit above (never substituted into them).
+  // Derived client-side into a TransportPaymentStatus via
+  // transportPaymentStatus() from @bongofleet/shared-lib.
+  amountReceived: string;
+  lastPaymentReceivedAt: string | null;
+}
+
+// TRANSPORT_DESIGN.md §6 - manual statement-upload payment reconciliation.
+export type TransportPaymentMatchReason = 'reference' | 'amount';
+
+export interface TransportPaymentCandidate {
+  jobId: string;
+  reference: string | null;
+  customerName: string | null;
+  remainingBalance: string;
+  matchReason: TransportPaymentMatchReason;
+}
+
+export interface TransportReconciliationPreviewRow {
+  rowIndex: number;
+  date: string | null;
+  amount: number | null;
+  narrative: string;
+  error: string | null;
+  candidates: TransportPaymentCandidate[];
+}
+
+export interface TransportReconciliationPreview {
+  fileName: string;
+  rows: TransportReconciliationPreviewRow[];
+}
+
+export interface TransportReconciliationRowSelection {
+  rowIndex: number;
+  transportJobId: string;
+}
+
+export interface TransportReconciliationCommitRowResult {
+  rowIndex: number;
+  status: 'committed' | 'skipped' | 'error';
+  transportJobId?: string;
+  message?: string;
+  overpaidWarning?: boolean;
+}
+
+export interface TransportReconciliationCommitResult {
+  results: TransportReconciliationCommitRowResult[];
 }
 
 export interface VehicleTransportSummary {
