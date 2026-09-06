@@ -1,0 +1,85 @@
+{
+  "title": "Matumizi",
+  "statusLive": "HAI",
+  "recordExpense": "Rekodi matumizi",
+  "editExpense": "Hariri matumizi",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia matumizi. Tafadhali jaribu tena.",
+  "deleteError": "Imeshindikana kufuta matumizi.",
+  "expenseUpdated": "Matumizi yamesasishwa.",
+  "expenseRecorded": "Matumizi yamerekodiwa.",
+  "expenseDeleted": "Matumizi yamefutwa.",
+
+  "kpiSpentThisMonth": "Yaliyotumika Mwezi Huu",
+  "kpiFuel": "Mafuta",
+  "kpiRepairs": "Matengenezo",
+  "kpiRecurringOffenders": "Magari Yanayorudia Gharama",
+  "kpiClaimsAwaitingApproval": "Madai Yanayosubiri Idhini",
+  "kpiCostPerVehicle": "Gharama kwa Gari",
+
+  "periodRange": "{{from}} hadi {{to}}",
+
+  "byCategoryTitle": "Kwa Aina",
+  "noExpensesRecorded": "Hakuna matumizi yaliyorekodiwa katika kipindi hiki.",
+
+  "costPerVehicleTypeTitle": "Gharama kwa Gari, kwa Aina",
+
+  "aiInsightsTitle": "Maarifa ya AI",
+  "noAnomalies": "Hakuna gari linalotumia zaidi ya kawaida kwa sasa.",
+  "anomalyComparison": "{{current}} kipindi hiki dhidi ya wastani wake wa miezi 3 wa {{avg}} ({{sign}}{{pct}}%)",
+
+  "noClaimsPending": "Hakuna kinachosubiri idhini.",
+
+  "vehicleAnomaliesTitle": "Magari Yanayotumia Zaidi ya Inavyostahili",
+  "tableVehicle": "Gari",
+  "tableType": "Aina",
+  "tableCurrentCost": "Gharama ya Sasa",
+  "tableAvg3Month": "Wastani wa Miezi 3",
+  "tableChange": "Mabadiliko",
+  "tableTopCategory": "Aina Kuu",
+  "tableVerdict": "Hukumu",
+  "flagged": "Imebainishwa",
+
+  "allExpensesTitle": "Matumizi Yote",
+  "shownTotal": "{{count}} yanaonyeshwa · {{total}}",
+  "filterFrom": "Kuanzia",
+  "filterTo": "Hadi",
+  "filterVehicleType": "Aina ya Gari",
+  "filterVehicle": "Gari",
+  "allVehicles": "Yote",
+
+  "tableDate": "Tarehe",
+  "tableCategory": "Aina",
+  "tableDescription": "Maelezo",
+  "tableAmount": "Kiasi",
+  "tableActions": "Vitendo",
+  "noExpensesInPeriod": "Hakuna matumizi katika kipindi hiki.",
+  "fleetWide": "Meli Nzima",
+  "edit": "Hariri",
+  "delete": "Futa",
+
+  "fuelLargestLineTitle": "Mafuta, Gharama Kubwa Zaidi",
+
+  "deleteExpenseTitle": "Futa Matumizi",
+  "deleteExpenseMessage": "Futa matumizi ya {{category}} ya {{amount}}? Hatua hii haiwezi kutenduliwa.",
+
+  "vehicleTypeMotorbike": "Pikipiki",
+  "vehicleTypeBajaji": "Bajaji",
+  "vehicleTypeCar": "Gari",
+  "vehicleTypeTruck": "Lori",
+  "categoryAllTypes": "Aina Zote",
+
+  "fieldCategory": "Aina",
+  "categoryPlaceholder": "mfano: Mafuta",
+  "fieldAmount": "Kiasi (TZS)",
+  "fieldDate": "Tarehe",
+  "fieldVehicle": "Gari",
+  "optional": "(hiari)",
+  "fleetWideOption": "Meli Nzima (si gari maalum)",
+  "fieldDescription": "Maelezo",
+
+  "errorCategoryRequired": "Aina inahitajika.",
+  "errorAmountPositive": "Kiasi lazima kiwe nambari chanya.",
+  "errorDateRequired": "Tarehe inahitajika.",
+  "genericError": "Hitilafu imetokea. Tafadhali jaribu tena."
+}

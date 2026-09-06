@@ -1,0 +1,85 @@
+{
+  "title": "Expenses",
+  "statusLive": "LIVE",
+  "recordExpense": "Record expense",
+  "editExpense": "Edit expense",
+  "loading": "Loading…",
+  "loadError": "Could not load expenses. Please try again.",
+  "deleteError": "Could not delete expense.",
+  "expenseUpdated": "Expense updated.",
+  "expenseRecorded": "Expense recorded.",
+  "expenseDeleted": "Expense deleted.",
+
+  "kpiSpentThisMonth": "Spent this month",
+  "kpiFuel": "Fuel",
+  "kpiRepairs": "Repairs",
+  "kpiRecurringOffenders": "Recurring offenders",
+  "kpiClaimsAwaitingApproval": "Claims awaiting approval",
+  "kpiCostPerVehicle": "Cost per vehicle",
+
+  "periodRange": "{{from}} to {{to}}",
+
+  "byCategoryTitle": "By category",
+  "noExpensesRecorded": "No expenses recorded in this period.",
+
+  "costPerVehicleTypeTitle": "Cost per vehicle, by type",
+
+  "aiInsightsTitle": "AI Insights",
+  "noAnomalies": "No vehicle is costing more than usual right now.",
+  "anomalyComparison": "{{current}} this period vs {{avg}} own 3-month average ({{sign}}{{pct}}%)",
+
+  "noClaimsPending": "Nothing waiting on approval.",
+
+  "vehicleAnomaliesTitle": "Vehicles costing more than they should",
+  "tableVehicle": "Vehicle",
+  "tableType": "Type",
+  "tableCurrentCost": "Current cost",
+  "tableAvg3Month": "3-month average",
+  "tableChange": "Change",
+  "tableTopCategory": "Top category",
+  "tableVerdict": "Verdict",
+  "flagged": "Flagged",
+
+  "allExpensesTitle": "All expenses",
+  "shownTotal": "{{count}} shown · {{total}}",
+  "filterFrom": "From",
+  "filterTo": "To",
+  "filterVehicleType": "Vehicle type",
+  "filterVehicle": "Vehicle",
+  "allVehicles": "All",
+
+  "tableDate": "Date",
+  "tableCategory": "Category",
+  "tableDescription": "Description",
+  "tableAmount": "Amount",
+  "tableActions": "Actions",
+  "noExpensesInPeriod": "No expenses in this period.",
+  "fleetWide": "Fleet-wide",
+  "edit": "Edit",
+  "delete": "Delete",
+
+  "fuelLargestLineTitle": "Fuel, the largest single line",
+
+  "deleteExpenseTitle": "Delete expense",
+  "deleteExpenseMessage": "Delete the {{category}} expense of {{amount}}? This cannot be undone.",
+
+  "vehicleTypeMotorbike": "Motorbike",
+  "vehicleTypeBajaji": "Bajaji",
+  "vehicleTypeCar": "Car",
+  "vehicleTypeTruck": "Truck",
+  "categoryAllTypes": "All types",
+
+  "fieldCategory": "Category",
+  "categoryPlaceholder": "e.g. Fuel",
+  "fieldAmount": "Amount (TZS)",
+  "fieldDate": "Date",
+  "fieldVehicle": "Vehicle",
+  "optional": "(optional)",
+  "fleetWideOption": "Fleet-wide (not vehicle-specific)",
+  "fieldDescription": "Description",
+
+  "errorCategoryRequired": "Category is required.",
+  "errorAmountPositive": "Amount must be a positive number.",
+  "errorDateRequired": "Date is required.",
+  "genericError": "Something went wrong. Please try again."
+}

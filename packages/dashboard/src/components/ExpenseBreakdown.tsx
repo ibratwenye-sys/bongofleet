@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ExpenseCategory } from '../lib/types';
 import { formatTZS } from '../lib/format';
 
@@ -34,10 +35,11 @@ export function ExpenseBreakdown({
    *  main panel already fetched, rather than a second, filtered query. */
   highlightCategory?: string;
 }) {
+  const { t } = useTranslation('expenses');
   const total = rows.reduce((sum, r) => sum + parseFloat(r.amount), 0);
 
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-txt-2">No expenses recorded in this period.</p>;
+    return <p className="p-4 text-sm text-txt-2">{t('noExpensesRecorded')}</p>;
   }
 
   return (

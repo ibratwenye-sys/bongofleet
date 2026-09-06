@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import type {
   CostPerVehicleTypeRow,
@@ -22,22 +24,27 @@ import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
-  ALL: 'All types',
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
-};
-const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
+
+// Stage L4 - the only label mapping for this enum anywhere in the app; see
+// StatusBadge/PaymentsPage's PAYMENT_STATUS_LABEL_KEY (L3) for the same
+// pattern. VEHICLE_TYPE_LABEL_KEY covers the four real types; the filter's
+// extra 'ALL' option has its own key since VehicleType itself has no ALL
+// member.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
 };
 
-// Common categories offered as quick suggestions; the field is still free text
-// so an owner can type anything (backend accepts any non-empty category).
+// Stage L4 - deliberately NOT translated (DESIGN_SWAHILI_UI.md's enum-vs-
+// free-text boundary): the category field itself is free text an owner can
+// type anything into, so real stored data may already exist in either
+// language from actual usage. Translating only this suggestion list would
+// be cosmetic - it wouldn't change what's actually saved or shown
+// elsewhere - and would desync the suggestions from the data they're
+// meant to shortcut. Left as literal English, unlike the fixed
+// VEHICLE_TYPE_LABEL_KEY enum above.
 const CATEGORY_SUGGESTIONS = [
   'Fuel',
   'Repairs',
@@ -47,6 +54,10 @@ const CATEGORY_SUGGESTIONS = [
   'Other',
 ];
 const APPROVALS_QUEUE_LIMIT = 5;
+
+function vehicleTypeFilterLabel(category: VehicleType | 'ALL', t: TFunction<'expenses'>): string {
+  return category === 'ALL' ? t('categoryAllTypes') : t(VEHICLE_TYPE_LABEL_KEY[category]);
+}
 
 interface FormState {
   category: string;
@@ -77,6 +88,8 @@ function ExpenseFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('expenses');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = expense != null;
   const [form, setForm] = useState<FormState>(() => toFormState(expense));
   const [error, setError] = useState<string | null>(null);
@@ -87,16 +100,16 @@ function ExpenseFormModal({
     setError(null);
 
     if (!form.category.trim()) {
-      setError('Category is required.');
+      setError(t('errorCategoryRequired'));
       return;
     }
     const amount = Number(form.amount);
     if (!form.amount || Number.isNaN(amount) || amount <= 0) {
-      setError('Amount must be a positive number.');
+      setError(t('errorAmountPositive'));
       return;
     }
     if (!form.incurredAt) {
-      setError('Date is required.');
+      setError(t('errorDateRequired'));
       return;
     }
 
@@ -114,7 +127,7 @@ function ExpenseFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Expense updated.');
+        onSaved(t('expenseUpdated'));
       } else {
         const payload: CreateExpensePayload = {
           category: form.category.trim(),
@@ -124,26 +137,26 @@ function ExpenseFormModal({
           description: form.description.trim() || undefined,
         };
         await apiFetch('/expenses', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Expense recorded.');
+        onSaved(t('expenseRecorded'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit expense' : 'Record expense'} onClose={onClose}>
+    <Modal title={isEdit ? t('editExpense') : t('recordExpense')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Category</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldCategory')}</label>
           <input
             list="expense-categories"
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
             className="w-full rounded border border-line px-3 py-2 text-sm"
-            placeholder="e.g. Fuel"
+            placeholder={t('categoryPlaceholder')}
           />
           <datalist id="expense-categories">
             {CATEGORY_SUGGESTIONS.map((c) => (
@@ -153,7 +166,7 @@ function ExpenseFormModal({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Amount (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldAmount')}</label>
             <input
               type="number"
               min="0"
@@ -164,7 +177,7 @@ function ExpenseFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldDate')}</label>
             <input
               type="date"
               value={form.incurredAt}
@@ -175,14 +188,14 @@ function ExpenseFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Vehicle <span className="text-txt-2">(optional)</span>
+            {t('fieldVehicle')} <span className="text-txt-2">{t('optional')}</span>
           </label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
             className="w-full rounded border border-line px-3 py-2 text-sm"
           >
-            <option value="">Fleet-wide (not vehicle-specific)</option>
+            <option value="">{t('fleetWideOption')}</option>
             {motorcycles.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.registrationNumber}
@@ -192,7 +205,7 @@ function ExpenseFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Description <span className="text-txt-2">(optional)</span>
+            {t('fieldDescription')} <span className="text-txt-2">{t('optional')}</span>
           </label>
           <input
             value={form.description}
@@ -209,14 +222,14 @@ function ExpenseFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -224,33 +237,34 @@ function ExpenseFormModal({
   );
 }
 
-function kpisToTiles(data: ExpenseSummaryResponse): KpiTile[] {
+function kpisToTiles(data: ExpenseSummaryResponse, t: TFunction<'expenses'>): KpiTile[] {
   const k = data.kpis;
   return [
-    { label: 'Spent this month', value: formatTZS(k.spentThisMonth), accentColor: 'c1' },
-    { label: 'Fuel', value: formatTZS(k.fuelThisMonth), accentColor: 'warn' },
-    { label: 'Repairs', value: formatTZS(k.repairsThisMonth), accentColor: 'warn' },
+    { label: t('kpiSpentThisMonth'), value: formatTZS(k.spentThisMonth), accentColor: 'c1' },
+    { label: t('kpiFuel'), value: formatTZS(k.fuelThisMonth), accentColor: 'warn' },
+    { label: t('kpiRepairs'), value: formatTZS(k.repairsThisMonth), accentColor: 'warn' },
     {
-      label: 'Recurring offenders',
+      label: t('kpiRecurringOffenders'),
       value: String(k.recurringOffendersCount),
       accentColor: k.recurringOffendersCount > 0 ? 'crit' : 'good',
     },
     {
-      label: 'Claims awaiting approval',
+      label: t('kpiClaimsAwaitingApproval'),
       value: String(k.claimsAwaitingApproval),
       accentColor: k.claimsAwaitingApproval > 0 ? 'warn' : 'good',
     },
-    { label: 'Cost per vehicle', value: formatTZS(k.costPerVehicle), accentColor: 'violet' },
+    { label: t('kpiCostPerVehicle'), value: formatTZS(k.costPerVehicle), accentColor: 'violet' },
   ];
 }
 
 function CostPerVehicleTypeCard({ rows }: { rows: CostPerVehicleTypeRow[] }) {
+  const { t } = useTranslation('expenses');
   return (
-    <Card title="Cost per vehicle, by type">
+    <Card title={t('costPerVehicleTypeTitle')}>
       <div className="divide-y divide-line-soft">
         {rows.map((r) => (
           <div key={r.vehicleType} className="flex items-center justify-between px-4 py-2">
-            <span className="text-sm text-txt-2">{VEHICLE_TYPE_LABELS[r.vehicleType]}</span>
+            <span className="text-sm text-txt-2">{t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}</span>
             <span className="text-sm font-medium text-txt">{formatTZS(r.costPerVehicle)}</span>
           </div>
         ))}
@@ -260,20 +274,24 @@ function CostPerVehicleTypeCard({ rows }: { rows: CostPerVehicleTypeRow[] }) {
 }
 
 function AnomalyInsightsCard({ anomalies }: { anomalies: VehicleAnomalyRow[] }) {
+  const { t } = useTranslation('expenses');
   const top = anomalies.slice(0, 2);
   return (
-    <Card title="AI Insights">
+    <Card title={t('aiInsightsTitle')}>
       {top.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">No vehicle is costing more than usual right now.</p>
+        <p className="p-4 text-sm text-txt-2">{t('noAnomalies')}</p>
       ) : (
         <div className="divide-y divide-line-soft">
           {top.map((a) => (
             <div key={a.motorcycleId} className="px-4 py-3">
               <p className="text-sm font-medium text-txt">{a.registrationNumber}</p>
               <p className="mt-1 text-xs text-txt-2">
-                {formatTZS(a.currentPeriodCost)} this period vs {formatTZS(a.trailing3MoAvg)} own
-                3-month average ({a.changePct >= 0 ? '+' : ''}
-                {a.changePct}%)
+                {t('anomalyComparison', {
+                  current: formatTZS(a.currentPeriodCost),
+                  avg: formatTZS(a.trailing3MoAvg),
+                  sign: a.changePct >= 0 ? '+' : '',
+                  pct: a.changePct,
+                })}
               </p>
             </div>
           ))}
@@ -284,13 +302,14 @@ function AnomalyInsightsCard({ anomalies }: { anomalies: VehicleAnomalyRow[] }) 
 }
 
 function ClaimsAwaitingApprovalCard({ pending }: { pending: Expense[] }) {
+  const { t } = useTranslation('expenses');
   return (
     <Card
-      title="Claims awaiting approval"
+      title={t('kpiClaimsAwaitingApproval')}
       subtitle={pending.length > 0 ? String(pending.length) : undefined}
     >
       {pending.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">Nothing waiting on approval.</p>
+        <p className="p-4 text-sm text-txt-2">{t('noClaimsPending')}</p>
       ) : (
         <div className="divide-y divide-line-soft">
           {pending.slice(0, APPROVALS_QUEUE_LIMIT).map((e) => (
@@ -309,33 +328,36 @@ function ClaimsAwaitingApprovalCard({ pending }: { pending: Expense[] }) {
 }
 
 function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
+  const { t } = useTranslation('expenses');
   return (
     <Card
-      title="Vehicles costing more than they should"
+      title={t('vehicleAnomaliesTitle')}
       subtitle={rows.length > 0 ? String(rows.length) : undefined}
     >
       {rows.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">No vehicle is costing more than usual right now.</p>
+        <p className="p-4 text-sm text-txt-2">{t('noAnomalies')}</p>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                  <th className="px-4 py-2 font-medium">Vehicle</th>
-                  <th className="px-4 py-2 font-medium">Type</th>
-                  <th className="px-4 py-2 text-right font-medium">Current cost</th>
-                  <th className="px-4 py-2 text-right font-medium">3-month average</th>
-                  <th className="px-4 py-2 text-right font-medium">Change</th>
-                  <th className="px-4 py-2 font-medium">Top category</th>
-                  <th className="px-4 py-2 font-medium">Verdict</th>
+                  <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                  <th className="px-4 py-2 font-medium">{t('tableType')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableCurrentCost')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableAvg3Month')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableChange')}</th>
+                  <th className="px-4 py-2 font-medium">{t('tableTopCategory')}</th>
+                  <th className="px-4 py-2 font-medium">{t('tableVerdict')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.motorcycleId} className="border-b border-line-soft last:border-0">
                     <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
-                    <td className="px-4 py-2 text-txt-2">{VEHICLE_TYPE_LABELS[r.vehicleType]}</td>
+                    <td className="px-4 py-2 text-txt-2">
+                      {t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}
+                    </td>
                     <td className="px-4 py-2 text-right text-txt-2">
                       {formatTZS(r.currentPeriodCost)}
                     </td>
@@ -346,7 +368,7 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
                     <td className="px-4 py-2 text-txt-2">{r.pattern}</td>
                     <td className="px-4 py-2">
                       <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
-                        Flagged
+                        {t('flagged')}
                       </span>
                     </td>
                   </tr>
@@ -363,10 +385,10 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-txt">
-                    {r.registrationNumber} · {VEHICLE_TYPE_LABELS[r.vehicleType]}
+                    {r.registrationNumber} · {t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}
                   </span>
                   <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
-                    Flagged
+                    {t('flagged')}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-txt-2">
@@ -384,6 +406,7 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
 }
 
 export function ExpensesPage() {
+  const { t } = useTranslation('expenses');
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
   const [summary, setSummary] = useState<ExpenseSummaryResponse | null>(null);
@@ -429,7 +452,7 @@ export function ExpensesPage() {
       setBreakdown(breakdownData);
       setCostPerVehicleType(costPerTypeData);
     } catch {
-      setError('Could not load expenses. Please try again.');
+      setError(t('loadError'));
     }
   }
 
@@ -488,12 +511,12 @@ export function ExpensesPage() {
     if (!deleting) return;
     try {
       await apiFetch(`/expenses/${deleting.id}`, { method: 'DELETE' });
-      setSuccessMessage('Expense deleted.');
+      setSuccessMessage(t('expenseDeleted'));
       setDeleting(null);
       void load();
       void loadFixedPeriodData();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete expense.');
+      setError(err instanceof ApiError ? err.message : t('deleteError'));
       setDeleting(null);
     }
   }
@@ -502,15 +525,15 @@ export function ExpensesPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!summary) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   return (
     <PageChassis
-      title="Expenses"
-      statusPill={{ mode: 'live', text: 'LIVE' }}
-      primaryAction={{ label: 'Record expense', onClick: () => setFormTarget('new') }}
-      kpis={kpisToTiles(summary)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: t('statusLive') }}
+      primaryAction={{ label: t('recordExpense'), onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(summary, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -519,7 +542,7 @@ export function ExpensesPage() {
 
       <ChassisGrid
         main={
-          <Card title="By category" subtitle={`${from} to ${to}`}>
+          <Card title={t('byCategoryTitle')} subtitle={t('periodRange', { from, to })}>
             <ExpenseBreakdown rows={breakdown} />
           </Card>
         }
@@ -532,10 +555,13 @@ export function ExpensesPage() {
         }
       />
 
-      <Card title="All expenses" subtitle={`${expenses?.length ?? 0} shown · ${formatTZS(total)}`}>
+      <Card
+        title={t('allExpensesTitle')}
+        subtitle={t('shownTotal', { count: expenses?.length ?? 0, total: formatTZS(total) })}
+      >
         <div className="flex flex-wrap items-end gap-3 border-b border-line-soft px-4 py-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">From</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterFrom')}</label>
             <input
               type="date"
               value={from}
@@ -545,7 +571,7 @@ export function ExpensesPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">To</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterTo')}</label>
             <input
               type="date"
               value={to}
@@ -555,7 +581,9 @@ export function ExpensesPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle type</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">
+              {t('filterVehicleType')}
+            </label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value as VehicleType | 'ALL')}
@@ -563,19 +591,21 @@ export function ExpensesPage() {
             >
               {CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
+                  {vehicleTypeFilterLabel(c, t)}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">
+              {t('filterVehicle')}
+            </label>
             <select
               value={motorcycleFilter}
               onChange={(e) => setMotorcycleFilter(e.target.value)}
               className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
             >
-              <option value="ALL">All</option>
+              <option value="ALL">{t('allVehicles')}</option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.registrationNumber}
@@ -589,25 +619,25 @@ export function ExpensesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Description</th>
-                <th className="px-4 py-2 text-right font-medium">Amount</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableCategory')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableDescription')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableAmount')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {expenses === null ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    Loading…
+                    {t('loading')}
                   </td>
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    No expenses in this period.
+                    {t('noExpensesInPeriod')}
                   </td>
                 </tr>
               ) : (
@@ -616,7 +646,7 @@ export function ExpensesPage() {
                     <td className="px-4 py-2 text-txt-2">{e.incurredAt.slice(0, 10)}</td>
                     <td className="px-4 py-2 font-medium text-txt">{e.category}</td>
                     <td className="px-4 py-2 text-txt-2">
-                      {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : 'Fleet-wide'}
+                      {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : t('fleetWide')}
                     </td>
                     <td className="px-4 py-2 text-txt-2">{e.description ?? '—'}</td>
                     <td className="px-4 py-2 text-right text-txt-2">{formatTZS(e.amount)}</td>
@@ -625,13 +655,13 @@ export function ExpensesPage() {
                         onClick={() => setFormTarget(e)}
                         className="mr-3 text-sm font-medium text-txt hover:underline"
                       >
-                        Edit
+                        {t('edit')}
                       </button>
                       <button
                         onClick={() => setDeleting(e)}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Delete
+                        {t('delete')}
                       </button>
                     </td>
                   </tr>
@@ -643,9 +673,9 @@ export function ExpensesPage() {
 
         <div className="md:hidden">
           {expenses === null ? (
-            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('loading')}</p>
           ) : expenses.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No expenses in this period.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noExpensesInPeriod')}</p>
           ) : (
             expenses.map((e) => (
               <div key={e.id} className="border-b border-line-soft px-4 py-3 last:border-0">
@@ -654,7 +684,7 @@ export function ExpensesPage() {
                   <span className="text-xs text-txt-2">{e.incurredAt.slice(0, 10)}</span>
                 </div>
                 <p className="mt-1 text-xs text-txt-2">
-                  {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : 'Fleet-wide'}
+                  {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : t('fleetWide')}
                   {e.description ? ` · ${e.description}` : ''}
                 </p>
                 <p className="mt-1 text-sm text-txt-2">{formatTZS(e.amount)}</p>
@@ -663,13 +693,13 @@ export function ExpensesPage() {
                     onClick={() => setFormTarget(e)}
                     className="text-sm font-medium text-txt hover:underline"
                   >
-                    Edit
+                    {t('edit')}
                   </button>
                   <button
                     onClick={() => setDeleting(e)}
                     className="text-sm font-medium text-crit hover:underline"
                   >
-                    Delete
+                    {t('delete')}
                   </button>
                 </div>
               </div>
@@ -681,7 +711,7 @@ export function ExpensesPage() {
       <ClosingRow
         left={<VehicleAnomaliesTable rows={anomalies} />}
         right={
-          <Card title="Fuel, the largest single line" subtitle={`${from} to ${to}`}>
+          <Card title={t('fuelLargestLineTitle')} subtitle={t('periodRange', { from, to })}>
             <ExpenseBreakdown rows={breakdown} highlightCategory="Fuel" />
           </Card>
         }
@@ -698,9 +728,12 @@ export function ExpensesPage() {
 
       {deleting && (
         <ConfirmDialog
-          title="Delete expense"
-          message={`Delete the ${deleting.category} expense of ${formatTZS(deleting.amount)}? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('deleteExpenseTitle')}
+          message={t('deleteExpenseMessage', {
+            category: deleting.category,
+            amount: formatTZS(deleting.amount),
+          })}
+          confirmLabel={t('delete')}
           danger
           onConfirm={() => void handleDelete()}
           onCancel={() => setDeleting(null)}
