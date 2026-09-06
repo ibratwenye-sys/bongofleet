@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -11,11 +13,11 @@ import { Modal } from './Modal';
 
 const SKIP = 'skip';
 
-function candidateLabel(c: TransportPaymentCandidate): string {
-  const reason = c.matchReason === 'reference' ? 'Reference match' : 'Amount match';
-  const ref = c.reference ?? 'no reference';
+function candidateLabel(c: TransportPaymentCandidate, t: TFunction<'transport'>): string {
+  const reason = c.matchReason === 'reference' ? t('referenceMatch') : t('amountMatch');
+  const ref = c.reference ?? t('noReference');
   const who = c.customerName ? ` · ${c.customerName}` : '';
-  return `${reason} — ${ref}${who} — owes ${formatTZS(c.remainingBalance)}`;
+  return t('candidateLabelTemplate', { reason, ref, who, amount: formatTZS(c.remainingBalance) });
 }
 
 /**
@@ -31,6 +33,8 @@ export function TransportReconciliationModal({
   onClose: () => void;
   onCommitted: (message: string) => void;
 }) {
+  const { t } = useTranslation('transport');
+  const { t: tCommon } = useTranslation('common');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<TransportReconciliationPreview | null>(null);
@@ -76,7 +80,7 @@ export function TransportReconciliationModal({
       }
       setChoices(initial);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not read this statement.');
+      setError(err instanceof ApiError ? err.message : t('statementReadError'));
       setPreview(null);
     } finally {
       setPreviewLoading(false);
@@ -90,7 +94,7 @@ export function TransportReconciliationModal({
       .map((row) => ({ rowIndex: row.rowIndex, transportJobId: choices.get(row.rowIndex) ?? SKIP }))
       .filter((s) => s.transportJobId !== SKIP);
     if (selections.length === 0) {
-      setError('Pick at least one row to record before confirming.');
+      setError(t('pickAtLeastOneRow'));
       return;
     }
     setCommitting(true);
@@ -105,9 +109,9 @@ export function TransportReconciliationModal({
       );
       setCommitResult(result);
       const committedCount = result.results.filter((r) => r.status === 'committed').length;
-      onCommitted(`Recorded ${committedCount} payment${committedCount === 1 ? '' : 's'}.`);
+      onCommitted(t('recordedPayments', { count: committedCount }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not record these payments.');
+      setError(err instanceof ApiError ? err.message : t('recordPaymentsError'));
     } finally {
       setCommitting(false);
     }
@@ -116,13 +120,9 @@ export function TransportReconciliationModal({
   const rowResultByIndex = new Map((commitResult?.results ?? []).map((r) => [r.rowIndex, r]));
 
   return (
-    <Modal title="Reconcile payments" onClose={onClose} maxWidth="max-w-4xl">
+    <Modal title={t('reconcilePayments')} onClose={onClose} maxWidth="max-w-4xl">
       <div className="space-y-4">
-        <p className="text-sm text-txt-2">
-          Upload a bank or mobile-money statement export (.xlsx or .csv). We'll match its rows
-          against transport jobs that still have a balance owed - review the suggestions below
-          before confirming.
-        </p>
+        <p className="text-sm text-txt-2">{t('reconciliationIntro')}</p>
 
         <div className="flex flex-wrap items-center gap-3">
           <input
@@ -137,7 +137,7 @@ export function TransportReconciliationModal({
             disabled={!file || previewLoading}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
-            {previewLoading ? 'Reading…' : 'Preview'}
+            {previewLoading ? t('reading') : t('preview')}
           </button>
         </div>
 
@@ -148,11 +148,11 @@ export function TransportReconciliationModal({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line-soft bg-panel-2 text-left text-xs text-txt-3">
-                  <th className="px-3 py-2 font-medium">Date</th>
-                  <th className="px-3 py-2 text-right font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Narrative</th>
-                  <th className="px-3 py-2 font-medium">Match</th>
-                  <th className="px-3 py-2 font-medium">Result</th>
+                  <th className="px-3 py-2 font-medium">{t('tableDate')}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t('tableAmount')}</th>
+                  <th className="px-3 py-2 font-medium">{t('tableNarrative')}</th>
+                  <th className="px-3 py-2 font-medium">{t('tableMatch')}</th>
+                  <th className="px-3 py-2 font-medium">{t('tableResult')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +171,7 @@ export function TransportReconciliationModal({
                         {row.error ? (
                           <span className="text-xs text-crit">{row.error}</span>
                         ) : row.candidates.length === 0 ? (
-                          <span className="text-xs text-txt-3">No match found</span>
+                          <span className="text-xs text-txt-3">{t('noMatchFound')}</span>
                         ) : (
                           <select
                             value={choices.get(row.rowIndex) ?? SKIP}
@@ -184,10 +184,10 @@ export function TransportReconciliationModal({
                             }}
                             className="w-full rounded border border-line bg-panel px-2 py-1 text-xs text-txt"
                           >
-                            <option value={SKIP}>Skip this row</option>
+                            <option value={SKIP}>{t('skipThisRow')}</option>
                             {row.candidates.map((c) => (
                               <option key={c.jobId} value={c.jobId}>
-                                {candidateLabel(c)}
+                                {candidateLabel(c, t)}
                               </option>
                             ))}
                           </select>
@@ -197,8 +197,8 @@ export function TransportReconciliationModal({
                         {result ? (
                           result.status === 'committed' ? (
                             <span className="text-good">
-                              Recorded
-                              {result.overpaidWarning ? ' (overpaid - already fully paid)' : ''}
+                              {t('recorded')}
+                              {result.overpaidWarning ? t('overpaidWarning') : ''}
                             </span>
                           ) : (
                             <span className="text-crit">{result.message ?? result.status}</span>
@@ -221,7 +221,7 @@ export function TransportReconciliationModal({
             onClick={onClose}
             className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2"
           >
-            {commitResult ? 'Close' : 'Cancel'}
+            {commitResult ? t('close') : tCommon('cancel')}
           </button>
           {!commitResult && (
             <button
@@ -229,7 +229,7 @@ export function TransportReconciliationModal({
               disabled={!preview || committing}
               className="rounded bg-green-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
             >
-              {committing ? 'Recording…' : 'Confirm and record'}
+              {committing ? t('recording') : t('confirmAndRecord')}
             </button>
           )}
         </div>

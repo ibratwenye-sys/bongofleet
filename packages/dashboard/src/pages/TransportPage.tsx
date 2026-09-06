@@ -12,6 +12,7 @@ import type {
   TransportJobStatus,
   TransportOperationsResponse,
   UpdateTransportJobPayload,
+  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -214,6 +215,21 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
   };
 }
 
+// Stage L6 - deliberate near-duplicate of ExpensesPage.tsx's own
+// VEHICLE_TYPE_LABEL_KEY (L4, `expenses` namespace) for the same VehicleType
+// enum. Not centralized into common.json here: this batch's job is closing
+// out Transport specifically, and reaching into an already-shipped,
+// already-verified page to extract a shared map is a separate refactor.
+// Same "duplicate now, centralize once a third page needs it" precedent
+// DriverPicker's placement set in L3 - move both into common.json next time
+// either page's vehicle-type labels need touching again.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
+};
+
 function JobFormModal({
   job,
   vehicles,
@@ -227,6 +243,8 @@ function JobFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('transport');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = job != null;
   const [form, setForm] = useState<JobFormState>(() => toJobForm(job, vehicles));
   const [error, setError] = useState<string | null>(null);
@@ -235,22 +253,22 @@ function JobFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.motorcycleId) return setError('Pick a vehicle.');
+    if (!form.motorcycleId) return setError(t('errorPickVehicle'));
     if (!form.origin.trim() || !form.destination.trim())
-      return setError('Origin and destination are required.');
+      return setError(t('errorOriginDestinationRequired'));
     const revenue = Number(form.revenue);
     if (!form.revenue || Number.isNaN(revenue) || revenue <= 0)
-      return setError('Enter a positive revenue.');
+      return setError(t('errorPositiveRevenue'));
     const driverFee = form.driverFee ? Number(form.driverFee) : undefined;
     if (form.driverFee && (Number.isNaN(driverFee) || (driverFee ?? 0) <= 0)) {
-      return setError('Driver fee must be a positive number.');
+      return setError(t('errorDriverFeePositive'));
     }
     const expectedDistanceKm = form.expectedDistanceKm ? Number(form.expectedDistanceKm) : null;
     if (
       form.expectedDistanceKm &&
       (Number.isNaN(expectedDistanceKm) || (expectedDistanceKm ?? 0) <= 0)
     ) {
-      return setError('Expected distance must be a positive number of km.');
+      return setError(t('errorExpectedDistancePositive'));
     }
 
     setSubmitting(true);
@@ -273,7 +291,7 @@ function JobFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Transport job updated.');
+        onSaved(t('jobUpdated'));
       } else {
         const payload: CreateTransportJobPayload = {
           motorcycleId: form.motorcycleId,
@@ -290,30 +308,30 @@ function JobFormModal({
           expectedDistanceKm,
         };
         await apiFetch('/transport-jobs', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Transport job created.');
+        onSaved(t('jobCreated'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit transport job' : 'New transport job'} onClose={onClose}>
+    <Modal title={isEdit ? t('editJobTitle') : t('newJobTitle')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Vehicle</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('tableVehicle')}</label>
             <select
               value={form.motorcycleId}
               onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
               className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             >
-              <option value="">Select a vehicle…</option>
+              <option value="">{t('selectVehiclePlaceholder')}</option>
               {vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.registrationNumber} ({v.vehicleType.toLowerCase()})
+                  {v.registrationNumber} ({t(VEHICLE_TYPE_LABEL_KEY[v.vehicleType])})
                 </option>
               ))}
             </select>
@@ -321,7 +339,7 @@ function JobFormModal({
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Origin</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldOrigin')}</label>
             <input
               value={form.origin}
               onChange={(e) => setForm({ ...form, origin: e.target.value })}
@@ -329,7 +347,9 @@ function JobFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Destination</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldDestination')}
+            </label>
             <input
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value })}
@@ -338,18 +358,18 @@ function JobFormModal({
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Cargo / description</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldCargo')}</label>
           <input
             value={form.cargo}
             onChange={(e) => setForm({ ...form, cargo: e.target.value })}
-            placeholder="e.g. 20 bags of cement, or a Toyota Vitz"
+            placeholder={t('cargoPlaceholder')}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-txt">
-              Customer name <span className="text-txt-2">(optional)</span>
+              {t('fieldCustomerName')} <span className="text-txt-2">{t('optional')}</span>
             </label>
             <input
               value={form.customerName}
@@ -359,7 +379,7 @@ function JobFormModal({
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-txt">
-              Customer phone <span className="text-txt-2">(optional)</span>
+              {t('fieldCustomerPhone')} <span className="text-txt-2">{t('optional')}</span>
             </label>
             <input
               value={form.customerContactPhone}
@@ -370,7 +390,7 @@ function JobFormModal({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Revenue (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldRevenue')}</label>
             <input
               type="number"
               value={form.revenue}
@@ -379,7 +399,9 @@ function JobFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Scheduled date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldScheduledDate')}
+            </label>
             <input
               type="date"
               value={form.scheduledDate}
@@ -390,7 +412,7 @@ function JobFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Driver fee (TZS) <span className="text-txt-2">(optional)</span>
+            {t('fieldDriverFee')} <span className="text-txt-2">{t('optional')}</span>
           </label>
           <input
             type="number"
@@ -401,7 +423,7 @@ function JobFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Expected distance (km) <span className="text-txt-2">(optional)</span>
+            {t('fieldExpectedDistance')} <span className="text-txt-2">{t('optional')}</span>
           </label>
           <input
             type="number"
@@ -411,10 +433,7 @@ function JobFormModal({
             onChange={(e) => setForm({ ...form, expectedDistanceKm: e.target.value })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
-          <p className="mt-1 text-xs text-gray-500">
-            Set this to show real progress while the job is in transit. Leave it blank and the map
-            card will show elapsed time and last position only - never a guessed ETA.
-          </p>
+          <p className="mt-1 text-xs text-gray-500">{t('expectedDistanceHelp')}</p>
         </div>
         <div>
           <label className="mb-1 flex items-center gap-2 text-sm font-medium text-txt">
@@ -423,7 +442,7 @@ function JobFormModal({
               checked={form.ownerDriven}
               onChange={(e) => setForm({ ...form, ownerDriven: e.target.checked })}
             />
-            Owner-driven (no assigned driver)
+            {t('ownerDrivenCheckbox')}
           </label>
           {!form.ownerDriven && (
             <select
@@ -431,7 +450,7 @@ function JobFormModal({
               onChange={(e) => setForm({ ...form, driverId: e.target.value })}
               className="mt-1 w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             >
-              <option value="">Driver (optional)…</option>
+              <option value="">{t('driverOptionalPlaceholder')}</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.user.firstName} {d.user.lastName}
@@ -449,14 +468,14 @@ function JobFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -473,6 +492,11 @@ function LogExpenseModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('transport');
+  const { t: tCommon } = useTranslation('common');
+  // Stage L4-style boundary - this initial value is real free-text data
+  // pre-filling the field (matching ExpensesPage's own CATEGORY_SUGGESTIONS
+  // reasoning), not UI chrome, so it stays a literal.
   const [category, setCategory] = useState('Fuel');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10));
@@ -484,7 +508,7 @@ function LogExpenseModal({
     e.preventDefault();
     setError(null);
     const value = Number(amount);
-    if (!amount || Number.isNaN(value) || value <= 0) return setError('Enter a positive amount.');
+    if (!amount || Number.isNaN(value) || value <= 0) return setError(t('errorPositiveAmount'));
     setSubmitting(true);
     try {
       await apiFetch('/expenses', {
@@ -497,29 +521,32 @@ function LogExpenseModal({
           description: description.trim() || undefined,
         }),
       });
-      onSaved('Expense logged against the job.');
+      onSaved(t('expenseLogged'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not log the expense.');
+      setError(err instanceof ApiError ? err.message : t('logExpenseError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={`Log expense — ${job.origin} → ${job.destination}`} onClose={onClose}>
+    <Modal
+      title={t('logExpenseTitle', { origin: job.origin, destination: job.destination })}
+      onClose={onClose}
+    >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Category</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldCategory')}</label>
             <input
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="Fuel, Driver, Repairs…"
+              placeholder={t('categoryPlaceholder')}
               className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Amount (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldAmount')}</label>
             <input
               type="number"
               value={amount}
@@ -529,7 +556,7 @@ function LogExpenseModal({
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Date</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldDate')}</label>
           <input
             type="date"
             value={incurredAt}
@@ -538,7 +565,9 @@ function LogExpenseModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Description (optional)</label>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            {t('fieldDescriptionOptional')}
+          </label>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -552,14 +581,14 @@ function LogExpenseModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Log expense'}
+            {submitting ? tCommon('saving') : t('logExpenseButton')}
           </button>
         </div>
       </form>
