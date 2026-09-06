@@ -13,5 +13,7 @@
   "vehicleTypeMotorbike": "Pikipiki",
   "vehicleTypeBajaji": "Bajaji",
   "vehicleTypeCar": "Gari",
-  "vehicleTypeTruck": "Lori"
+  "vehicleTypeTruck": "Lori",
+  "edit": "Hariri",
+  "delete": "Futa"
 }

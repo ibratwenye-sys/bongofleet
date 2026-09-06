@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS, startOfThisMonth, today } from '../lib/format';
 import type {
@@ -7,6 +9,7 @@ import type {
   MaintenanceSummaryResponse,
   Motorcycle,
   UpdateMaintenancePayload,
+  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -15,34 +18,69 @@ import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
-function kpisToTiles(data: MaintenanceSummaryResponse): KpiTile[] {
+// Stage L8 - deliberate near-duplicate of FleetPage.tsx's own
+// VEHICLE_TYPE_LABEL_KEY/vehicleTypeLabel (L7), which are private to that
+// file (not exported). Both now point at the same centralized common.json
+// keys, so there is exactly one English/Swahili string per vehicle type -
+// only the small Record + helper wrapper is duplicated, not a whole
+// namespace. Worth exporting from a shared module next time a third page
+// needs this exact wrapper.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
+};
+
+function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
+  return vehicleType in VEHICLE_TYPE_LABEL_KEY
+    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
+    : vehicleType;
+}
+
+// Stage L8 - bug fix: pipelineLabels used to hardcode the same four
+// strings as the KPI tiles below as a second literal map. Now points at
+// the identical KPI translation keys, so there's one English string and
+// one Swahili string per concept, not two that could drift apart.
+const PIPELINE_LABEL_KEY: Record<string, string> = {
+  OVERDUE: 'kpiOverdue',
+  DUE_7: 'kpiDueWithin7Days',
+  DUE_30: 'kpiDueWithin30Days',
+  NOTHING_DUE: 'kpiNothingDue',
+};
+
+function kpisToTiles(data: MaintenanceSummaryResponse, t: TFunction<'maintenance'>): KpiTile[] {
   const k = data.kpis;
   return [
     {
-      label: 'Overdue',
+      label: t('kpiOverdue'),
       value: String(k.overdue.count),
       accentColor: k.overdue.count > 0 ? 'crit' : 'good',
     },
     {
-      label: 'Due within 7 days',
+      label: t('kpiDueWithin7Days'),
       value: String(k.dueWithin7Days.count),
       accentColor: k.dueWithin7Days.count > 0 ? 'warn' : 'good',
     },
-    { label: 'Due within 30 days', value: String(k.dueWithin30Days.count), accentColor: 'c1' },
     {
-      label: 'Nothing due',
+      label: t('kpiDueWithin30Days'),
+      value: String(k.dueWithin30Days.count),
+      accentColor: 'c1',
+    },
+    {
+      label: t('kpiNothingDue'),
       value: String(k.nothingDue.count),
-      delta: `${k.nothingDue.percentOfFleet}% of the fleet`,
+      delta: t('kpiNothingDueDelta', { percent: k.nothingDue.percentOfFleet }),
       accentColor: 'good',
     },
     {
-      label: 'Completed, this month',
+      label: t('kpiCompletedThisMonth'),
       value: String(k.completedThisMonth.count),
       delta: formatTZS(k.completedThisMonth.cost),
       accentColor: 'violet',
     },
     {
-      label: 'Repeat visits',
+      label: t('kpiRepeatVisits'),
       value: String(k.repeatVisits.count),
       accentColor: k.repeatVisits.count > 0 ? 'crit' : 'good',
     },
@@ -50,8 +88,9 @@ function kpisToTiles(data: MaintenanceSummaryResponse): KpiTile[] {
 }
 
 function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBooking'] }) {
+  const { t } = useTranslation('maintenance');
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-txt-2">Nothing needs booking right now.</p>;
+    return <p className="p-4 text-sm text-txt-2">{t('needsBookingEmpty')}</p>;
   }
   return (
     <>
@@ -59,11 +98,11 @@ function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBo
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-              <th className="px-4 py-2 font-medium">Vehicle</th>
-              <th className="px-4 py-2 font-medium">Driver</th>
-              <th className="px-4 py-2 font-medium">Why</th>
-              <th className="px-4 py-2 text-right font-medium">Odometer</th>
-              <th className="px-4 py-2 font-medium">Status</th>
+              <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+              <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+              <th className="px-4 py-2 font-medium">{t('tableWhy')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableOdometer')}</th>
+              <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
             </tr>
           </thead>
           <tbody>
@@ -82,7 +121,7 @@ function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBo
                   <span
                     className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
                   >
-                    {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
+                    {r.status === 'OVERDUE' ? t('kpiOverdue') : t('statusDueSoon')}
                   </span>
                 </td>
               </tr>
@@ -104,7 +143,7 @@ function NeedsBookingTable({ rows }: { rows: MaintenanceSummaryResponse['needsBo
               <span
                 className={`rounded px-2 py-0.5 text-xs font-medium ${r.status === 'OVERDUE' ? 'bg-crit-d text-crit-x' : 'bg-warn-d text-warn-x'}`}
               >
-                {r.status === 'OVERDUE' ? 'Overdue' : 'Due soon'}
+                {r.status === 'OVERDUE' ? t('kpiOverdue') : t('statusDueSoon')}
               </span>
             </div>
             <p className="mt-1 text-xs text-txt-2">
@@ -155,6 +194,8 @@ function MaintenanceFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('maintenance');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = log != null;
   const [form, setForm] = useState<FormState>(() => toFormState(log, defaultMotorcycleId));
   const [error, setError] = useState<string | null>(null);
@@ -165,20 +206,20 @@ function MaintenanceFormModal({
     setError(null);
 
     if (!isEdit && !form.motorcycleId) {
-      setError('Please choose a vehicle.');
+      setError(t('errorChooseVehicle'));
       return;
     }
     if (!form.description.trim()) {
-      setError('Description is required.');
+      setError(t('errorDescriptionRequired'));
       return;
     }
     const cost = Number(form.cost);
     if (!form.cost || Number.isNaN(cost) || cost <= 0) {
-      setError('Cost must be a positive number.');
+      setError(t('errorCostPositive'));
       return;
     }
     if (!form.performedAt) {
-      setError('Service date is required.');
+      setError(t('errorServiceDateRequired'));
       return;
     }
 
@@ -202,7 +243,7 @@ function MaintenanceFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Service updated.');
+        onSaved(t('serviceUpdated'));
       } else {
         const payload: CreateMaintenancePayload = {
           motorcycleId: form.motorcycleId,
@@ -214,47 +255,48 @@ function MaintenanceFormModal({
           nextServiceMileage: optionalNumbers.nextServiceMileage,
         };
         await apiFetch('/maintenance', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Service logged.');
+        onSaved(t('serviceLogged'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit service' : 'Log service'} onClose={onClose}>
+    <Modal title={isEdit ? t('editServiceTitle') : t('logService')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Vehicle</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('tableVehicle')}</label>
             <select
               value={form.motorcycleId}
               onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
               className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             >
-              <option value="">Choose a vehicle…</option>
+              <option value="">{t('chooseVehiclePlaceholder')}</option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.registrationNumber} (current {m.currentMileage.toLocaleString()} km)
+                  {m.registrationNumber}{' '}
+                  {t('vehicleMileageSuffix', { mileage: m.currentMileage.toLocaleString() })}
                 </option>
               ))}
             </select>
           </div>
         )}
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Description</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldDescription')}</label>
           <input
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
-            placeholder="e.g. Oil change, brake pads"
+            placeholder={t('descriptionPlaceholder')}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Cost (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldCost')}</label>
             <input
               type="number"
               min="0"
@@ -265,7 +307,9 @@ function MaintenanceFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Service date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldServiceDate')}
+            </label>
             <input
               type="date"
               value={form.performedAt}
@@ -276,7 +320,7 @@ function MaintenanceFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Odometer at service (km) <span className="text-txt-2">(optional)</span>
+            {t('fieldOdometerAtService')} <span className="text-txt-2">{t('optional')}</span>
           </label>
           <input
             type="number"
@@ -284,16 +328,16 @@ function MaintenanceFormModal({
             value={form.mileageAtService}
             onChange={(e) => setForm({ ...form, mileageAtService: e.target.value })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
-            placeholder="Updates the vehicle's current mileage"
+            placeholder={t('odometerPlaceholder')}
           />
         </div>
         <div className="rounded border border-line bg-panel-2 p-3">
-          <p className="mb-2 text-xs font-medium text-txt-2">
-            Next service reminder (optional) — you'll be emailed when either is near.
-          </p>
+          <p className="mb-2 text-xs font-medium text-txt-2">{t('nextServiceReminderNote')}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-txt">Next due date</label>
+              <label className="mb-1 block text-sm font-medium text-txt">
+                {t('fieldNextDueDate')}
+              </label>
               <input
                 type="date"
                 value={form.nextServiceDate}
@@ -303,7 +347,7 @@ function MaintenanceFormModal({
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-txt">
-                Next due mileage (km)
+                {t('fieldNextDueMileage')}
               </label>
               <input
                 type="number"
@@ -324,14 +368,14 @@ function MaintenanceFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -340,6 +384,8 @@ function MaintenanceFormModal({
 }
 
 export function MaintenancePage() {
+  const { t } = useTranslation('maintenance');
+  const { t: tCommon } = useTranslation('common');
   const [data, setData] = useState<MaintenanceSummaryResponse | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -364,7 +410,7 @@ export function MaintenancePage() {
       setMotorcycles(motorcycleList);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load the maintenance summary.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
     }
   }
 
@@ -409,12 +455,12 @@ export function MaintenancePage() {
     if (!deleting) return;
     try {
       await apiFetch(`/maintenance/${deleting.id}`, { method: 'DELETE' });
-      setSuccessMessage('Service deleted.');
+      setSuccessMessage(t('serviceDeleted'));
       setDeleting(null);
       void load();
       void loadManageLogs();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete service.');
+      setError(err instanceof ApiError ? err.message : t('deleteError'));
       setDeleting(null);
     }
   }
@@ -423,7 +469,7 @@ export function MaintenancePage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   const somethingDueCount =
@@ -434,19 +480,13 @@ export function MaintenancePage() {
     DUE_30: 'var(--c1)',
     NOTHING_DUE: 'var(--good)',
   };
-  const pipelineLabels: Record<string, string> = {
-    OVERDUE: 'Overdue',
-    DUE_7: 'Due within 7 days',
-    DUE_30: 'Due within 30 days',
-    NOTHING_DUE: 'Nothing due',
-  };
 
   return (
     <PageChassis
-      title="Maintenance"
-      statusPill={{ mode: 'reporting', text: `${somethingDueCount} vehicles have something due` }}
-      primaryAction={{ label: 'Log service', onClick: () => setFormTarget('new') }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{ mode: 'reporting', text: t('statusPill', { count: somethingDueCount }) }}
+      primaryAction={{ label: t('logService'), onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -457,12 +497,12 @@ export function MaintenancePage() {
         main={
           <>
             <Card
-              title="Needs booking"
-              subtitle={`${data.needsBooking.length} vehicles · overdue and at risk`}
+              title={t('needsBookingTitle')}
+              subtitle={t('needsBookingSubtitle', { count: data.needsBooking.length })}
             >
               <NeedsBookingTable rows={data.needsBooking} />
             </Card>
-            <Card title="Service pipeline" subtitle="all vehicles">
+            <Card title={t('servicePipelineTitle')} subtitle={t('servicePipelineSubtitle')}>
               <div className="px-4 pb-4">
                 <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-panel-2">
                   {data.servicePipeline.map((b) => (
@@ -480,7 +520,7 @@ export function MaintenancePage() {
                           className="inline-block h-2.5 w-2.5 rounded-full"
                           style={{ backgroundColor: pipelineColors[b.bucket] }}
                         />
-                        {pipelineLabels[b.bucket]}
+                        {t(PIPELINE_LABEL_KEY[b.bucket])}
                       </span>
                       <span className="text-txt">
                         {b.count} <span className="text-txt-3">{b.share}%</span>
@@ -495,11 +535,11 @@ export function MaintenancePage() {
         rail={
           <>
             <Card
-              title="AI Insights"
+              title={t('aiInsightsTitle')}
               subtitle={data.insights.length > 0 ? String(data.insights.length) : undefined}
             >
               {data.insights.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('nothingToFlag')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.insights.map((ins, i) => (
@@ -511,9 +551,12 @@ export function MaintenancePage() {
                 </div>
               )}
             </Card>
-            <Card title="At risk" subtitle={`${data.atRisk.length} · nothing booked`}>
+            <Card
+              title={t('atRiskTitle')}
+              subtitle={t('atRiskSubtitle', { count: data.atRisk.length })}
+            >
               {data.atRisk.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing at risk right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('atRiskEmpty')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.atRisk.slice(0, 6).map((r) => (
@@ -533,26 +576,29 @@ export function MaintenancePage() {
       />
 
       <Card
-        title="Completed this month"
-        subtitle={`${data.completedThisMonth.length} services · ${formatTZS(data.kpis.completedThisMonth.cost)}`}
+        title={t('completedTitle')}
+        subtitle={t('completedSubtitle', {
+          count: data.completedThisMonth.length,
+          cost: formatTZS(data.kpis.completedThisMonth.cost),
+        })}
       >
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Work</th>
-                <th className="px-4 py-2 text-right font-medium">Odometer</th>
-                <th className="px-4 py-2 text-right font-medium">Cost</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableWork')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableOdometer')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableCost')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {data.completedThisMonth.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    No services completed yet this month.
+                    {t('noServicesCompleted')}
                   </td>
                 </tr>
               ) : (
@@ -585,13 +631,13 @@ export function MaintenancePage() {
                         }
                         className="mr-3 text-sm font-medium text-c1 hover:underline"
                       >
-                        Edit
+                        {tCommon('edit')}
                       </button>
                       <button
                         onClick={() => setDeleting({ id: c.id, description: c.description })}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Delete
+                        {tCommon('delete')}
                       </button>
                     </td>
                   </tr>
@@ -603,9 +649,7 @@ export function MaintenancePage() {
 
         <div className="md:hidden">
           {data.completedThisMonth.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">
-              No services completed yet this month.
-            </p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noServicesCompleted')}</p>
           ) : (
             data.completedThisMonth.map((c) => (
               <div key={c.id} className="border-b border-line-soft px-4 py-3 last:border-0">
@@ -638,13 +682,13 @@ export function MaintenancePage() {
                     }
                     className="text-sm font-medium text-c1 hover:underline"
                   >
-                    Edit
+                    {tCommon('edit')}
                   </button>
                   <button
                     onClick={() => setDeleting({ id: c.id, description: c.description })}
                     className="text-sm font-medium text-crit hover:underline"
                   >
-                    Delete
+                    {tCommon('delete')}
                   </button>
                 </div>
               </div>
@@ -655,9 +699,9 @@ export function MaintenancePage() {
 
       <ClosingRow
         left={
-          <Card title="Maintenance spend by vehicle type" subtitle="this month">
+          <Card title={t('spendTitle')} subtitle={t('spendSubtitle')}>
             {data.spendByVehicleType.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">No spend recorded this month.</p>
+              <p className="p-4 text-sm text-txt-2">{t('noSpendRecorded')}</p>
             ) : (
               <div className="divide-y divide-line-soft px-4">
                 {data.spendByVehicleType.map((row) => (
@@ -665,7 +709,7 @@ export function MaintenancePage() {
                     key={row.vehicleType}
                     className="flex items-center justify-between py-2.5 text-sm"
                   >
-                    <span className="text-txt">{row.vehicleType.toLowerCase()}</span>
+                    <span className="text-txt">{vehicleTypeLabel(row.vehicleType, tCommon)}</span>
                     <span className="font-medium text-txt">{formatTZS(row.amount)}</span>
                   </div>
                 ))}
@@ -675,13 +719,11 @@ export function MaintenancePage() {
         }
         right={
           <Card
-            title="Repeat-visit vehicles"
-            subtitle={`${data.repeatVisitVehicles.length} · rolling 45 days`}
+            title={t('repeatVisitTitle')}
+            subtitle={t('repeatVisitSubtitle', { count: data.repeatVisitVehicles.length })}
           >
             {data.repeatVisitVehicles.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">
-                No vehicle has needed more than one visit recently.
-              </p>
+              <p className="p-4 text-sm text-txt-2">{t('noRepeatVisits')}</p>
             ) : (
               <div className="divide-y divide-line-soft px-4">
                 {data.repeatVisitVehicles.map((v) => (
@@ -690,7 +732,7 @@ export function MaintenancePage() {
                     className="flex items-center justify-between py-2.5 text-sm"
                   >
                     <span className="text-txt">
-                      {v.registrationNumber} · {v.visitCount} visits
+                      {v.registrationNumber} · {t('visitCount', { count: v.visitCount })}
                     </span>
                     <span className="font-medium text-crit">{formatTZS(v.totalSpend)}</span>
                   </div>
@@ -701,10 +743,10 @@ export function MaintenancePage() {
         }
       />
 
-      <Card title="Manage older records" subtitle="edit or delete a service from any date range">
+      <Card title={t('manageTitle')} subtitle={t('manageSubtitle')}>
         <div className="flex flex-wrap items-end gap-3 border-b border-line-soft px-4 py-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">From</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterFrom')}</label>
             <input
               type="date"
               value={manageFrom}
@@ -714,7 +756,7 @@ export function MaintenancePage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">To</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterTo')}</label>
             <input
               type="date"
               value={manageTo}
@@ -724,13 +766,15 @@ export function MaintenancePage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle</label>
+            <label className="mb-1 block text-xs font-medium text-txt-3">
+              {t('filterVehicle')}
+            </label>
             <select
               value={manageVehicle}
               onChange={(e) => setManageVehicle(e.target.value)}
               className="rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt"
             >
-              <option value="ALL">All</option>
+              <option value="ALL">{t('allVehicles')}</option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.registrationNumber}
@@ -743,24 +787,24 @@ export function MaintenancePage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Description</th>
-                <th className="px-4 py-2 text-right font-medium">Cost</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableDescription')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableCost')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {manageLogs === null ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
-                    Loading…
+                    {t('loading')}
                   </td>
                 </tr>
               ) : manageLogs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
-                    No maintenance in this period.
+                    {t('noMaintenanceInPeriod')}
                   </td>
                 </tr>
               ) : (
@@ -777,13 +821,13 @@ export function MaintenancePage() {
                         onClick={() => setFormTarget(m)}
                         className="mr-3 text-sm font-medium text-c1 hover:underline"
                       >
-                        Edit
+                        {tCommon('edit')}
                       </button>
                       <button
                         onClick={() => setDeleting({ id: m.id, description: m.description })}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Delete
+                        {tCommon('delete')}
                       </button>
                     </td>
                   </tr>
@@ -795,9 +839,9 @@ export function MaintenancePage() {
 
         <div className="md:hidden">
           {manageLogs === null ? (
-            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('loading')}</p>
           ) : manageLogs.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No maintenance in this period.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noMaintenanceInPeriod')}</p>
           ) : (
             manageLogs.map((m) => (
               <div key={m.id} className="border-b border-line-soft px-4 py-3 last:border-0">
@@ -812,13 +856,13 @@ export function MaintenancePage() {
                     onClick={() => setFormTarget(m)}
                     className="text-sm font-medium text-c1 hover:underline"
                   >
-                    Edit
+                    {tCommon('edit')}
                   </button>
                   <button
                     onClick={() => setDeleting({ id: m.id, description: m.description })}
                     className="text-sm font-medium text-crit hover:underline"
                   >
-                    Delete
+                    {tCommon('delete')}
                   </button>
                 </div>
               </div>
@@ -839,9 +883,9 @@ export function MaintenancePage() {
 
       {deleting && (
         <ConfirmDialog
-          title="Delete service"
-          message={`Delete the "${deleting.description}" service record? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('deleteServiceTitle')}
+          message={t('deleteServiceMessage', { description: deleting.description })}
+          confirmLabel={tCommon('delete')}
           danger
           onConfirm={() => void handleDelete()}
           onCancel={() => setDeleting(null)}

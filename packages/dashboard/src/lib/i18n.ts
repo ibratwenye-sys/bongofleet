@@ -12,6 +12,8 @@ import enTransport from '../locales/en/transport.json';
 import swTransport from '../locales/sw/transport.json';
 import enFleet from '../locales/en/fleet.json';
 import swFleet from '../locales/sw/fleet.json';
+import enMaintenance from '../locales/en/maintenance.json';
+import swMaintenance from '../locales/sw/maintenance.json';
 import type { Language } from './types';
 
 /**
@@ -22,10 +24,10 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L7 translate them (operationsCenter, payments,
- * expenses, transport, then fleet - see DESIGN_SWAHILI_UI.md's per-page
- * rollout plan). Not built ahead of need: a page gets its own namespace
- * only once it's actually translated.
+ * batch as Stage L2-L8 translate them (operationsCenter, payments,
+ * expenses, transport, fleet, then maintenance - see
+ * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of need:
+ * a page gets its own namespace only once it's actually translated.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -36,6 +38,7 @@ void i18n.use(initReactI18next).init({
       expenses: enExpenses,
       transport: enTransport,
       fleet: enFleet,
+      maintenance: enMaintenance,
     },
     sw: {
       common: sw,
@@ -44,6 +47,7 @@ void i18n.use(initReactI18next).init({
       expenses: swExpenses,
       transport: swTransport,
       fleet: swFleet,
+      maintenance: swMaintenance,
     },
   },
   lng: 'en',
