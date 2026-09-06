@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { transportPaymentStatus, type TransportPaymentStatus } from '@bongofleet/shared-lib';
 import { apiFetch, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
@@ -21,11 +23,14 @@ import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
 const STATUS_OPTIONS: TransportJobStatus[] = ['SCHEDULED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
-const STATUS_LABELS: Record<TransportJobStatus, string> = {
-  SCHEDULED: 'Scheduled',
-  IN_TRANSIT: 'In transit',
-  DELIVERED: 'Delivered',
-  CANCELLED: 'Cancelled',
+
+// Stage L5 - the only label mapping for this enum anywhere in the app,
+// same pattern as L3/L4's PAYMENT_STATUS_LABEL_KEY/VEHICLE_TYPE_LABEL_KEY.
+const STATUS_LABEL_KEY: Record<TransportJobStatus, string> = {
+  SCHEDULED: 'transportJobStatusScheduled',
+  IN_TRANSIT: 'transportJobStatusInTransit',
+  DELIVERED: 'transportJobStatusDelivered',
+  CANCELLED: 'transportJobStatusCancelled',
 };
 
 interface DriverOption {
@@ -33,69 +38,70 @@ interface DriverOption {
   user: { firstName: string; lastName: string };
 }
 
-function kpisToTiles(data: TransportOperationsResponse): KpiTile[] {
+function kpisToTiles(data: TransportOperationsResponse, t: TFunction<'transport'>): KpiTile[] {
   const k = data.kpis;
   const net = parseFloat(k.netThisMonth.amount);
   return [
     {
-      label: 'Trucks and cars',
+      label: t('kpiTrucksAndCars'),
       value: String(k.fleetCount.count),
-      delta: `${k.fleetCount.trucks} trucks · ${k.fleetCount.cars} cars`,
+      delta: t('kpiTrucksAndCarsDelta', { trucks: k.fleetCount.trucks, cars: k.fleetCount.cars }),
       accentColor: 'c1',
     },
     {
-      label: 'Trips this month',
+      label: t('kpiTripsThisMonth'),
       value: String(k.tripsThisMonth.count),
-      delta: `${k.tripsThisMonth.inTransitNow} in transit now`,
+      delta: t('kpiTripsThisMonthDelta', { count: k.tripsThisMonth.inTransitNow }),
       accentColor: 'c1',
     },
     {
-      label: 'Revenue',
+      label: t('kpiRevenue'),
       value: formatTZS(k.revenueThisMonth.amount),
-      delta: `${k.revenueThisMonth.percentOfAllRevenue}% of all revenue`,
+      delta: t('kpiRevenueDelta', { percent: k.revenueThisMonth.percentOfAllRevenue }),
       accentColor: 'good',
     },
     {
-      label: 'Costs',
+      label: t('kpiCosts'),
       value: formatTZS(k.costsThisMonth.amount),
-      delta: `${k.costsThisMonth.percentFuel}% of it fuel`,
+      delta: t('kpiCostsDelta', { percent: k.costsThisMonth.percentFuel }),
       accentColor: 'warn',
     },
     {
-      label: 'Net',
+      label: t('kpiNet'),
       value: formatTZS(k.netThisMonth.amount),
-      delta: `${formatTZS(k.netThisMonth.perVehicleAverage)} per vehicle`,
+      delta: t('kpiNetDelta', { amount: formatTZS(k.netThisMonth.perVehicleAverage) }),
       accentColor: 'violet',
     },
     {
-      label: 'Margin',
+      label: t('kpiMargin'),
       value: `${k.marginThisMonth.percent}%`,
       delta:
         k.marginThisMonth.vsMotorbikeMarginPercent === null
           ? undefined
-          : `vs ${k.marginThisMonth.vsMotorbikeMarginPercent}% on motorbikes`,
+          : t('kpiMarginDelta', { percent: k.marginThisMonth.vsMotorbikeMarginPercent }),
       accentColor: net >= 0 ? 'good' : 'crit',
     },
   ];
 }
 
 function InTransitCard({ job }: { job: TransportOperationsResponse['inTransitJob'] }) {
+  const { t } = useTranslation('transport');
   if (!job) {
     return (
-      <Card title="In transit now">
-        <p className="p-4 text-sm text-txt-2">No job is currently in transit.</p>
+      <Card title={t('inTransitTitle')}>
+        <p className="p-4 text-sm text-txt-2">{t('noJobInTransit')}</p>
       </Card>
     );
   }
   const hoursElapsed = (job.progress.elapsedMs / 3_600_000).toFixed(1);
   return (
-    <Card title="In transit now" subtitle={job.reference ?? undefined}>
+    <Card title={t('inTransitTitle')} subtitle={job.reference ?? undefined}>
       <div className="px-4 pb-4">
         <p className="text-base font-semibold text-txt">
           {job.origin} → {job.destination}
         </p>
         <p className="text-xs text-txt-2">
-          {job.registrationNumber} · {job.driverName ?? 'owner-driven'}
+          {job.registrationNumber} · {job.driverName ?? t('ownerDriven')}
           {job.cargo ? ` · ${job.cargo}` : ''}
         </p>
         {job.progress.kind === 'progress' ? (
@@ -110,34 +116,38 @@ function InTransitCard({ job }: { job: TransportOperationsResponse['inTransitJob
             </div>
             <div className="mt-2 flex justify-between text-xs text-txt-2">
               <span>
-                <b className="text-txt">{job.progress.kmCovered.toFixed(0)} km</b> covered
+                <b className="text-txt">{job.progress.kmCovered.toFixed(0)} km</b> {t('kmCovered')}
               </span>
               <span>
-                <b className="text-txt">{job.progress.kmRemaining.toFixed(0)} km</b> to go
+                <b className="text-txt">{job.progress.kmRemaining.toFixed(0)} km</b> {t('kmToGo')}
               </span>
             </div>
           </>
         ) : (
-          <p className="mt-3 text-xs text-txt-2">
-            No expected distance was set for this job - showing elapsed time and last position only,
-            never an invented ETA.
-          </p>
+          <p className="mt-3 text-xs text-txt-2">{t('noExpectedDistance')}</p>
         )}
         <p className="mt-2 text-xs text-txt-2">
-          {hoursElapsed}h since pickup
+          {t('hoursSincePickup', { hours: hoursElapsed })}
           {job.progress.lastPosition
-            ? ` · last position ${formatDateTime(job.progress.lastPosition.recordedAt)}`
-            : ' · no GPS fix received yet'}
+            ? t('lastPositionKnown', {
+                time: formatDateTime(job.progress.lastPosition.recordedAt),
+              })
+            : t('lastPositionUnknown')}
         </p>
       </div>
     </Card>
   );
 }
 
-const PAYMENT_STATUS_LABEL: Record<TransportPaymentStatus, string> = {
-  UNPAID: 'Unpaid',
-  PARTIALLY_PAID: 'Partially paid',
-  PAID: 'Paid',
+// Stage L5 - TransportPaymentStatus (UNPAID/PARTIALLY_PAID/PAID) is its own
+// enum, distinct from PaymentsPage.tsx's PaymentStatus (PENDING/COMPLETED/
+// FAILED) - a transport job's collection status vs. a rental payment's own
+// status, different value sets entirely - so this gets its own key map in
+// the `transport` namespace rather than reusing L3's `payments` one.
+const PAYMENT_STATUS_LABEL_KEY: Record<TransportPaymentStatus, string> = {
+  UNPAID: 'transportPaymentStatusUnpaid',
+  PARTIALLY_PAID: 'transportPaymentStatusPartiallyPaid',
+  PAID: 'transportPaymentStatusPaid',
 };
 
 // TRANSPORT_DESIGN.md §6 - purely additive collection-status indicator next
@@ -145,6 +155,7 @@ const PAYMENT_STATUS_LABEL: Record<TransportPaymentStatus, string> = {
 // Only rendered once the full TransportJob (with amountReceived) has loaded
 // via jobsById - the lighter tripsThisMonth summary row doesn't carry it.
 function CollectionStatusPill({ job }: { job: TransportJob }) {
+  const { t } = useTranslation('transport');
   const revenue = parseFloat(job.revenue);
   const amountReceived = parseFloat(job.amountReceived);
   const status = transportPaymentStatus(revenue, amountReceived);
@@ -153,11 +164,14 @@ function CollectionStatusPill({ job }: { job: TransportJob }) {
       <span
         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${TRANSPORT_PAYMENT_STATUS_STYLES[status]}`}
       >
-        {PAYMENT_STATUS_LABEL[status]}
+        {t(PAYMENT_STATUS_LABEL_KEY[status])}
       </span>
       {status === 'PARTIALLY_PAID' && (
         <span className="text-xs whitespace-nowrap text-txt-2">
-          Collected {formatTZS(amountReceived)} of {formatTZS(revenue)}
+          {t('collectedOfRevenue', {
+            amount: formatTZS(amountReceived),
+            revenue: formatTZS(revenue),
+          })}
         </span>
       )}
     </span>
@@ -554,6 +568,7 @@ function LogExpenseModal({
 }
 
 export function TransportPage() {
+  const { t } = useTranslation('transport');
   const { user } = useAuth();
   const [data, setData] = useState<TransportOperationsResponse | null>(null);
   const [vehicles, setVehicles] = useState<Motorcycle[]>([]);
@@ -584,7 +599,7 @@ export function TransportPage() {
       setJobsById(new Map(jobList.map((j) => [j.id, j])));
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load transport operations.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
     }
   }
 
@@ -594,8 +609,8 @@ export function TransportPage() {
 
   useEffect(() => {
     if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 4000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setSuccess(null), 4000);
+    return () => clearTimeout(timer);
   }, [success]);
 
   function handleSaved(message: string) {
@@ -611,10 +626,10 @@ export function TransportPage() {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
-      setSuccess('Status updated.');
+      setSuccess(t('statusUpdated'));
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update status.');
+      setError(err instanceof ApiError ? err.message : t('updateStatusError'));
     }
   }
 
@@ -622,11 +637,11 @@ export function TransportPage() {
     if (!deleting) return;
     try {
       await apiFetch(`/transport-jobs/${deleting.id}`, { method: 'DELETE' });
-      setSuccess('Transport job deleted.');
+      setSuccess(t('jobDeleted'));
       setDeleting(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete the job.');
+      setError(err instanceof ApiError ? err.message : t('deleteError'));
       setDeleting(null);
     }
   }
@@ -635,18 +650,18 @@ export function TransportPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   return (
     <PageChassis
-      title="Transport"
+      title={t('title')}
       statusPill={{
         mode: 'live',
-        text: data.inTransitJob ? 'LIVE · 1 job in transit' : 'LIVE · 0 jobs in transit',
+        text: t('inTransitStatus', { count: data.inTransitJob ? 1 : 0 }),
       }}
-      primaryAction={{ label: 'New job', onClick: () => setFormTarget('new') }}
-      kpis={kpisToTiles(data)}
+      primaryAction={{ label: t('newJob'), onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data, t)}
     >
       {success && <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{success}</p>}
       {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
@@ -657,7 +672,7 @@ export function TransportPage() {
             onClick={() => setReconciling(true)}
             className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2"
           >
-            Reconcile payments
+            {t('reconcilePayments')}
           </button>
         </div>
       )}
@@ -665,23 +680,20 @@ export function TransportPage() {
       <ChassisGrid
         main={
           <>
-            <Card
-              title="Per vehicle, this month"
-              subtitle="ranked - the sell decision falls out of the ranking"
-            >
+            <Card title={t('perVehicleTitle')} subtitle={t('perVehicleSubtitle')}>
               {data.perVehicleThisMonth.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">No transport jobs this month.</p>
+                <p className="p-4 text-sm text-txt-2">{t('noTransportJobsThisMonth')}</p>
               ) : (
                 <>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                          <th className="px-4 py-2 font-medium">Vehicle</th>
-                          <th className="px-4 py-2 text-right font-medium">Trips</th>
-                          <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                          <th className="px-4 py-2 text-right font-medium">Expenses</th>
-                          <th className="px-4 py-2 text-right font-medium">Net</th>
+                          <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableTrips')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableRevenue')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableExpenses')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableNet')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -719,11 +731,16 @@ export function TransportPage() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="font-medium text-txt">{v.registrationNumber}</span>
-                          <span className="text-txt-2">{v.jobCount} trips</span>
+                          <span className="text-txt-2">
+                            {t('mobileTripCount', { count: v.jobCount })}
+                          </span>
                         </div>
                         <div className="mt-1 flex items-center justify-between text-sm">
                           <span className="text-txt-2">
-                            Revenue {formatTZS(v.revenue)} · Expenses {formatTZS(v.expenses)}
+                            {t('mobileRevenueExpenses', {
+                              revenue: formatTZS(v.revenue),
+                              expenses: formatTZS(v.expenses),
+                            })}
                           </span>
                           <span
                             className={`font-medium ${parseFloat(v.netProfit) >= 0 ? 'text-good' : 'text-crit'}`}
@@ -743,16 +760,20 @@ export function TransportPage() {
         }
         rail={
           <>
-            <Card title="AI Insight">
+            <Card title={t('aiInsightTitle')}>
               {data.marginDeclineFlag ? (
                 <div className="p-4">
                   <p className="text-sm font-medium text-txt">
-                    {data.marginDeclineFlag.registrationNumber}: margin fell to{' '}
-                    {data.marginDeclineFlag.currentMarginPercent}%
+                    {t('marginDeclineSentence', {
+                      registration: data.marginDeclineFlag.registrationNumber,
+                      percent: data.marginDeclineFlag.currentMarginPercent,
+                    })}
                   </p>
                   <p className="mt-1 text-xs text-txt-2">
-                    Averaged {data.marginDeclineFlag.priorAverageMarginPercent}% over the prior{' '}
-                    {data.marginDeclineFlag.priorMonthCount} months.
+                    {t('marginDeclineAverage', {
+                      avg: data.marginDeclineFlag.priorAverageMarginPercent,
+                      count: data.marginDeclineFlag.priorMonthCount,
+                    })}
                   </p>
                 </div>
               ) : data.alerts.length > 0 ? (
@@ -768,15 +789,15 @@ export function TransportPage() {
                   ))}
                 </div>
               ) : (
-                <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('nothingToFlag')}</p>
               )}
             </Card>
             <Card
-              title="Transport alerts"
+              title={t('transportAlertsTitle')}
               subtitle={data.alerts.length > 0 ? String(data.alerts.length) : undefined}
             >
               {data.alerts.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing needs attention right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('nothingNeedsAttention')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.alerts.map((a, i) => (
@@ -795,27 +816,30 @@ export function TransportPage() {
         }
       />
 
-      <Card title="Trips this month" subtitle={`${data.tripsThisMonth.length} trips`}>
+      <Card
+        title={t('kpiTripsThisMonth')}
+        subtitle={t('tripsThisMonthSubtitle', { count: data.tripsThisMonth.length })}
+      >
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Reference</th>
-                <th className="px-4 py-2 font-medium">Route</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                <th className="px-4 py-2 text-right font-medium">Cost</th>
-                <th className="px-4 py-2 text-right font-medium">Profit</th>
-                <th className="px-4 py-2 font-medium">Collection</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableReference')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableRoute')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableRevenue')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableCost')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableProfit')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableCollection')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {data.tripsThisMonth.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-6 text-center text-txt-2">
-                    No trips yet this month.
+                    {t('noTripsYet')}
                   </td>
                 </tr>
               ) : (
@@ -852,7 +876,7 @@ export function TransportPage() {
                           >
                             {STATUS_OPTIONS.map((s) => (
                               <option key={s} value={s}>
-                                {STATUS_LABELS[s]}
+                                {t(STATUS_LABEL_KEY[s])}
                               </option>
                             ))}
                           </select>
@@ -867,19 +891,19 @@ export function TransportPage() {
                               onClick={() => setExpenseTarget(job)}
                               className="mr-3 text-sm font-medium text-c1 hover:underline"
                             >
-                              + Expense
+                              {t('addExpenseAction')}
                             </button>
                             <button
                               onClick={() => setFormTarget(job)}
                               className="mr-3 text-sm font-medium text-c1 hover:underline"
                             >
-                              Edit
+                              {t('edit')}
                             </button>
                             <button
                               onClick={() => setDeleting(job)}
                               className="text-sm font-medium text-crit hover:underline"
                             >
-                              Delete
+                              {t('delete')}
                             </button>
                           </>
                         )}
@@ -894,7 +918,7 @@ export function TransportPage() {
 
         <div className="md:hidden">
           {data.tripsThisMonth.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No trips yet this month.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noTripsYet')}</p>
           ) : (
             data.tripsThisMonth.map((trip) => {
               const job = jobsById.get(trip.id);
@@ -910,7 +934,10 @@ export function TransportPage() {
                   </p>
                   <div className="mt-1 flex items-center justify-between text-sm">
                     <span className="text-txt-2">
-                      Revenue {formatTZS(trip.revenue)} · Cost {formatTZS(trip.expensesTotal)}
+                      {t('mobileRevenueCost', {
+                        revenue: formatTZS(trip.revenue),
+                        cost: formatTZS(trip.expensesTotal),
+                      })}
                     </span>
                     <span className={`font-medium ${net >= 0 ? 'text-good' : 'text-crit'}`}>
                       {formatTZS(trip.netProfit)}
@@ -932,7 +959,7 @@ export function TransportPage() {
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>
-                            {STATUS_LABELS[s]}
+                            {t(STATUS_LABEL_KEY[s])}
                           </option>
                         ))}
                       </select>
@@ -946,19 +973,19 @@ export function TransportPage() {
                         onClick={() => setExpenseTarget(job)}
                         className="text-sm font-medium text-c1 hover:underline"
                       >
-                        + Expense
+                        {t('addExpenseAction')}
                       </button>
                       <button
                         onClick={() => setFormTarget(job)}
                         className="text-sm font-medium text-c1 hover:underline"
                       >
-                        Edit
+                        {t('edit')}
                       </button>
                       <button
                         onClick={() => setDeleting(job)}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Delete
+                        {t('delete')}
                       </button>
                     </div>
                   )}
@@ -973,8 +1000,10 @@ export function TransportPage() {
         left={
           data.marginDeclineFlag && data.flaggedVehicleMarginTrend ? (
             <Card
-              title={`${data.marginDeclineFlag.registrationNumber} — margin trend`}
-              subtitle="over recent months"
+              title={t('marginTrendTitleWithVehicle', {
+                registration: data.marginDeclineFlag.registrationNumber,
+              })}
+              subtitle={t('marginTrendSubtitle')}
             >
               <div className="flex h-32 items-end gap-2 px-4 pb-4">
                 {data.flaggedVehicleMarginTrend.map((m) => (
@@ -991,15 +1020,13 @@ export function TransportPage() {
               </div>
             </Card>
           ) : (
-            <Card title="Margin trend" subtitle="no decline flagged">
-              <p className="p-4 text-sm text-txt-2">
-                No vehicle has a flagged margin decline right now.
-              </p>
+            <Card title={t('marginTrendFallbackTitle')} subtitle={t('marginTrendFallbackSubtitle')}>
+              <p className="p-4 text-sm text-txt-2">{t('noMarginDeclineFlagged')}</p>
             </Card>
           )
         }
         right={
-          <Card title="Where transport margin goes" subtitle="per shilling earned">
+          <Card title={t('marginGoesTitle')} subtitle={t('marginGoesSubtitle')}>
             <div className="px-4 pb-4">
               <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-panel-2">
                 <div className="bg-crit" style={{ width: `${data.marginSplit.fuelPercent}%` }} />
@@ -1011,19 +1038,19 @@ export function TransportPage() {
               </div>
               <div className="mt-3 space-y-1.5 text-sm text-txt-2">
                 <div className="flex justify-between">
-                  <span>Fuel</span>
+                  <span>{t('marginRowFuel')}</span>
                   <span className="text-txt">
                     {data.marginSplit.fuelPercent}% · {formatTZS(data.marginSplit.fuel)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Other costs</span>
+                  <span>{t('marginRowOtherCosts')}</span>
                   <span className="text-txt">
                     {data.marginSplit.otherPercent}% · {formatTZS(data.marginSplit.other)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Kept as profit</span>
+                  <span>{t('marginRowProfit')}</span>
                   <span className="text-txt">
                     {data.marginSplit.profitPercent}% · {formatTZS(data.marginSplit.profit)}
                   </span>
@@ -1052,9 +1079,12 @@ export function TransportPage() {
       )}
       {deleting && (
         <ConfirmDialog
-          title="Delete transport job"
-          message={`Delete the job ${deleting.origin} → ${deleting.destination}? This can't be undone. (Jobs with expenses can't be deleted.)`}
-          confirmLabel="Delete"
+          title={t('deleteJobTitle')}
+          message={t('deleteJobMessage', {
+            origin: deleting.origin,
+            destination: deleting.destination,
+          })}
+          confirmLabel={t('delete')}
           danger
           onConfirm={handleDelete}
           onCancel={() => setDeleting(null)}
