@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -8,6 +10,8 @@ import type {
   Driver,
   Motorcycle,
   Payment,
+  PaymentStatus,
+  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -18,54 +22,85 @@ import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
+// Stage L9 - reuse PaymentsPage.tsx's own PAYMENT_STATUS_LABEL_KEY (L3)
+// rather than inventing a third copy of these three strings: same
+// PaymentStatus enum, same payments.json keys, just read via a second
+// useTranslation('payments') hook here.
+const PAYMENT_STATUS_LABEL_KEY: Record<PaymentStatus, string> = {
+  PENDING: 'paymentStatusPending',
+  COMPLETED: 'paymentStatusCompleted',
+  FAILED: 'paymentStatusFailed',
+};
+
+// Stage L9 - this is now the THIRD page with its own private copy of this
+// exact VehicleType label wrapper (Fleet L7, Maintenance L8, now this).
+// Extracting VEHICLE_TYPE_LABEL_KEY/vehicleTypeLabel into a shared module
+// is overdue - queued as a follow-up, not done here since Fleet and
+// Maintenance are already shipped/verified and out of this stage's scope.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
+};
+
+function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
+  return vehicleType in VEHICLE_TYPE_LABEL_KEY
+    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
+    : vehicleType;
+}
+
 function todayDateInput(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function kpisToTiles(data: AssignmentSummaryResponse): KpiTile[] {
+function kpisToTiles(data: AssignmentSummaryResponse, t: TFunction<'assignments'>): KpiTile[] {
   const k = data.kpis;
   return [
     {
-      label: 'Assigned today',
+      label: t('kpiAssignedToday'),
       value: String(k.assignedToday.count),
       valueSuffix: `/ ${k.assignedToday.fleetSize}`,
-      delta: `${k.assignedToday.percentOfFleet}% of the fleet`,
+      delta: t('kpiAssignedTodayDelta', { percent: k.assignedToday.percentOfFleet }),
       accentColor: 'c1',
     },
     {
-      label: 'Moving',
+      label: t('kpiMoving'),
       value: String(k.movingToday.count),
-      delta: `${k.movingToday.percentActuallyEarning}% actually earning`,
+      delta: t('kpiMovingDelta', { percent: k.movingToday.percentActuallyEarning }),
       accentColor: 'good',
     },
     {
-      label: 'Assigned, in workshop',
+      label: t('kpiAssignedWorkshop'),
       value: String(k.assignedInWorkshopToday.count),
-      delta: 'Has a driver, earns nothing',
+      delta: t('kpiAssignedWorkshopDelta'),
       accentColor: k.assignedInWorkshopToday.count > 0 ? 'warn' : 'good',
     },
     {
-      label: 'In stock, unassigned',
+      label: t('kpiInStockUnassigned'),
       value: String(k.inStockToday.count),
-      delta: `${formatTZS(k.inStockToday.targetLost)} a day`,
+      delta: t('kpiInStockUnassignedDelta', { amount: formatTZS(k.inStockToday.targetLost) }),
       accentColor: k.inStockToday.count > 0 ? 'crit' : 'good',
     },
     {
-      label: 'Created this month',
+      label: t('kpiCreatedThisMonth'),
       value: String(k.createdThisMonth.count),
-      delta: `${k.createdThisMonth.percentEndedWithPayment}% ended with a payment`,
+      delta: t('kpiCreatedThisMonthDelta', {
+        percent: k.createdThisMonth.percentEndedWithPayment,
+      }),
       accentColor: 'c1',
     },
     {
-      label: 'Cost of idleness',
+      label: t('kpiCostOfIdleness'),
       value: formatTZS(k.costOfIdlenessThisMonth.amount),
-      delta: 'this month to date',
+      delta: t('kpiCostOfIdlenessDelta'),
       accentColor: 'violet',
     },
   ];
 }
 
 function StockChart({ series }: { series: AssignmentSummaryResponse['dailyStockSeries'] }) {
+  const { t } = useTranslation('assignments');
   return (
     <div>
       <div className="flex h-32 items-end gap-1">
@@ -75,7 +110,7 @@ function StockChart({ series }: { series: AssignmentSummaryResponse['dailyStockS
             <div
               key={p.date}
               className="flex flex-1 flex-col items-center gap-0.5"
-              title={`${p.outCount} out, ${p.inStockCount} in stock`}
+              title={t('stockChartTooltip', { out: p.outCount, inStock: p.inStockCount })}
             >
               <div className="flex w-full flex-1 flex-col justify-end overflow-hidden rounded-t">
                 <div
@@ -95,11 +130,11 @@ function StockChart({ series }: { series: AssignmentSummaryResponse['dailyStockS
       <div className="mt-2 flex gap-4 text-xs text-txt-2">
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-full bg-c1 align-middle" />
-          Out with a driver
+          {t('legendOutWithDriver')}
         </span>
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-full bg-crit align-middle" />
-          In stock
+          {t('legendInStock')}
         </span>
       </div>
     </div>
@@ -127,6 +162,8 @@ function AssignmentFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('assignments');
+  const { t: tCommon } = useTranslation('common');
   const [form, setForm] = useState<FormState>({
     motorcycleId: '',
     driverId: '',
@@ -142,12 +179,12 @@ function AssignmentFormModal({
     setError(null);
 
     if (!form.motorcycleId || !form.driverId || !form.assignedDate) {
-      setError('Driver, vehicle, and date are required.');
+      setError(t('errorRequiredFields'));
       return;
     }
     const targetAmount = Number(form.targetAmount);
     if (!form.targetAmount || Number.isNaN(targetAmount) || targetAmount <= 0) {
-      setError('Enter a valid target amount.');
+      setError(t('errorValidTargetAmount'));
       return;
     }
 
@@ -161,25 +198,25 @@ function AssignmentFormModal({
         notes: form.notes.trim() || undefined,
       };
       await apiFetch('/assignments', { method: 'POST', body: JSON.stringify(payload) });
-      onSaved('Assignment created.');
+      onSaved(t('assignmentCreated'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="Create assignment" onClose={onClose}>
+    <Modal title={t('createAssignment')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Driver</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('tableDriver')}</label>
           <select
             value={form.driverId}
             onChange={(e) => setForm({ ...form, driverId: e.target.value })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           >
-            <option value="">Select a driver…</option>
+            <option value="">{t('selectDriverPlaceholder')}</option>
             {drivers.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.user.firstName} {d.user.lastName} — {d.licenseNumber}
@@ -188,13 +225,13 @@ function AssignmentFormModal({
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Vehicle</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('tableVehicle')}</label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           >
-            <option value="">Select a vehicle…</option>
+            <option value="">{t('selectVehiclePlaceholder')}</option>
             {motorcycles.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.registrationNumber} {[m.make, m.model].filter(Boolean).join(' ')}
@@ -204,7 +241,7 @@ function AssignmentFormModal({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('tableDate')}</label>
             <input
               type="date"
               value={form.assignedDate}
@@ -213,7 +250,9 @@ function AssignmentFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Target amount (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldTargetAmount')}
+            </label>
             <input
               type="number"
               min="0"
@@ -225,7 +264,9 @@ function AssignmentFormModal({
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Notes (optional)</label>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            {t('fieldNotesOptional')}
+          </label>
           <textarea
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -242,14 +283,14 @@ function AssignmentFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -258,6 +299,9 @@ function AssignmentFormModal({
 }
 
 export function AssignmentsPage() {
+  const { t } = useTranslation('assignments');
+  const { t: tCommon } = useTranslation('common');
+  const { t: tPayments } = useTranslation('payments');
   const [data, setData] = useState<AssignmentSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -293,7 +337,7 @@ export function AssignmentsPage() {
       setPayments(paymentsData);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load assignments.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
     }
   }
 
@@ -336,11 +380,11 @@ export function AssignmentsPage() {
     if (!deleting) return;
     try {
       await apiFetch(`/assignments/${deleting.id}`, { method: 'DELETE' });
-      setSuccessMessage('Assignment deleted.');
+      setSuccessMessage(t('assignmentDeleted'));
       setDeleting(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete assignment.');
+      setError(err instanceof ApiError ? err.message : t('deleteError'));
       setDeleting(null);
     }
   }
@@ -349,15 +393,15 @@ export function AssignmentsPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   return (
     <PageChassis
-      title="Assignments"
-      statusPill={{ mode: 'live', text: `LIVE · ${data.kpis.assignedToday.count} assigned today` }}
-      primaryAction={{ label: 'Create assignment', onClick: () => setShowCreate(true) }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: t('statusPill', { count: data.kpis.assignedToday.count }) }}
+      primaryAction={{ label: t('createAssignment'), onClick: () => setShowCreate(true) }}
+      kpis={kpisToTiles(data, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -367,12 +411,17 @@ export function AssignmentsPage() {
       <ChassisGrid
         main={
           <>
-            <Card title="Out with a driver vs in stock" subtitle="last 14 days, count of vehicles">
+            <Card title={t('stockChartTitle')} subtitle={t('stockChartSubtitle')}>
               <StockChart series={data.dailyStockSeries} />
             </Card>
             <Card
-              title="Utilisation today"
-              subtitle={`${data.utilisationToday.moving + data.utilisationToday.workshop + data.utilisationToday.inStock} vehicles`}
+              title={t('utilisationTitle')}
+              subtitle={t('utilisationSubtitle', {
+                count:
+                  data.utilisationToday.moving +
+                  data.utilisationToday.workshop +
+                  data.utilisationToday.inStock,
+              })}
             >
               {(() => {
                 const total =
@@ -397,15 +446,15 @@ export function AssignmentsPage() {
                     </div>
                     <div className="mt-3 space-y-1.5 text-sm text-txt-2">
                       <div className="flex justify-between">
-                        <span>Assigned and moving</span>
+                        <span>{t('rowAssignedMoving')}</span>
                         <span className="text-txt">{data.utilisationToday.moving}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Assigned, in workshop</span>
+                        <span>{t('kpiAssignedWorkshop')}</span>
                         <span className="text-txt">{data.utilisationToday.workshop}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>In stock, nobody on it</span>
+                        <span>{t('rowInStockNobody')}</span>
                         <span className="text-txt">{data.utilisationToday.inStock}</span>
                       </div>
                     </div>
@@ -418,11 +467,11 @@ export function AssignmentsPage() {
         rail={
           <>
             <Card
-              title="AI Insights"
+              title={t('aiInsightsTitle')}
               subtitle={data.insights.length > 0 ? String(data.insights.length) : undefined}
             >
               {data.insights.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('nothingToFlag')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.insights.map((ins, i) => (
@@ -434,18 +483,20 @@ export function AssignmentsPage() {
                 </div>
               )}
             </Card>
-            <Card title="Unassigned right now" subtitle={String(data.unassignedNow.length)}>
+            <Card title={t('unassignedTitle')} subtitle={String(data.unassignedNow.length)}>
               {data.unassignedNow.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Every active vehicle has a driver today.</p>
+                <p className="p-4 text-sm text-txt-2">{t('everyActiveHasDriver')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.unassignedNow.slice(0, 6).map((v) => (
                     <div key={v.motorcycleId} className="px-4 py-2.5">
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-medium text-txt">
-                          {v.registrationNumber} · {v.vehicleType.toLowerCase()}
+                          {v.registrationNumber} · {vehicleTypeLabel(v.vehicleType, tCommon)}
                         </span>
-                        <span className="text-txt-3">{v.daysUnassigned}d</span>
+                        <span className="text-txt-3">
+                          {t('daysUnassignedSuffix', { count: v.daysUnassigned })}
+                        </span>
                       </div>
                       <p className="mt-0.5 text-xs text-txt-2">{v.reason}</p>
                     </div>
@@ -458,34 +509,36 @@ export function AssignmentsPage() {
       />
 
       <Card
-        title="Vehicles in stock"
-        subtitle={`${data.unassignedNow.length} · each one is a decision, not a status`}
+        title={t('vehiclesInStockTitle')}
+        subtitle={t('vehiclesInStockSubtitle', { count: data.unassignedNow.length })}
       >
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Registration</th>
-                <th className="px-4 py-2 font-medium">Type</th>
-                <th className="px-4 py-2 text-right font-medium">Days unassigned</th>
-                <th className="px-4 py-2 text-right font-medium">Daily target</th>
-                <th className="px-4 py-2 text-right font-medium">Lost so far</th>
-                <th className="px-4 py-2 font-medium">Area</th>
-                <th className="px-4 py-2 font-medium">Why</th>
+                <th className="px-4 py-2 font-medium">{t('tableRegistration')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableType')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableDaysUnassigned')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableDailyTarget')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableLostSoFar')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableArea')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableWhy')}</th>
               </tr>
             </thead>
             <tbody>
               {data.unassignedNow.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-center text-txt-2">
-                    Nothing in stock right now.
+                    {t('nothingInStock')}
                   </td>
                 </tr>
               ) : (
                 data.unassignedNow.map((v) => (
                   <tr key={v.motorcycleId} className="border-b border-line-soft last:border-0">
                     <td className="px-4 py-2 font-medium text-txt">{v.registrationNumber}</td>
-                    <td className="px-4 py-2 text-txt-2">{v.vehicleType.toLowerCase()}</td>
+                    <td className="px-4 py-2 text-txt-2">
+                      {vehicleTypeLabel(v.vehicleType, tCommon)}
+                    </td>
                     <td className="px-4 py-2 text-right text-txt-2">{v.daysUnassigned}</td>
                     <td className="px-4 py-2 text-right text-txt-2">
                       {v.dailyTarget ? formatTZS(v.dailyTarget) : '—'}
@@ -504,7 +557,7 @@ export function AssignmentsPage() {
 
         <div className="md:hidden">
           {data.unassignedNow.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">Nothing in stock right now.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('nothingInStock')}</p>
           ) : (
             data.unassignedNow.map((v) => (
               <div
@@ -513,9 +566,11 @@ export function AssignmentsPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-txt">
-                    {v.registrationNumber} · {v.vehicleType.toLowerCase()}
+                    {v.registrationNumber} · {vehicleTypeLabel(v.vehicleType, tCommon)}
                   </span>
-                  <span className="shrink-0 text-txt-3">{v.daysUnassigned}d</span>
+                  <span className="shrink-0 text-txt-3">
+                    {t('daysUnassignedSuffix', { count: v.daysUnassigned })}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-txt-2">
                   {v.operatingArea ?? '—'} · {v.reason}
@@ -536,27 +591,30 @@ export function AssignmentsPage() {
 
       <ClosingRow
         left={
-          <Card title="This month" subtitle={`${data.thisMonth.created} assignments`}>
+          <Card
+            title={t('thisMonthTitle')}
+            subtitle={t('thisMonthSubtitle', { count: data.thisMonth.created })}
+          >
             <table className="w-full text-sm">
               <tbody>
                 <tr className="border-b border-line-soft">
-                  <td className="px-4 py-2 text-txt-2">Assignments created</td>
+                  <td className="px-4 py-2 text-txt-2">{t('rowAssignmentsCreated')}</td>
                   <td className="px-4 py-2 text-right text-txt">{data.thisMonth.created}</td>
                 </tr>
                 <tr className="border-b border-line-soft">
-                  <td className="px-4 py-2 text-txt-2">Ended with a payment</td>
+                  <td className="px-4 py-2 text-txt-2">{t('rowEndedWithPayment')}</td>
                   <td className="px-4 py-2 text-right text-good">
                     {data.thisMonth.endedWithPayment}
                   </td>
                 </tr>
                 <tr className="border-b border-line-soft">
-                  <td className="px-4 py-2 text-txt-2">Ended with nothing paid</td>
+                  <td className="px-4 py-2 text-txt-2">{t('rowEndedWithNothing')}</td>
                   <td className="px-4 py-2 text-right text-crit">
                     {data.thisMonth.endedWithNothing}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-4 py-2 font-medium text-txt">Value of those days</td>
+                  <td className="px-4 py-2 font-medium text-txt">{t('rowValueOfDays')}</td>
                   <td className="px-4 py-2 text-right font-medium text-crit">
                     {formatTZS(data.thisMonth.valueOfUnpaidDays)}
                   </td>
@@ -566,23 +624,25 @@ export function AssignmentsPage() {
           </Card>
         }
         right={
-          <Card title="What idleness costs, by type" subtitle="cumulative">
+          <Card title={t('idlenessTitle')} subtitle={t('idlenessSubtitle')}>
             {data.idlenessCostByType.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">No idle vehicles.</p>
+              <p className="p-4 text-sm text-txt-2">{t('noIdleVehicles')}</p>
             ) : (
               <div className="divide-y divide-line-soft px-4">
                 {data.idlenessCostByType.map((row) => (
                   <div key={row.vehicleType} className="py-2.5">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-txt">{row.vehicleType.toLowerCase()} idle</span>
+                      <span className="text-txt">
+                        {t('idleRowLabel', { type: vehicleTypeLabel(row.vehicleType, tCommon) })}
+                      </span>
                       <span className="text-txt-2">
-                        {row.count} vehicle{row.count === 1 ? '' : 's'}
+                        {t('idleVehicleCount', { count: row.count })}
                       </span>
                       <span className="font-medium text-crit">{formatTZS(row.amount)}</span>
                     </div>
                     {row.topContributor && (
                       <p className="mt-0.5 text-xs text-txt-2">
-                        {row.topContributor} — the largest line
+                        {t('topContributorLine', { topContributor: row.topContributor })}
                       </p>
                     )}
                   </div>
@@ -593,9 +653,9 @@ export function AssignmentsPage() {
         }
       />
 
-      <Card title="Manage assignments" subtitle="record a payment or delete a specific assignment">
+      <Card title={t('manageTitle')} subtitle={t('manageSubtitle')}>
         <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3">
-          <label className="text-sm text-txt-2">Filter by date:</label>
+          <label className="text-sm text-txt-2">{t('filterByDate')}</label>
           <input
             type="date"
             value={dateFilter}
@@ -607,7 +667,7 @@ export function AssignmentsPage() {
               onClick={() => setDateFilter('')}
               className="text-sm text-txt-3 hover:underline"
             >
-              Clear
+              {t('clear')}
             </button>
           )}
         </div>
@@ -615,25 +675,25 @@ export function AssignmentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Driver</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Target</th>
-                <th className="px-4 py-2 font-medium">Payments</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableDate')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableTarget')}</th>
+                <th className="px-4 py-2 font-medium">{t('tablePayments')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {assignments === null ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    Loading…
+                    {t('loading')}
                   </td>
                 </tr>
               ) : filteredAssignments.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                    No assignments found.
+                    {t('noAssignmentsFound')}
                   </td>
                 </tr>
               ) : (
@@ -651,20 +711,24 @@ export function AssignmentsPage() {
                       <td className="px-4 py-2 text-txt">
                         {driver
                           ? `${driver.user.firstName} ${driver.user.lastName}`
-                          : 'Unknown driver'}
+                          : t('unknownDriver')}
                       </td>
                       <td className="px-4 py-2 text-txt-2">
-                        {motorcycle?.registrationNumber ?? 'Unknown vehicle'}
+                        {motorcycle?.registrationNumber ?? t('unknownVehicle')}
                       </td>
                       <td className="px-4 py-2 text-txt-2">{formatTZS(a.targetAmount)}</td>
                       <td className="px-4 py-2 text-txt-2">
                         {assignmentPayments.length === 0 ? (
-                          'No payments yet'
+                          t('noPaymentsYet')
                         ) : (
                           <span className="flex items-center gap-2">
                             {formatTZS(paidTotal)} / {formatTZS(a.targetAmount)}
                             {latest && (
-                              <StatusBadge status={latest.status} styles={PAYMENT_STATUS_STYLES} />
+                              <StatusBadge
+                                status={latest.status}
+                                styles={PAYMENT_STATUS_STYLES}
+                                label={tPayments(PAYMENT_STATUS_LABEL_KEY[latest.status])}
+                              />
                             )}
                           </span>
                         )}
@@ -674,13 +738,13 @@ export function AssignmentsPage() {
                           onClick={() => setPaymentTarget(a)}
                           className="mr-3 text-sm font-medium text-c1 hover:underline"
                         >
-                          Record payment
+                          {t('recordPayment')}
                         </button>
                         <button
                           onClick={() => setDeleting(a)}
                           className="text-sm font-medium text-crit hover:underline"
                         >
-                          Delete
+                          {tCommon('delete')}
                         </button>
                       </td>
                     </tr>
@@ -693,9 +757,9 @@ export function AssignmentsPage() {
 
         <div className="md:hidden">
           {assignments === null ? (
-            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('loading')}</p>
           ) : filteredAssignments.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No assignments found.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noAssignmentsFound')}</p>
           ) : (
             filteredAssignments.slice(0, 25).map((a) => {
               const driver = driverById.get(a.driverId);
@@ -711,22 +775,26 @@ export function AssignmentsPage() {
                     <span className="font-medium text-txt">
                       {driver
                         ? `${driver.user.firstName} ${driver.user.lastName}`
-                        : 'Unknown driver'}
+                        : t('unknownDriver')}
                     </span>
                     <span className="text-xs text-txt-2">{a.assignedDate.slice(0, 10)}</span>
                   </div>
                   <p className="mt-1 text-xs text-txt-2">
-                    {motorcycle?.registrationNumber ?? 'Unknown vehicle'} ·{' '}
+                    {motorcycle?.registrationNumber ?? t('unknownVehicle')} ·{' '}
                     {formatTZS(a.targetAmount)}
                   </p>
                   <div className="mt-1 text-sm text-txt-2">
                     {assignmentPayments.length === 0 ? (
-                      'No payments yet'
+                      t('noPaymentsYet')
                     ) : (
                       <span className="flex items-center gap-2">
                         {formatTZS(paidTotal)} / {formatTZS(a.targetAmount)}
                         {latest && (
-                          <StatusBadge status={latest.status} styles={PAYMENT_STATUS_STYLES} />
+                          <StatusBadge
+                            status={latest.status}
+                            styles={PAYMENT_STATUS_STYLES}
+                            label={tPayments(PAYMENT_STATUS_LABEL_KEY[latest.status])}
+                          />
                         )}
                       </span>
                     )}
@@ -736,13 +804,13 @@ export function AssignmentsPage() {
                       onClick={() => setPaymentTarget(a)}
                       className="text-sm font-medium text-c1 hover:underline"
                     >
-                      Record payment
+                      {t('recordPayment')}
                     </button>
                     <button
                       onClick={() => setDeleting(a)}
                       className="text-sm font-medium text-crit hover:underline"
                     >
-                      Delete
+                      {tCommon('delete')}
                     </button>
                   </div>
                 </div>
@@ -774,9 +842,9 @@ export function AssignmentsPage() {
 
       {deleting && (
         <ConfirmDialog
-          title="Delete assignment"
-          message={`Delete the assignment for ${deleting.assignedDate.slice(0, 10)}? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('deleteAssignmentTitle')}
+          message={t('deleteAssignmentMessage', { date: deleting.assignedDate.slice(0, 10) })}
+          confirmLabel={tCommon('delete')}
           danger
           onConfirm={handleDelete}
           onCancel={() => setDeleting(null)}
