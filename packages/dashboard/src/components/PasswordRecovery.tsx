@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 /**
  * Stage H0f Part 2 - tells an owner, in words he can act on, whether a rider can get
  * himself back into the app.
@@ -24,12 +26,17 @@ function canSelfRecover(emailProvenAt: string | null): boolean {
   return emailProvenAt !== null;
 }
 
-/** One short phrase for the Drivers list, where there is no room to explain. */
+/** One short phrase for the Drivers list, where there is no room to explain.
+ *  Stage L10 (DESIGN_SWAHILI_UI.md, batch a) - lives in the `drivers`
+ *  namespace since it's only ever rendered by DriversPage's Manage Drivers
+ *  table; PasswordRecoveryNote below stays untranslated in this batch, it
+ *  belongs to DriverDetailPage which is out of scope until batch b. */
 export function PasswordRecoveryLabel({ emailProvenAt }: { emailProvenAt: string | null }) {
+  const { t } = useTranslation('drivers');
   return canSelfRecover(emailProvenAt) ? (
-    <span className="text-gray-600">Can reset his own</span>
+    <span className="text-gray-600">{t('canResetOwn')}</span>
   ) : (
-    <span className="font-medium text-amber-700">Only you can reset</span>
+    <span className="font-medium text-amber-700">{t('onlyYouCanReset')}</span>
   );
 }
 

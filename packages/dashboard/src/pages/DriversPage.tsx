@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -21,10 +23,20 @@ import { Card } from '../components/chassis/Card';
 import type { KpiAccent, KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
+// Stage UI2-era literal labels, kept only for DriverFormModal (batch b scope,
+// untouched this stage) - the main page body now reads CATEGORY_LABEL_KEY.
 const CATEGORY_LABELS: Record<DriverType, string> = {
   RIDER: 'Rider',
   CAR_DRIVER: 'Car driver',
   TRUCK_DRIVER: 'Truck driver',
+};
+// Stage L10 (DESIGN_SWAHILI_UI.md, batch a) - first page needing a DriverType
+// label map, so no centralization question yet (same starting point as
+// STATUS_LABEL_KEY at L5 and MOTORCYCLE_STATUS_LABEL_KEY at L7).
+const CATEGORY_LABEL_KEY: Record<DriverType, string> = {
+  RIDER: 'categoryRider',
+  CAR_DRIVER: 'categoryCarDriver',
+  TRUCK_DRIVER: 'categoryTruckDriver',
 };
 const BAND_ACCENT: Record<DriverScore['band'], KpiAccent> = {
   Excellent: 'good',
@@ -33,25 +45,36 @@ const BAND_ACCENT: Record<DriverScore['band'], KpiAccent> = {
   Watch: 'warn',
   'At risk': 'crit',
 };
+// Stage L10 - band was rendered raw at both its call sites even though
+// BAND_ACCENT already keys off these exact five values for color; this was
+// a real gap; fixed the same way BAND_ACCENT itself was already handled.
+const BAND_LABEL_KEY: Record<DriverScore['band'], string> = {
+  Excellent: 'bandExcellent',
+  Good: 'bandGood',
+  Fair: 'bandFair',
+  Watch: 'bandWatch',
+  'At risk': 'bandAtRisk',
+};
 
-function kpisToTiles(data: DriverScoreboardResponse): KpiTile[] {
+function kpisToTiles(data: DriverScoreboardResponse, t: TFunction<'drivers'>): KpiTile[] {
   const k = data.kpis;
   // Stage UI2 (§4) - 5 real tiles, not padded to 6: the mockup's 6th tile
   // ("Loan ready") is dropped entirely (no lending feature exists here to
   // back it), and there is no honest 6th number to replace it with - see
   // KpiRail's own "fewer than six genuine numbers" convention.
   return [
-    { label: 'Drivers', value: String(k.totalDrivers), accentColor: 'c1' },
-    { label: 'Excellent, 85+', value: String(k.excellent), accentColor: 'good' },
-    { label: 'Good, 70–84', value: String(k.good), accentColor: 'c1' },
-    { label: 'Watch, 40–54', value: String(k.watch), accentColor: 'warn' },
-    { label: 'At risk, under 40', value: String(k.atRisk), accentColor: 'crit' },
+    { label: t('kpiDrivers'), value: String(k.totalDrivers), accentColor: 'c1' },
+    { label: t('kpiExcellent'), value: String(k.excellent), accentColor: 'good' },
+    { label: t('kpiGood'), value: String(k.good), accentColor: 'c1' },
+    { label: t('kpiWatch'), value: String(k.watch), accentColor: 'warn' },
+    { label: t('kpiAtRisk'), value: String(k.atRisk), accentColor: 'crit' },
   ];
 }
 
 function Sparkline({ points }: { points: DriverScore['sixMonthOnTimeRate'] }) {
+  const { t } = useTranslation('drivers');
   const known = points.filter((p) => p.rate !== null);
-  if (known.length < 2) return <span className="text-xs text-txt-3">Not enough history</span>;
+  if (known.length < 2) return <span className="text-xs text-txt-3">{t('notEnoughHistory')}</span>;
   const w = 80;
   const h = 24;
   const step = w / (points.length - 1);
@@ -80,47 +103,57 @@ function Sparkline({ points }: { points: DriverScore['sixMonthOnTimeRate'] }) {
 }
 
 function Scorecard({ score }: { score: DriverScore }) {
+  const { t } = useTranslation('drivers');
   const rows = [
     {
-      label: 'Payment reliability',
+      label: t('rowPaymentReliability'),
       max: 50,
       points: score.components.reliability.points,
-      detail: `${score.components.reliability.onTimeDays} of ${score.components.reliability.expectedDays} assignments paid on or before the day`,
+      detail: t('reliabilityDetail', {
+        onTime: score.components.reliability.onTimeDays,
+        expected: score.components.reliability.expectedDays,
+      }),
     },
     {
-      label: 'Honouring the contract',
+      label: t('rowHonouringContract'),
       max: 20,
       points: score.components.contract.points,
       detail: !score.components.contract.hasPlan
-        ? 'No ownership plan - nothing to breach'
+        ? t('contractNoPlan')
         : score.components.contract.defaulted
-          ? 'Plan defaulted'
-          : `${score.components.contract.consecutiveMissedDays ?? 0} of ${score.components.contract.breachAfterConsecutiveMissedDays ?? '—'} missed days before breach`,
+          ? t('contractDefaulted')
+          : t('contractMissedDays', {
+              missed: score.components.contract.consecutiveMissedDays ?? 0,
+              allowed: score.components.contract.breachAfterConsecutiveMissedDays ?? '—',
+            }),
     },
     {
-      label: 'Vehicle care',
+      label: t('rowVehicleCare'),
       max: 20,
       points: score.components.care.points,
       detail: !score.components.care.hasAssignmentToday
-        ? 'No assignment today'
+        ? t('careNoAssignment')
         : score.components.care.dueKind === 'OVERDUE'
-          ? 'Current vehicle is overdue for service'
+          ? t('careOverdue')
           : score.components.care.dueKind === 'DUE_SOON'
-            ? 'Current vehicle is due for service soon'
-            : 'Current vehicle is up to date',
+            ? t('careDueSoon')
+            : t('careUpToDate'),
     },
   ];
   return (
     <Card
-      title={`${score.firstName} ${score.lastName} — scorecard`}
-      subtitle={`${score.display} / 100 · ${score.band}`}
+      title={t('scorecardTitle', { firstName: score.firstName, lastName: score.lastName })}
+      subtitle={t('scorecardSubtitle', {
+        score: score.display,
+        band: t(BAND_LABEL_KEY[score.band]),
+      })}
     >
       <div className="space-y-3 px-4 pb-4">
         {rows.map((row) => (
           <div key={row.label}>
             <div className="flex items-center justify-between text-sm">
               <span className="text-txt-2">{row.label}</span>
-              <span className="text-txt-3">{row.max} pts</span>
+              <span className="text-txt-3">{t('ptsSuffix', { max: row.max })}</span>
               <span className="font-medium text-txt">{row.points}</span>
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
@@ -472,6 +505,8 @@ function ResetPasswordModal({
 }
 
 export function DriversPage() {
+  const { t } = useTranslation('drivers');
+  const { t: tCommon } = useTranslation('common');
   const [data, setData] = useState<DriverScoreboardResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -501,7 +536,7 @@ export function DriversPage() {
       setError(null);
       setSelectedId((current) => current ?? scoreboard.drivers[0]?.driverId ?? null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load the driver scoreboard.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
     }
   }
 
@@ -536,11 +571,11 @@ export function DriversPage() {
     if (!deactivating) return;
     try {
       await apiFetch(`/drivers/${deactivating.id}`, { method: 'DELETE' });
-      setSuccessMessage('Driver deactivated - they can no longer log in.');
+      setSuccessMessage(t('driverDeactivated'));
       setDeactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not deactivate driver.');
+      setError(err instanceof ApiError ? err.message : t('deactivateError'));
       setDeactivating(null);
     }
   }
@@ -549,11 +584,11 @@ export function DriversPage() {
     if (!reactivating) return;
     try {
       await apiFetch(`/drivers/${reactivating.id}/reactivate`, { method: 'PATCH' });
-      setSuccessMessage('Driver reactivated - they can log in again.');
+      setSuccessMessage(t('driverReactivated'));
       setReactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reactivate driver.');
+      setError(err instanceof ApiError ? err.message : t('reactivateError'));
       setReactivating(null);
     }
   }
@@ -562,17 +597,20 @@ export function DriversPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   const selected = data.drivers.find((d) => d.driverId === selectedId) ?? null;
 
   return (
     <PageChassis
-      title="Drivers"
-      statusPill={{ mode: 'reporting', text: `${data.kpis.totalDrivers} drivers` }}
-      primaryAction={{ label: 'Add driver', onClick: () => setFormTarget('new') }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{
+        mode: 'reporting',
+        text: t('statusPill', { count: data.kpis.totalDrivers }),
+      }}
+      primaryAction={{ label: t('addDriver'), onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -582,22 +620,20 @@ export function DriversPage() {
       <ChassisGrid
         main={
           <>
-            <Card title="Driver performance" subtitle="worst first — this is the list you act on">
+            <Card title={t('driverPerformanceTitle')} subtitle={t('driverPerformanceSubtitle')}>
               {data.drivers.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">
-                  No driver has any assignment history yet - nothing to score.
-                </p>
+                <p className="p-4 text-sm text-txt-2">{t('noScoreHistory')}</p>
               ) : (
                 <>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                          <th className="px-4 py-2 text-right font-medium">Score</th>
-                          <th className="px-4 py-2 font-medium">Driver</th>
-                          <th className="px-4 py-2 font-medium">Category</th>
-                          <th className="px-4 py-2 font-medium">6-month trend</th>
-                          <th className="px-4 py-2 font-medium">Note</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableScore')}</th>
+                          <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                          <th className="px-4 py-2 font-medium">{t('tableCategory')}</th>
+                          <th className="px-4 py-2 font-medium">{t('tableTrend')}</th>
+                          <th className="px-4 py-2 font-medium">{t('tableNote')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -628,7 +664,7 @@ export function DriversPage() {
                               </div>
                             </td>
                             <td className="px-4 py-2 text-txt-2">
-                              {CATEGORY_LABELS[d.driverType]}
+                              {t(CATEGORY_LABEL_KEY[d.driverType])}
                             </td>
                             <td className="px-4 py-2">
                               <Sparkline points={d.sixMonthOnTimeRate} />
@@ -669,7 +705,7 @@ export function DriversPage() {
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <span className="text-xs text-txt-2">
-                            {CATEGORY_LABELS[d.driverType]}
+                            {t(CATEGORY_LABEL_KEY[d.driverType])}
                           </span>
                           <Sparkline points={d.sixMonthOnTimeRate} />
                         </div>
@@ -686,26 +722,29 @@ export function DriversPage() {
         }
         rail={
           <>
-            <Card title="AI Insights" subtitle="lowest score">
+            <Card title={t('aiInsightsTitle')} subtitle={t('aiInsightsSubtitle')}>
               {data.lowestScoring ? (
                 <div className="p-4">
                   <p className="text-sm font-medium text-txt">
-                    {data.lowestScoring.firstName} {data.lowestScoring.lastName}:{' '}
-                    {data.lowestScoring.raw}/90 raw
+                    {t('lowestScoringLine', {
+                      firstName: data.lowestScoring.firstName,
+                      lastName: data.lowestScoring.lastName,
+                      raw: data.lowestScoring.raw,
+                    })}
                   </p>
                   <p className="mt-1 text-xs text-txt-2">{data.lowestScoring.note}</p>
                 </div>
               ) : (
-                <p className="p-4 text-sm text-txt-2">No driver has scoring history yet.</p>
+                <p className="p-4 text-sm text-txt-2">{t('noScoringHistory')}</p>
               )}
             </Card>
 
             <Card
-              title="Driver alerts"
+              title={t('driverAlertsTitle')}
               subtitle={data.alerts.length > 0 ? String(data.alerts.length) : undefined}
             >
               {data.alerts.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing needs attention right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('noAlerts')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.alerts.map((a, i) => (
@@ -725,16 +764,16 @@ export function DriversPage() {
       />
 
       <Card
-        title="Score distribution"
-        subtitle={`${data.drivers.length} drivers across five bands`}
+        title={t('scoreDistributionTitle')}
+        subtitle={t('scoreDistributionSubtitle', { count: data.drivers.length })}
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Band</th>
-                <th className="px-4 py-2 text-right font-medium">Drivers</th>
-                <th className="px-4 py-2 text-right font-medium">Share</th>
+                <th className="px-4 py-2 font-medium">{t('tableBand')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableDriversCol')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableShare')}</th>
               </tr>
             </thead>
             <tbody>
@@ -746,7 +785,7 @@ export function DriversPage() {
                         className="inline-block h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: `var(--${BAND_ACCENT[row.band]})` }}
                       />
-                      {row.band}
+                      {t(BAND_LABEL_KEY[row.band])}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right text-txt-2">{row.count}</td>
@@ -760,21 +799,18 @@ export function DriversPage() {
 
       <ClosingRow
         left={
-          <Card title="What the score is built from" subtitle="weighting, of 90 raw points">
+          <Card title={t('scoreBuiltFromTitle')} subtitle={t('scoreBuiltFromSubtitle')}>
             <div className="space-y-3 px-4 pb-4">
-              <p className="text-xs text-txt-2">
-                Conduct (off-zone events, complaints) isn't scored yet - no geofencing or complaints
-                system exists in this product to compute it from.
-              </p>
+              <p className="text-xs text-txt-2">{t('conductNote')}</p>
               {[
-                { label: 'Payment reliability', pts: 50 },
-                { label: 'Honouring the contract', pts: 20 },
-                { label: 'Vehicle care', pts: 20 },
+                { label: t('rowPaymentReliability'), pts: 50 },
+                { label: t('rowHonouringContract'), pts: 20 },
+                { label: t('rowVehicleCare'), pts: 20 },
               ].map((row) => (
                 <div key={row.label}>
                   <div className="flex justify-between text-sm">
                     <span className="text-txt-2">{row.label}</span>
-                    <span className="text-txt">{row.pts} / 90</span>
+                    <span className="text-txt">{t('ptsOf90', { pts: row.pts })}</span>
                   </div>
                   <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
                     <div className="h-full bg-c1" style={{ width: `${(row.pts / 90) * 100}%` }} />
@@ -785,24 +821,21 @@ export function DriversPage() {
           </Card>
         }
         right={
-          <Card title="Missed payments this month" subtitle="across all drivers">
+          <Card title={t('missedPaymentsTitle')} subtitle={t('missedPaymentsSubtitle')}>
             <div className="px-4 pb-4">
               <p className="text-2xl font-semibold text-crit">
                 {formatTZS(data.missedPaymentTotalThisMonth)}
               </p>
-              <p className="mt-1 text-xs text-txt-2">
-                Sum of every assignment's shortfall this month - the same definition as the
-                Operations Center's outstanding-today figure.
-              </p>
+              <p className="mt-1 text-xs text-txt-2">{t('missedPaymentsNote')}</p>
             </div>
           </Card>
         }
       />
 
-      <Card title="Manage drivers" subtitle="edit, deactivate, or reset a password">
+      <Card title={t('manageDriversTitle')} subtitle={t('manageDriversSubtitle')}>
         <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3">
           <input
-            placeholder="Search name or license number…"
+            placeholder={t('searchPlaceholder')}
             value={manageSearch}
             onChange={(e) => setManageSearch(e.target.value)}
             className="w-full rounded border border-line bg-panel px-3 py-1.5 text-sm text-txt sm:w-64"
@@ -813,31 +846,31 @@ export function DriversPage() {
               checked={manageShowDeactivated}
               onChange={(e) => setManageShowDeactivated(e.target.checked)}
             />
-            Show deactivated
+            {t('showDeactivated')}
           </label>
         </div>
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Phone</th>
-                <th className="px-4 py-2 font-medium">Password recovery</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableName')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableCategory')}</th>
+                <th className="px-4 py-2 font-medium">{t('tablePhone')}</th>
+                <th className="px-4 py-2 font-medium">{t('tablePasswordRecovery')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {allDrivers === null ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
-                    Loading…
+                    {t('loading')}
                   </td>
                 </tr>
               ) : filteredManageDrivers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-txt-2">
-                    No drivers found.
+                    {t('noDriversFound')}
                   </td>
                 </tr>
               ) : (
@@ -854,7 +887,7 @@ export function DriversPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-txt-2">{CATEGORY_LABELS[d.driverType]}</td>
+                    <td className="px-4 py-2 text-txt-2">{t(CATEGORY_LABEL_KEY[d.driverType])}</td>
                     <td className="px-4 py-2 text-txt-2">{d.user.phone}</td>
                     <td className="px-4 py-2 text-txt-2">
                       <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
@@ -866,21 +899,21 @@ export function DriversPage() {
                             onClick={() => setFormTarget(d)}
                             className="mr-3 text-sm font-medium text-c1 hover:underline"
                           >
-                            Edit
+                            {tCommon('edit')}
                           </button>
                           {user?.role === 'OWNER' && (
                             <button
                               onClick={() => setResettingPassword(d)}
                               className="mr-3 text-sm font-medium text-c1 hover:underline"
                             >
-                              Reset password
+                              {t('resetPassword')}
                             </button>
                           )}
                           <button
                             onClick={() => setDeactivating(d)}
                             className="text-sm font-medium text-crit hover:underline"
                           >
-                            Deactivate
+                            {t('deactivate')}
                           </button>
                         </>
                       ) : (
@@ -888,7 +921,7 @@ export function DriversPage() {
                           onClick={() => setReactivating(d)}
                           className="text-sm font-medium text-c1 hover:underline"
                         >
-                          Reactivate
+                          {t('reactivate')}
                         </button>
                       )}
                     </td>
@@ -901,9 +934,9 @@ export function DriversPage() {
 
         <div className="md:hidden">
           {allDrivers === null ? (
-            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('loading')}</p>
           ) : filteredManageDrivers.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No drivers found.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noDriversFound')}</p>
           ) : (
             filteredManageDrivers.map((d) => (
               <div
@@ -919,7 +952,7 @@ export function DriversPage() {
                   {!d.isActive && <StatusBadge status="INACTIVE" styles={INACTIVE_STYLES} />}
                 </div>
                 <p className="mt-1 text-xs text-txt-2">
-                  {CATEGORY_LABELS[d.driverType]} · {d.user.phone}
+                  {t(CATEGORY_LABEL_KEY[d.driverType])} · {d.user.phone}
                 </p>
                 <div className="mt-1 text-xs text-txt-2">
                   <PasswordRecoveryLabel emailProvenAt={d.user.emailProvenAt} />
@@ -931,21 +964,21 @@ export function DriversPage() {
                         onClick={() => setFormTarget(d)}
                         className="text-sm font-medium text-c1 hover:underline"
                       >
-                        Edit
+                        {tCommon('edit')}
                       </button>
                       {user?.role === 'OWNER' && (
                         <button
                           onClick={() => setResettingPassword(d)}
                           className="text-sm font-medium text-c1 hover:underline"
                         >
-                          Reset password
+                          {t('resetPassword')}
                         </button>
                       )}
                       <button
                         onClick={() => setDeactivating(d)}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Deactivate
+                        {t('deactivate')}
                       </button>
                     </>
                   ) : (
@@ -953,7 +986,7 @@ export function DriversPage() {
                       onClick={() => setReactivating(d)}
                       className="text-sm font-medium text-c1 hover:underline"
                     >
-                      Reactivate
+                      {t('reactivate')}
                     </button>
                   )}
                 </div>
@@ -984,9 +1017,12 @@ export function DriversPage() {
 
       {deactivating && (
         <ConfirmDialog
-          title="Deactivate driver"
-          message={`Deactivate ${deactivating.user.firstName} ${deactivating.user.lastName}? They will immediately lose the ability to log in. Their assignment/payment history is kept.`}
-          confirmLabel="Deactivate"
+          title={t('deactivateDriverTitle')}
+          message={t('deactivateDriverMessage', {
+            firstName: deactivating.user.firstName,
+            lastName: deactivating.user.lastName,
+          })}
+          confirmLabel={t('deactivate')}
           danger
           onConfirm={handleDeactivate}
           onCancel={() => setDeactivating(null)}
@@ -995,9 +1031,12 @@ export function DriversPage() {
 
       {reactivating && (
         <ConfirmDialog
-          title="Reactivate driver"
-          message={`Reactivate ${reactivating.user.firstName} ${reactivating.user.lastName}? This restores their ability to log in.`}
-          confirmLabel="Reactivate"
+          title={t('reactivateDriverTitle')}
+          message={t('reactivateDriverMessage', {
+            firstName: reactivating.user.firstName,
+            lastName: reactivating.user.lastName,
+          })}
+          confirmLabel={t('reactivate')}
           onConfirm={handleReactivate}
           onCancel={() => setReactivating(null)}
         />
