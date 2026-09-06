@@ -9,5 +9,9 @@
   "cancel": "Cancel",
   "save": "Save",
   "saving": "Saving…",
-  "confirm": "Confirm"
+  "confirm": "Confirm",
+  "vehicleTypeMotorbike": "Motorbike",
+  "vehicleTypeBajaji": "Bajaji",
+  "vehicleTypeCar": "Car",
+  "vehicleTypeTruck": "Truck"
 }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Marker } from 'react-leaflet';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -26,44 +28,78 @@ const REFRESH_MS = 30_000;
 
 const STATUS_OPTIONS: MotorcycleStatus[] = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 const VEHICLE_TYPE_OPTIONS: VehicleType[] = ['MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
+
+// Stage L7 - centralized into common.json: this is the third page needing
+// this VehicleType label map (ExpensesPage's own in L4, TransportPage's own
+// in L6, both still using their local near-duplicates - not migrated here,
+// see this stage's report). New pages should consume these common keys
+// directly rather than building another local copy.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
 };
 
-function kpisToTiles(data: FleetSummaryResponse): KpiTile[] {
+// Stage L7 - the first page needing a label map for this enum (unlike
+// VehicleType above), so no centralization question yet - same as L5's
+// STATUS_LABEL_KEY for TransportJobStatus.
+const MOTORCYCLE_STATUS_LABEL_KEY: Record<MotorcycleStatus, string> = {
+  ACTIVE: 'motorcycleStatusActive',
+  MAINTENANCE: 'motorcycleStatusMaintenance',
+  RETIRED: 'motorcycleStatusRetired',
+};
+
+// Stage L7 - FleetVehicleRow/IdleVehicleRow type vehicleType/status as plain
+// `string` (not the narrower enums), so these guard against a value the
+// label maps above don't recognize by falling back to the raw string,
+// matching the `?? t.vehicleType` fallback the pre-L7 code already used.
+function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
+  return vehicleType in VEHICLE_TYPE_LABEL_KEY
+    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
+    : vehicleType;
+}
+
+function motorcycleStatusLabel(status: string, t: TFunction<'fleet'>): string {
+  return status in MOTORCYCLE_STATUS_LABEL_KEY
+    ? t(MOTORCYCLE_STATUS_LABEL_KEY[status as MotorcycleStatus])
+    : status;
+}
+
+function kpisToTiles(data: FleetSummaryResponse, t: TFunction<'fleet'>): KpiTile[] {
   const k = data.kpis;
   return [
     {
-      label: 'Total vehicles',
+      // Stage L7 - k.totalVehicles.byType is backend-computed
+      // (fleet-summary.service.ts builds it server-side, e.g. "3 motorbike
+      // · 2 car") and stays untouched, same boundary as ApiError.message.
+      label: t('kpiTotalVehicles'),
       value: String(k.totalVehicles.count),
       delta: k.totalVehicles.byType,
       accentColor: 'c1',
     },
     {
-      label: 'On the road',
+      label: t('kpiOnTheRoad'),
       value: String(k.onRoadToday.count),
-      delta: `${k.onRoadToday.percentOfFleet}% of the fleet`,
+      delta: t('kpiOnTheRoadDelta', { percent: k.onRoadToday.percentOfFleet }),
       accentColor: 'good',
     },
     {
-      label: 'Idle, no driver',
+      label: t('kpiIdleNoDriver'),
       value: String(k.idleToday.count),
-      delta: `${formatTZS(k.idleToday.targetLost)} a day lost`,
+      delta: t('kpiIdleNoDriverDelta', { amount: formatTZS(k.idleToday.targetLost) }),
       accentColor: k.idleToday.count > 0 ? 'warn' : 'good',
     },
     {
-      label: 'In workshop',
+      label: t('kpiInWorkshop'),
       value: String(k.inWorkshop.count),
       accentColor: k.inWorkshop.count > 0 ? 'warn' : 'good',
     },
-    { label: 'Collected today', value: formatTZS(k.collectedToday.amount), accentColor: 'c1' },
+    { label: t('kpiCollectedToday'), value: formatTZS(k.collectedToday.amount), accentColor: 'c1' },
     {
-      label: 'Net per vehicle',
+      label: t('kpiNetPerVehicle'),
       value: formatTZS(k.netPerVehicleThisMonth.amount),
-      delta: 'this month',
+      delta: t('kpiNetPerVehicleDelta'),
       accentColor: 'violet',
     },
   ];
@@ -104,6 +140,8 @@ function MotorcycleFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('fleet');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = motorcycle != null;
   const [form, setForm] = useState<FormState>(() => toFormState(motorcycle));
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +152,7 @@ function MotorcycleFormModal({
     setError(null);
 
     if (!form.registrationNumber.trim()) {
-      setError('Registration number is required.');
+      setError(t('errorRegistrationRequired'));
       return;
     }
 
@@ -135,7 +173,7 @@ function MotorcycleFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Vehicle updated.');
+        onSaved(t('vehicleUpdated'));
       } else {
         const payload: CreateMotorcyclePayload = {
           registrationNumber: form.registrationNumber.trim(),
@@ -147,20 +185,22 @@ function MotorcycleFormModal({
           operatingArea: form.operatingArea.trim() || undefined,
         };
         await apiFetch('/motorcycles', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Vehicle added.');
+        onSaved(t('vehicleAdded'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit vehicle' : 'Add vehicle'} onClose={onClose}>
+    <Modal title={isEdit ? t('editVehicleTitle') : t('addVehicle')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Registration number</label>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            {t('fieldRegistrationNumber')}
+          </label>
           <input
             value={form.registrationNumber}
             onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
@@ -168,22 +208,22 @@ function MotorcycleFormModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Vehicle type</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldVehicleType')}</label>
           <select
             value={form.vehicleType}
             onChange={(e) => setForm({ ...form, vehicleType: e.target.value as VehicleType })}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           >
-            {VEHICLE_TYPE_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {VEHICLE_TYPE_LABELS[t]}
+            {VEHICLE_TYPE_OPTIONS.map((vt) => (
+              <option key={vt} value={vt}>
+                {tCommon(VEHICLE_TYPE_LABEL_KEY[vt])}
               </option>
             ))}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Make</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldMake')}</label>
             <input
               value={form.make}
               onChange={(e) => setForm({ ...form, make: e.target.value })}
@@ -191,7 +231,7 @@ function MotorcycleFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Model</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldModel')}</label>
             <input
               value={form.model}
               onChange={(e) => setForm({ ...form, model: e.target.value })}
@@ -201,7 +241,7 @@ function MotorcycleFormModal({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Year</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldYear')}</label>
             <input
               type="number"
               value={form.year}
@@ -210,7 +250,9 @@ function MotorcycleFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">GPS device id</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldGpsDeviceId')}
+            </label>
             <input
               value={form.gpsDeviceId}
               onChange={(e) => setForm({ ...form, gpsDeviceId: e.target.value })}
@@ -220,22 +262,20 @@ function MotorcycleFormModal({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Operating area <span className="text-txt-2">(optional, you set this by hand)</span>
+            {t('fieldOperatingArea')}{' '}
+            <span className="text-txt-2">{t('operatingAreaOptional')}</span>
           </label>
           <input
             value={form.operatingArea}
             onChange={(e) => setForm({ ...form, operatingArea: e.target.value })}
-            placeholder="e.g. Kariakoo"
+            placeholder={t('operatingAreaPlaceholder')}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
-          <p className="mt-1 text-xs text-gray-500">
-            Free text - there's no zone detection. The Fleet page groups vehicles by whatever you
-            type here.
-          </p>
+          <p className="mt-1 text-xs text-gray-500">{t('operatingAreaHelp')}</p>
         </div>
         {isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Status</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldStatus')}</label>
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value as MotorcycleStatus })}
@@ -243,7 +283,7 @@ function MotorcycleFormModal({
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {t(MOTORCYCLE_STATUS_LABEL_KEY[s])}
                 </option>
               ))}
             </select>
@@ -258,14 +298,14 @@ function MotorcycleFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -274,6 +314,7 @@ function MotorcycleFormModal({
 }
 
 function TypeStack({ breakdown }: { breakdown: FleetSummaryResponse['typeBreakdown'] }) {
+  const { t } = useTranslation('common');
   const colors: Record<string, string> = {
     MOTORBIKE: 'var(--c1)',
     BAJAJI: 'var(--c2)',
@@ -283,25 +324,25 @@ function TypeStack({ breakdown }: { breakdown: FleetSummaryResponse['typeBreakdo
   return (
     <div>
       <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-panel-2">
-        {breakdown.map((t) => (
+        {breakdown.map((row) => (
           <div
-            key={t.vehicleType}
-            style={{ width: `${t.share}%`, backgroundColor: colors[t.vehicleType] }}
+            key={row.vehicleType}
+            style={{ width: `${row.share}%`, backgroundColor: colors[row.vehicleType] }}
           />
         ))}
       </div>
       <div className="mt-3 space-y-1.5 text-sm">
-        {breakdown.map((t) => (
-          <div key={t.vehicleType} className="flex items-center justify-between">
+        {breakdown.map((row) => (
+          <div key={row.vehicleType} className="flex items-center justify-between">
             <span className="flex items-center gap-2 text-txt-2">
               <span
                 className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: colors[t.vehicleType] }}
+                style={{ backgroundColor: colors[row.vehicleType] }}
               />
-              {VEHICLE_TYPE_LABELS[t.vehicleType as VehicleType] ?? t.vehicleType}
+              {vehicleTypeLabel(row.vehicleType, t)}
             </span>
             <span className="text-txt">
-              {t.count} <span className="text-txt-3">{t.share}%</span>
+              {row.count} <span className="text-txt-3">{row.share}%</span>
             </span>
           </div>
         ))}
@@ -311,6 +352,8 @@ function TypeStack({ breakdown }: { breakdown: FleetSummaryResponse['typeBreakdo
 }
 
 export function FleetPage() {
+  const { t } = useTranslation('fleet');
+  const { t: tCommon } = useTranslation('common');
   const [data, setData] = useState<FleetSummaryResponse | null>(null);
   const [positions, setPositions] = useState<FleetVehiclePosition[] | null>(null);
   // Stage UI2 - fleet-summary's "All vehicles" table only lists active
@@ -345,7 +388,7 @@ export function FleetPage() {
       setDeactivatedVehicles(allVehicles.filter((v) => !v.isActive));
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load the fleet summary.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
     }
   }
 
@@ -376,7 +419,7 @@ export function FleetPage() {
       const full = await apiFetch<Motorcycle>(`/motorcycles/${motorcycleId}`);
       setEditing(full);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load the vehicle.');
+      setError(err instanceof ApiError ? err.message : t('loadVehicleError'));
     }
   }
 
@@ -384,11 +427,11 @@ export function FleetPage() {
     if (!deactivating) return;
     try {
       await apiFetch(`/motorcycles/${deactivating.id}`, { method: 'DELETE' });
-      setSuccessMessage('Vehicle deactivated.');
+      setSuccessMessage(t('vehicleDeactivated'));
       setDeactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not deactivate vehicle.');
+      setError(err instanceof ApiError ? err.message : t('deactivateError'));
       setDeactivating(null);
     }
   }
@@ -397,11 +440,11 @@ export function FleetPage() {
     if (!reactivating) return;
     try {
       await apiFetch(`/motorcycles/${reactivating.id}/reactivate`, { method: 'PATCH' });
-      setSuccessMessage('Vehicle reactivated.');
+      setSuccessMessage(t('vehicleReactivated'));
       setReactivating(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reactivate vehicle.');
+      setError(err instanceof ApiError ? err.message : t('reactivateError'));
       setReactivating(null);
     }
   }
@@ -410,17 +453,17 @@ export function FleetPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   const live = (positions ?? []).filter((p) => !p.offline);
 
   return (
     <PageChassis
-      title="Fleet"
-      statusPill={{ mode: 'live', text: `LIVE · ${live.length} reporting` }}
-      primaryAction={{ label: 'Add vehicle', onClick: () => setFormTarget('new') }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: t('statusLive', { count: live.length }) }}
+      primaryAction={{ label: t('addVehicle'), onClick: () => setFormTarget('new') }}
+      kpis={kpisToTiles(data, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -430,7 +473,10 @@ export function FleetPage() {
       <ChassisGrid
         main={
           <>
-            <Card title="Live fleet" subtitle={`${live.length} reporting`}>
+            <Card
+              title={t('liveFleetTitle')}
+              subtitle={t('reportingCount', { count: live.length })}
+            >
               <VehicleMap
                 center={DEFAULT_CENTER}
                 fitBoundsTo={live.map((p) => [p.latitude, p.longitude])}
@@ -459,7 +505,10 @@ export function FleetPage() {
               </div>
             </Card>
 
-            <Card title="Fleet by type" subtitle={`${data.kpis.totalVehicles.count} vehicles`}>
+            <Card
+              title={t('fleetByTypeTitle')}
+              subtitle={t('fleetByTypeSubtitle', { count: data.kpis.totalVehicles.count })}
+            >
               <TypeStack breakdown={data.typeBreakdown} />
             </Card>
           </>
@@ -467,14 +516,16 @@ export function FleetPage() {
         rail={
           <>
             {data.worstPerformerThisMonth ? (
-              <Card title="Needs attention" subtitle="Losing money this month">
+              <Card title={t('needsAttentionTitle')} subtitle={t('needsAttentionSubtitle')}>
                 <div className="p-4">
                   <p className="text-sm font-medium text-txt">
                     {data.worstPerformerThisMonth.registrationNumber}
                   </p>
                   <p className="mt-1 text-xs text-txt-2">
-                    Revenue {formatTZS(data.worstPerformerThisMonth.revenue)}, expenses{' '}
-                    {formatTZS(data.worstPerformerThisMonth.expenses)}.
+                    {t('needsAttentionRevenueExpenses', {
+                      revenue: formatTZS(data.worstPerformerThisMonth.revenue),
+                      expenses: formatTZS(data.worstPerformerThisMonth.expenses),
+                    })}
                   </p>
                   <p className="mt-2 text-lg font-semibold text-crit">
                     {formatTZS(data.worstPerformerThisMonth.netProfit)}
@@ -482,9 +533,12 @@ export function FleetPage() {
                 </div>
               </Card>
             ) : (
-              <Card title="Alerts" subtitle={data.alerts.length > 0 ? 'Needs action' : undefined}>
+              <Card
+                title={t('alertsTitle')}
+                subtitle={data.alerts.length > 0 ? t('alertsSubtitle') : undefined}
+              >
                 {data.alerts.length === 0 ? (
-                  <p className="p-4 text-sm text-txt-2">Nothing needs attention right now.</p>
+                  <p className="p-4 text-sm text-txt-2">{t('alertsEmpty')}</p>
                 ) : (
                   <div className="divide-y divide-line-soft">
                     {data.alerts.map((alert, i) => (
@@ -501,19 +555,19 @@ export function FleetPage() {
               </Card>
             )}
 
-            <Card title="Where they are, in words" subtitle="owner-set, not tracked">
+            <Card title={t('whereAreTheyTitle')} subtitle={t('whereAreTheySubtitle')}>
               <div className="divide-y divide-line-soft">
                 {data.areaGroups.map((g) => (
                   <div key={g.vehicleType} className="px-4 py-2.5">
                     <p className="text-sm font-medium text-txt">
-                      {VEHICLE_TYPE_LABELS[g.vehicleType as VehicleType] ?? g.vehicleType}
+                      {vehicleTypeLabel(g.vehicleType, tCommon)}
                     </p>
                     <p className="mt-0.5 text-xs text-txt-2">
                       {g.areas.length === 0 && g.unset === 0
-                        ? 'None'
+                        ? t('none')
                         : [
                             ...g.areas.map((a) => `${a.count} ${a.area}`),
-                            g.unset > 0 ? `${g.unset} area not set` : null,
+                            g.unset > 0 ? t('areaNotSet', { count: g.unset }) : null,
                           ]
                             .filter(Boolean)
                             .join(' · ')}
@@ -527,22 +581,22 @@ export function FleetPage() {
       />
 
       <Card
-        title="All vehicles"
-        subtitle={`${data.vehicles.length} rows · sorted by what needs attention`}
+        title={t('allVehiclesTitle')}
+        subtitle={t('allVehiclesSubtitle', { count: data.vehicles.length })}
       >
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Registration</th>
-                <th className="px-4 py-2 font-medium">Type</th>
-                <th className="px-4 py-2 font-medium">Driver</th>
-                <th className="px-4 py-2 font-medium">Area</th>
-                <th className="px-4 py-2 text-right font-medium">Target</th>
-                <th className="px-4 py-2 text-right font-medium">Paid</th>
-                <th className="px-4 py-2 text-right font-medium">Net</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableRegistration')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableType')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableArea')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableTarget')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tablePaid')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableNet')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -557,7 +611,7 @@ export function FleetPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-2 text-txt-2">
-                    {VEHICLE_TYPE_LABELS[v.vehicleType as VehicleType] ?? v.vehicleType}
+                    {vehicleTypeLabel(v.vehicleType, tCommon)}
                   </td>
                   <td className="px-4 py-2 text-txt-2">{v.currentDriver ?? '—'}</td>
                   <td className="px-4 py-2 text-txt-2">{v.operatingArea ?? '—'}</td>
@@ -570,13 +624,13 @@ export function FleetPage() {
                   >
                     {formatTZS(v.netThisMonth)}
                   </td>
-                  <td className="px-4 py-2 text-txt-2">{v.status}</td>
+                  <td className="px-4 py-2 text-txt-2">{motorcycleStatusLabel(v.status, t)}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     <button
                       onClick={() => void openEdit(v.motorcycleId)}
                       className="mr-3 text-sm font-medium text-c1 hover:underline"
                     >
-                      Edit
+                      {t('edit')}
                     </button>
                     <button
                       onClick={() =>
@@ -587,7 +641,7 @@ export function FleetPage() {
                       }
                       className="text-sm font-medium text-crit hover:underline"
                     >
-                      Deactivate
+                      {t('deactivate')}
                     </button>
                   </td>
                 </tr>
@@ -611,15 +665,18 @@ export function FleetPage() {
                 >
                   {v.registrationNumber}
                 </Link>
-                <span className="text-sm text-txt-2">{v.status}</span>
+                <span className="text-sm text-txt-2">{motorcycleStatusLabel(v.status, t)}</span>
               </div>
               <p className="mt-1 text-xs text-txt-2">
-                {VEHICLE_TYPE_LABELS[v.vehicleType as VehicleType] ?? v.vehicleType} ·{' '}
-                {v.currentDriver ?? '—'} · {v.operatingArea ?? '—'}
+                {vehicleTypeLabel(v.vehicleType, tCommon)} · {v.currentDriver ?? '—'} ·{' '}
+                {v.operatingArea ?? '—'}
               </p>
               <div className="mt-1 flex items-center justify-between text-sm">
                 <span className="text-txt-2">
-                  Target {formatTZS(v.targetThisMonth)} · Paid {formatTZS(v.paidThisMonth)}
+                  {t('mobileTargetPaid', {
+                    target: formatTZS(v.targetThisMonth),
+                    paid: formatTZS(v.paidThisMonth),
+                  })}
                 </span>
                 <span
                   className={`font-medium ${parseFloat(v.netThisMonth) >= 0 ? 'text-good' : 'text-crit'}`}
@@ -632,7 +689,7 @@ export function FleetPage() {
                   onClick={() => void openEdit(v.motorcycleId)}
                   className="text-sm font-medium text-c1 hover:underline"
                 >
-                  Edit
+                  {t('edit')}
                 </button>
                 <button
                   onClick={() =>
@@ -643,7 +700,7 @@ export function FleetPage() {
                   }
                   className="text-sm font-medium text-crit hover:underline"
                 >
-                  Deactivate
+                  {t('deactivate')}
                 </button>
               </div>
             </div>
@@ -654,11 +711,11 @@ export function FleetPage() {
       <ClosingRow
         left={
           <Card
-            title="Idle vehicles"
-            subtitle={`${data.idleVehicles.length} · each one is a decision`}
+            title={t('idleVehiclesTitle')}
+            subtitle={t('idleVehiclesSubtitle', { count: data.idleVehicles.length })}
           >
             {data.idleVehicles.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">Every active vehicle has a driver today.</p>
+              <p className="p-4 text-sm text-txt-2">{t('allActiveHaveDriver')}</p>
             ) : (
               <div className="divide-y divide-line-soft px-4">
                 {data.idleVehicles.slice(0, 6).map((v) => (
@@ -666,12 +723,16 @@ export function FleetPage() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium text-txt">{v.registrationNumber}</span>
                       <span className="text-txt-2">
-                        {v.vehicleType.toLowerCase()} · {v.daysUnassigned}d
+                        {vehicleTypeLabel(v.vehicleType, tCommon)} · {v.daysUnassigned}d
                       </span>
                       <span className="font-medium text-crit">
                         {v.lostSoFar ? formatTZS(v.lostSoFar) : '—'}
                       </span>
                     </div>
+                    {/* Stage L7 - v.reason ("No driver since {date}" / "Never
+                        assigned a driver") is backend-generated in
+                        idle-vehicles.util.ts and stays untouched, same
+                        boundary as ApiError.message. */}
                     <p className="mt-0.5 text-xs text-txt-2">{v.reason}</p>
                   </div>
                 ))}
@@ -680,11 +741,9 @@ export function FleetPage() {
           </Card>
         }
         right={
-          <Card title="Net per vehicle by type" subtitle="this month, TZS">
+          <Card title={t('netPerVehicleTitle')} subtitle={t('netPerVehicleSubtitle')}>
             {data.netPerVehicleByType.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">
-                No revenue or expenses recorded yet this month.
-              </p>
+              <p className="p-4 text-sm text-txt-2">{t('noRevenueExpenses')}</p>
             ) : (
               <div className="divide-y divide-line-soft px-4">
                 {data.netPerVehicleByType.map((row) => (
@@ -692,12 +751,8 @@ export function FleetPage() {
                     key={row.vehicleType}
                     className="flex items-center justify-between py-2.5 text-sm"
                   >
-                    <span className="text-txt">
-                      {VEHICLE_TYPE_LABELS[row.vehicleType as VehicleType] ?? row.vehicleType}
-                    </span>
-                    <span className="text-txt-2">
-                      {row.count} vehicle{row.count === 1 ? '' : 's'}
-                    </span>
+                    <span className="text-txt">{vehicleTypeLabel(row.vehicleType, tCommon)}</span>
+                    <span className="text-txt-2">{t('vehicleCount', { count: row.count })}</span>
                     <span
                       className={`font-medium ${parseFloat(row.amount) >= 0 ? 'text-good' : 'text-crit'}`}
                     >
@@ -713,14 +768,14 @@ export function FleetPage() {
 
       {deactivatedVehicles.length > 0 && (
         <Card
-          title="Deactivated vehicles"
-          subtitle={`${deactivatedVehicles.length} hidden from the fleet`}
+          title={t('deactivatedVehiclesTitle')}
+          subtitle={t('deactivatedVehiclesSubtitle', { count: deactivatedVehicles.length })}
         >
           <div className="divide-y divide-line-soft px-4">
             {deactivatedVehicles.map((v) => (
               <div key={v.id} className="flex items-center justify-between py-2.5 text-sm">
                 <span className="text-txt-2">
-                  {v.registrationNumber} · {VEHICLE_TYPE_LABELS[v.vehicleType]}
+                  {v.registrationNumber} · {vehicleTypeLabel(v.vehicleType, tCommon)}
                 </span>
                 <button
                   onClick={() =>
@@ -728,7 +783,7 @@ export function FleetPage() {
                   }
                   className="text-sm font-medium text-c1 hover:underline"
                 >
-                  Reactivate
+                  {t('reactivate')}
                 </button>
               </div>
             ))}
@@ -754,9 +809,11 @@ export function FleetPage() {
 
       {deactivating && (
         <ConfirmDialog
-          title="Deactivate vehicle"
-          message={`Deactivate ${deactivating.registrationNumber}? It will be hidden from the fleet, but its history is kept.`}
-          confirmLabel="Deactivate"
+          title={t('deactivateVehicleTitle')}
+          message={t('deactivateVehicleMessage', {
+            registration: deactivating.registrationNumber,
+          })}
+          confirmLabel={t('deactivate')}
           danger
           onConfirm={handleDeactivate}
           onCancel={() => setDeactivating(null)}
@@ -765,9 +822,11 @@ export function FleetPage() {
 
       {reactivating && (
         <ConfirmDialog
-          title="Reactivate vehicle"
-          message={`Reactivate ${reactivating.registrationNumber}?`}
-          confirmLabel="Reactivate"
+          title={t('reactivateVehicleTitle')}
+          message={t('reactivateVehicleMessage', {
+            registration: reactivating.registrationNumber,
+          })}
+          confirmLabel={t('reactivate')}
           onConfirm={handleReactivate}
           onCancel={() => setReactivating(null)}
         />

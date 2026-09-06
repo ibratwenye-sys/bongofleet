@@ -9,5 +9,9 @@
   "cancel": "Ghairi",
   "save": "Hifadhi",
   "saving": "Inahifadhi…",
-  "confirm": "Thibitisha"
+  "confirm": "Thibitisha",
+  "vehicleTypeMotorbike": "Pikipiki",
+  "vehicleTypeBajaji": "Bajaji",
+  "vehicleTypeCar": "Gari",
+  "vehicleTypeTruck": "Lori"
 }
