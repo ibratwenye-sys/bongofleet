@@ -2,5 +2,8 @@
   "close": "Funga",
   "closeMoreMenu": "Funga menyu ya Zaidi",
   "more": "Zaidi",
-  "logout": "Toka"
+  "logout": "Toka",
+  "statusLive": "Hai",
+  "statusStale": "Zamani",
+  "statusOffline": "Haipo Mtandaoni"
 }

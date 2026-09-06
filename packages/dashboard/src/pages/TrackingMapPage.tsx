@@ -10,7 +10,7 @@ import type {
   VehicleType,
 } from '../lib/types';
 import { VehicleMap } from '../components/VehicleMap';
-import { markerStatus, vehicleDivIcon, STATUS_COLOR, STATUS_LABEL } from '../lib/gps-status';
+import { markerStatus, vehicleDivIcon, STATUS_COLOR, statusLabel } from '../lib/gps-status';
 import { today, formatDateTime } from '../lib/format';
 import { PageChassis } from '../components/chassis/PageChassis';
 import type { KpiTile } from '../components/chassis/KpiRail';
@@ -159,7 +159,7 @@ export function TrackingMapPage() {
     positions === null
       ? undefined
       : (['live', 'stale', 'offline'] as const).map((status) => ({
-          label: STATUS_LABEL[status],
+          label: statusLabel(status),
           value: String(positions.filter((p) => markerStatus(p) === status).length),
           accentColor: status === 'live' ? 'good' : status === 'stale' ? 'warn' : 'c1',
         }));
@@ -199,7 +199,7 @@ export function TrackingMapPage() {
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: STATUS_COLOR[status] }}
             />
-            {STATUS_LABEL[status]}
+            {statusLabel(status)}
           </span>
         ))}
         <span>📱 Phone · 📡 Device</span>
@@ -292,7 +292,7 @@ export function TrackingMapPage() {
                     className="font-medium"
                     style={{ color: STATUS_COLOR[markerStatus(selected)] }}
                   >
-                    {STATUS_LABEL[markerStatus(selected)]}
+                    {statusLabel(markerStatus(selected))}
                   </dd>
                 </div>
                 <div className="flex justify-between">

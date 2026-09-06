@@ -2,6 +2,8 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from '../locales/en/common.json';
 import sw from '../locales/sw/common.json';
+import enOperationsCenter from '../locales/en/operationsCenter.json';
+import swOperationsCenter from '../locales/sw/operationsCenter.json';
 import type { Language } from './types';
 
 /**
@@ -11,14 +13,15 @@ import type { Language } from './types';
  * OS preference" precedent. auth-context.tsx calls changeLanguage() once
  * the signed-in user's own account preference is known.
  *
- * Only the `common` namespace exists so far - shared chassis/chrome
- * strings only, per this stage's scope. Per-page namespaces are later
- * stages' work (DESIGN_SWAHILI_UI.md), not built ahead of need here.
+ * `common` (shared chassis/chrome strings) plus one namespace per page
+ * batch as Stage L2 translates them (operationsCenter first - see
+ * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of need:
+ * a page gets its own namespace only once it's actually translated.
  */
 void i18n.use(initReactI18next).init({
   resources: {
-    en: { common: en },
-    sw: { common: sw },
+    en: { common: en, operationsCenter: enOperationsCenter },
+    sw: { common: sw, operationsCenter: swOperationsCenter },
   },
   lng: 'en',
   fallbackLng: 'en',

@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import i18n from './i18n';
 import type { FleetVehiclePosition } from './types';
 
 export type MarkerStatus = 'live' | 'stale' | 'offline';
@@ -25,11 +26,24 @@ export const STATUS_COLOR: Record<MarkerStatus, string> = {
   offline: '#6b7280', // gray-500
 };
 
-export const STATUS_LABEL: Record<MarkerStatus, string> = {
-  live: 'Live',
-  stale: 'Stale',
-  offline: 'Offline',
+const STATUS_LABEL_KEY: Record<MarkerStatus, string> = {
+  live: 'statusLive',
+  stale: 'statusStale',
+  offline: 'statusOffline',
 };
+
+/**
+ * Stage L2 - reads i18next's current language at call time rather than
+ * taking it as a parameter, same pattern lib/format.ts established in
+ * Stage L1: this is shared across pages (OperationsCenterPage,
+ * TrackingMapPage) that don't otherwise touch i18n, so threading a
+ * language argument through every call site would be pure churn. Lives in
+ * `common` (defaultNS), not a page namespace - the label isn't
+ * Operations-Center- or Live-Map-specific.
+ */
+export function statusLabel(status: MarkerStatus): string {
+  return i18n.t(STATUS_LABEL_KEY[status]);
+}
 
 // §3 - DEVICE hardware vs. a rider's phone. MANUAL fixes (a hand-entered
 // position, never actually written by anything yet) get no badge - there

@@ -1,0 +1,63 @@
+{
+  "title": "Operations Center",
+  "statusLive": "LIVE · {{count}} reporting",
+  "recordPayment": "Record payment",
+  "loading": "Loading…",
+  "loadError": "Could not load the operations center.",
+
+  "kpiOnTheRoad": "On the road",
+  "kpiOnTheRoadDeltaSame": "same as yesterday",
+  "kpiOnTheRoadDeltaChange": "{{arrow}} {{count}} vs yesterday",
+
+  "kpiCollectedToday": "Collected today",
+  "kpiCollectedTodayDelta": "{{percent}}% of {{target}} target",
+
+  "kpiNotDeposited": "Not deposited",
+  "kpiNotDepositedDelta": "{{amount}} outstanding",
+
+  "kpiOwnershipPlans": "Ownership plans",
+  "kpiOwnershipPlansDelta": "active",
+
+  "kpiServiceDue": "Service due",
+  "kpiServiceDueDeltaOverdue": "{{count}} overdue",
+  "kpiServiceDueDeltaNone": "none overdue",
+
+  "kpiProfitToday": "Profit today",
+  "kpiProfitTodayDeltaPositive": "in the black",
+  "kpiProfitTodayDeltaNegative": "in the red",
+
+  "chartToday": "Today",
+
+  "liveFleetTitle": "Live fleet",
+  "reportingCount": "{{count}} reporting",
+
+  "collectionTitle": "Collection — last 14 days",
+  "collectionSubtitle": "TZS",
+
+  "outstandingTitle": "Today's outstanding assignments",
+  "outstandingSubtitle": "{{count}} short",
+  "outstandingEmpty": "Every assignment due today has been paid in full.",
+  "tableVehicle": "Vehicle",
+  "tableTarget": "Target",
+  "tablePaid": "Paid",
+  "tableBalance": "Balance",
+  "mobileTargetPaid": "Target {{target}} · Paid {{paid}}",
+
+  "needsAttentionTitle": "Needs attention",
+  "needsAttentionSubtitle": "Lowest profit today",
+  "needsAttentionRevenueExpenses": "Revenue {{revenue}}, expenses {{expenses}} today.",
+
+  "alertsTitle": "Alerts",
+  "alertsSubtitle": "Needs action",
+  "alertsEmpty": "Nothing needs attention right now.",
+
+  "topPerformersTitle": "Today's top performers",
+  "topPerformersSubtitle": "By profit",
+  "topPerformersEmpty": "No revenue or expenses recorded yet today.",
+
+  "pnlTitle": "Today's profit & loss",
+  "pnlRentalDeposits": "Rental deposits",
+  "pnlTransportJobs": "Transport jobs",
+  "pnlExpenses": "Expenses",
+  "pnlNetToday": "Net today"
+}

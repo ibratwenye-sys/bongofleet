@@ -19,7 +19,7 @@ import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 import { VehicleMap } from '../components/VehicleMap';
-import { markerStatus, vehicleDivIcon, STATUS_COLOR, STATUS_LABEL } from '../lib/gps-status';
+import { markerStatus, vehicleDivIcon, STATUS_COLOR, statusLabel } from '../lib/gps-status';
 
 const DEFAULT_CENTER: [number, number] = [-6.8, 39.28];
 const REFRESH_MS = 30_000;
@@ -453,7 +453,7 @@ export function FleetPage() {
                       className="inline-block h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: STATUS_COLOR[status] }}
                     />
-                    {STATUS_LABEL[status]}
+                    {statusLabel(status)}
                   </span>
                 ))}
               </div>

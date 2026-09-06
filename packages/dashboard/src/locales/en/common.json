@@ -2,5 +2,8 @@
   "close": "Close",
   "closeMoreMenu": "Close more menu",
   "more": "More",
-  "logout": "Logout"
+  "logout": "Logout",
+  "statusLive": "Live",
+  "statusStale": "Stale",
+  "statusOffline": "Offline"
 }

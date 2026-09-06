@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Marker } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS, formatDateTime } from '../lib/format';
 import type { FleetVehiclePosition, OperationsCenterResponse } from '../lib/types';
@@ -9,60 +11,69 @@ import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 import { VehicleMap } from '../components/VehicleMap';
-import { markerStatus, vehicleDivIcon, STATUS_COLOR, STATUS_LABEL } from '../lib/gps-status';
+import { markerStatus, vehicleDivIcon, STATUS_COLOR, statusLabel } from '../lib/gps-status';
 
 const DEFAULT_CENTER: [number, number] = [-6.8, 39.28];
 const REFRESH_MS = 30_000;
 
-function kpisToTiles(data: OperationsCenterResponse): KpiTile[] {
+function kpisToTiles(data: OperationsCenterResponse, t: TFunction<'operationsCenter'>): KpiTile[] {
   const k = data.kpis;
   const netProfit = parseFloat(k.netProfitToday.amount);
   return [
     {
-      label: 'On the road',
+      label: t('kpiOnTheRoad'),
       value: String(k.onTheRoad.count),
       valueSuffix: `/ ${k.onTheRoad.fleetSize}`,
       delta:
         k.onTheRoad.deltaVsYesterday === 0
-          ? 'same as yesterday'
-          : `${k.onTheRoad.deltaVsYesterday > 0 ? '▲' : '▼'} ${Math.abs(k.onTheRoad.deltaVsYesterday)} vs yesterday`,
+          ? t('kpiOnTheRoadDeltaSame')
+          : t('kpiOnTheRoadDeltaChange', {
+              arrow: k.onTheRoad.deltaVsYesterday > 0 ? '▲' : '▼',
+              count: Math.abs(k.onTheRoad.deltaVsYesterday),
+            }),
       accentColor: 'good',
     },
     {
-      label: 'Collected today',
+      label: t('kpiCollectedToday'),
       value: formatTZS(k.collectedToday.amount),
-      delta: `${k.collectedToday.percentOfTarget}% of ${formatTZS(k.collectedToday.targetAmount)} target`,
+      delta: t('kpiCollectedTodayDelta', {
+        percent: k.collectedToday.percentOfTarget,
+        target: formatTZS(k.collectedToday.targetAmount),
+      }),
       accentColor: 'c1',
     },
     {
-      label: 'Not deposited',
+      label: t('kpiNotDeposited'),
       value: String(k.outstandingToday.count),
-      delta: `${formatTZS(k.outstandingToday.amount)} outstanding`,
+      delta: t('kpiNotDepositedDelta', { amount: formatTZS(k.outstandingToday.amount) }),
       accentColor: 'crit',
     },
     {
-      label: 'Ownership plans',
+      label: t('kpiOwnershipPlans'),
       value: String(k.activeOwnershipPlans.count),
-      delta: 'active',
+      delta: t('kpiOwnershipPlansDelta'),
       accentColor: 'violet',
     },
     {
-      label: 'Service due',
+      label: t('kpiServiceDue'),
       value: String(k.serviceDue.count),
       delta:
-        k.serviceDue.overdueCount > 0 ? `${k.serviceDue.overdueCount} overdue` : 'none overdue',
+        k.serviceDue.overdueCount > 0
+          ? t('kpiServiceDueDeltaOverdue', { count: k.serviceDue.overdueCount })
+          : t('kpiServiceDueDeltaNone'),
       accentColor: 'warn',
     },
     {
-      label: 'Profit today',
+      label: t('kpiProfitToday'),
       value: formatTZS(k.netProfitToday.amount),
-      delta: netProfit >= 0 ? 'in the black' : 'in the red',
+      delta: netProfit >= 0 ? t('kpiProfitTodayDeltaPositive') : t('kpiProfitTodayDeltaNegative'),
       accentColor: netProfit >= 0 ? 'good' : 'crit',
     },
   ];
 }
 
 function CollectionChart({ series }: { series: OperationsCenterResponse['collectionSeries'] }) {
+  const { t } = useTranslation('operationsCenter');
   const todayIso = new Date().toISOString().slice(0, 10);
   const max = Math.max(1, ...series.map((p) => parseFloat(p.amount)));
   return (
@@ -87,7 +98,8 @@ function CollectionChart({ series }: { series: OperationsCenterResponse['collect
         })}
       </div>
       <p className="mt-2 text-xs text-txt-2">
-        <span className="mr-1 inline-block h-2 w-2 rounded-full bg-good align-middle" /> Today
+        <span className="mr-1 inline-block h-2 w-2 rounded-full bg-good align-middle" />{' '}
+        {t('chartToday')}
       </p>
     </div>
   );
@@ -123,6 +135,7 @@ function MotorcyclePnlRow({
 
 export function OperationsCenterPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('operationsCenter');
   const [data, setData] = useState<OperationsCenterResponse | null>(null);
   const [positions, setPositions] = useState<FleetVehiclePosition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,19 +151,23 @@ export function OperationsCenterPage() {
         setPositions(fleet);
         setError(null);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not load the operations center.');
+        // Stage L2 (DESIGN_SWAHILI_UI.md's scope boundary) - ApiError's own
+        // .message is backend-supplied content and stays English for this
+        // initiative; only the dashboard-authored fallback below is
+        // translated.
+        setError(err instanceof ApiError ? err.message : t('loadError'));
       }
     }
     void load();
     const interval = setInterval(() => void load(), REFRESH_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [t]);
 
   if (error) {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   const live = (positions ?? []).filter((p) => !p.offline);
@@ -161,15 +178,18 @@ export function OperationsCenterPage() {
 
   return (
     <PageChassis
-      title="Operations Center"
-      statusPill={{ mode: 'live', text: `LIVE · ${live.length} reporting` }}
-      primaryAction={{ label: 'Record payment', onClick: () => navigate('/payments') }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: t('statusLive', { count: live.length }) }}
+      primaryAction={{ label: t('recordPayment'), onClick: () => navigate('/payments') }}
+      kpis={kpisToTiles(data, t)}
     >
       <ChassisGrid
         main={
           <>
-            <Card title="Live fleet" subtitle={`${live.length} reporting`}>
+            <Card
+              title={t('liveFleetTitle')}
+              subtitle={t('reportingCount', { count: live.length })}
+            >
               <VehicleMap
                 center={DEFAULT_CENTER}
                 fitBoundsTo={live.map((p) => [p.latitude, p.longitude])}
@@ -192,34 +212,32 @@ export function OperationsCenterPage() {
                       className="inline-block h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: STATUS_COLOR[status] }}
                     />
-                    {STATUS_LABEL[status]} — {statusCounts[status]}
+                    {statusLabel(status)} — {statusCounts[status]}
                   </span>
                 ))}
               </div>
             </Card>
 
-            <Card title="Collection — last 14 days" subtitle="TZS">
+            <Card title={t('collectionTitle')} subtitle={t('collectionSubtitle')}>
               <CollectionChart series={data.collectionSeries} />
             </Card>
 
             <Card
-              title="Today's outstanding assignments"
-              subtitle={`${data.outstandingAssignmentRows.length} short`}
+              title={t('outstandingTitle')}
+              subtitle={t('outstandingSubtitle', { count: data.outstandingAssignmentRows.length })}
             >
               {data.outstandingAssignmentRows.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">
-                  Every assignment due today has been paid in full.
-                </p>
+                <p className="p-4 text-sm text-txt-2">{t('outstandingEmpty')}</p>
               ) : (
                 <>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                          <th className="px-4 py-2 font-medium">Vehicle</th>
-                          <th className="px-4 py-2 text-right font-medium">Target</th>
-                          <th className="px-4 py-2 text-right font-medium">Paid</th>
-                          <th className="px-4 py-2 text-right font-medium">Balance</th>
+                          <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableTarget')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tablePaid')}</th>
+                          <th className="px-4 py-2 text-right font-medium">{t('tableBalance')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -257,7 +275,10 @@ export function OperationsCenterPage() {
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-txt-2">
-                          Target {formatTZS(row.targetAmount)} · Paid {formatTZS(row.paidAmount)}
+                          {t('mobileTargetPaid', {
+                            target: formatTZS(row.targetAmount),
+                            paid: formatTZS(row.paidAmount),
+                          })}
                         </p>
                       </div>
                     ))}
@@ -276,14 +297,16 @@ export function OperationsCenterPage() {
                 commentary. Omitted entirely - not padded with a fake
                 placeholder - when nothing moved money today at all. */}
             {data.worstPerformerToday && (
-              <Card title="Needs attention" subtitle="Lowest profit today">
+              <Card title={t('needsAttentionTitle')} subtitle={t('needsAttentionSubtitle')}>
                 <div className="p-4">
                   <p className="text-sm font-medium text-txt">
                     {data.worstPerformerToday.registrationNumber}
                   </p>
                   <p className="mt-1 text-xs text-txt-2">
-                    Revenue {formatTZS(data.worstPerformerToday.revenue)}, expenses{' '}
-                    {formatTZS(data.worstPerformerToday.expenses)} today.
+                    {t('needsAttentionRevenueExpenses', {
+                      revenue: formatTZS(data.worstPerformerToday.revenue),
+                      expenses: formatTZS(data.worstPerformerToday.expenses),
+                    })}
                   </p>
                   <p
                     className={`mt-2 text-lg font-semibold ${
@@ -298,9 +321,12 @@ export function OperationsCenterPage() {
               </Card>
             )}
 
-            <Card title="Alerts" subtitle={data.alerts.length > 0 ? 'Needs action' : undefined}>
+            <Card
+              title={t('alertsTitle')}
+              subtitle={data.alerts.length > 0 ? t('alertsSubtitle') : undefined}
+            >
               {data.alerts.length === 0 ? (
-                <p className="p-4 text-sm text-txt-2">Nothing needs attention right now.</p>
+                <p className="p-4 text-sm text-txt-2">{t('alertsEmpty')}</p>
               ) : (
                 <div className="divide-y divide-line-soft">
                   {data.alerts.map((alert, i) => (
@@ -315,9 +341,9 @@ export function OperationsCenterPage() {
 
       <ClosingRow
         left={
-          <Card title="Today's top performers" subtitle="By profit">
+          <Card title={t('topPerformersTitle')} subtitle={t('topPerformersSubtitle')}>
             {data.topPerformersToday.length === 0 ? (
-              <p className="p-4 text-sm text-txt-2">No revenue or expenses recorded yet today.</p>
+              <p className="p-4 text-sm text-txt-2">{t('topPerformersEmpty')}</p>
             ) : (
               <div className="px-4 pb-2">
                 {data.topPerformersToday.map((row) => (
@@ -328,22 +354,22 @@ export function OperationsCenterPage() {
           </Card>
         }
         right={
-          <Card title="Today's profit & loss" subtitle={new Date().toLocaleDateString()}>
+          <Card title={t('pnlTitle')} subtitle={new Date().toLocaleDateString()}>
             <div className="px-4 pb-3 text-sm">
               <div className="flex justify-between border-b border-line-soft py-2">
-                <span className="text-txt-2">Rental deposits</span>
+                <span className="text-txt-2">{t('pnlRentalDeposits')}</span>
                 <span className="text-good">+{formatTZS(data.todaysPnl.rentalRevenue)}</span>
               </div>
               <div className="flex justify-between border-b border-line-soft py-2">
-                <span className="text-txt-2">Transport jobs</span>
+                <span className="text-txt-2">{t('pnlTransportJobs')}</span>
                 <span className="text-good">+{formatTZS(data.todaysPnl.transportRevenue)}</span>
               </div>
               <div className="flex justify-between border-b border-line-soft py-2">
-                <span className="text-txt-2">Expenses</span>
+                <span className="text-txt-2">{t('pnlExpenses')}</span>
                 <span className="text-crit">-{formatTZS(data.todaysPnl.expenses)}</span>
               </div>
               <div className="flex justify-between pt-2 font-semibold">
-                <span className="text-txt">Net today</span>
+                <span className="text-txt">{t('pnlNetToday')}</span>
                 <span
                   className={parseFloat(data.todaysPnl.netProfit) >= 0 ? 'text-good' : 'text-crit'}
                 >

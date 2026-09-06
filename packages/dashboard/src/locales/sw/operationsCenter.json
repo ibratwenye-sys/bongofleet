@@ -1,0 +1,63 @@
+{
+  "title": "Kituo cha Uendeshaji",
+  "statusLive": "HAI · {{count}} zinazoripoti",
+  "recordPayment": "Rekodi malipo",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia kituo cha uendeshaji.",
+
+  "kpiOnTheRoad": "Barabarani",
+  "kpiOnTheRoadDeltaSame": "sawa na jana",
+  "kpiOnTheRoadDeltaChange": "{{arrow}} {{count}} ukilinganisha na jana",
+
+  "kpiCollectedToday": "Makusanyo ya leo",
+  "kpiCollectedTodayDelta": "{{percent}}% ya lengo la {{target}}",
+
+  "kpiNotDeposited": "Hazijawekwa Benki",
+  "kpiNotDepositedDelta": "{{amount}} bado zinadaiwa",
+
+  "kpiOwnershipPlans": "Mipango ya Umiliki",
+  "kpiOwnershipPlansDelta": "inayoendelea",
+
+  "kpiServiceDue": "Huduma Inahitajika",
+  "kpiServiceDueDeltaOverdue": "{{count}} zimechelewa",
+  "kpiServiceDueDeltaNone": "hakuna iliyochelewa",
+
+  "kpiProfitToday": "Faida ya Leo",
+  "kpiProfitTodayDeltaPositive": "faida",
+  "kpiProfitTodayDeltaNegative": "hasara",
+
+  "chartToday": "Leo",
+
+  "liveFleetTitle": "Magari kwa Wakati Halisi",
+  "reportingCount": "{{count}} zinaripoti",
+
+  "collectionTitle": "Makusanyo — Siku 14 Zilizopita",
+  "collectionSubtitle": "TZS",
+
+  "outstandingTitle": "Kazi za Leo Zenye Deni",
+  "outstandingSubtitle": "{{count}} pungufu",
+  "outstandingEmpty": "Kila kazi ya leo imelipwa kikamilifu.",
+  "tableVehicle": "Gari",
+  "tableTarget": "Lengo",
+  "tablePaid": "Kilicholipwa",
+  "tableBalance": "Salio",
+  "mobileTargetPaid": "Lengo {{target}} · Kilicholipwa {{paid}}",
+
+  "needsAttentionTitle": "Inahitaji Ufuatiliaji",
+  "needsAttentionSubtitle": "Faida Ndogo Zaidi ya Leo",
+  "needsAttentionRevenueExpenses": "Mapato {{revenue}}, gharama {{expenses}} leo.",
+
+  "alertsTitle": "Tahadhari",
+  "alertsSubtitle": "Inahitaji Hatua",
+  "alertsEmpty": "Hakuna kinachohitaji ufuatiliaji kwa sasa.",
+
+  "topPerformersTitle": "Waliofanya Vizuri Zaidi Leo",
+  "topPerformersSubtitle": "Kwa Faida",
+  "topPerformersEmpty": "Hakuna mapato au gharama zilizorekodiwa leo bado.",
+
+  "pnlTitle": "Faida na Hasara ya Leo",
+  "pnlRentalDeposits": "Amana za Kukodisha",
+  "pnlTransportJobs": "Kazi za Usafirishaji",
+  "pnlExpenses": "Gharama",
+  "pnlNetToday": "Jumla ya Leo"
+}
