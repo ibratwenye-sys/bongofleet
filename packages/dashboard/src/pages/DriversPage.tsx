@@ -23,13 +23,6 @@ import { Card } from '../components/chassis/Card';
 import type { KpiAccent, KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: DriverType[] = ['RIDER', 'CAR_DRIVER', 'TRUCK_DRIVER'];
-// Stage UI2-era literal labels, kept only for DriverFormModal (batch b scope,
-// untouched this stage) - the main page body now reads CATEGORY_LABEL_KEY.
-const CATEGORY_LABELS: Record<DriverType, string> = {
-  RIDER: 'Rider',
-  CAR_DRIVER: 'Car driver',
-  TRUCK_DRIVER: 'Truck driver',
-};
 // Stage L10 (DESIGN_SWAHILI_UI.md, batch a) - first page needing a DriverType
 // label map, so no centralization question yet (same starting point as
 // STATUS_LABEL_KEY at L5 and MOTORCYCLE_STATUS_LABEL_KEY at L7).
@@ -207,6 +200,8 @@ function DriverFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('drivers');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = driver != null;
   const [form, setForm] = useState<FormState>(() => toFormState(driver));
   const [error, setError] = useState<string | null>(null);
@@ -214,17 +209,17 @@ function DriverFormModal({
 
   function validate(): string | null {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim()) {
-      return 'First name, last name, and phone are required.';
+      return t('errorNameRequired');
     }
     if (!form.licenseNumber.trim()) {
-      return 'License number is required.';
+      return t('errorLicenseRequired');
     }
     if (!isEdit) {
       if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
-        return 'A valid email is required.';
+        return t('errorValidEmail');
       }
       if (form.initialPassword.length < 8) {
-        return 'Initial password must be at least 8 characters.';
+        return t('errorInitialPasswordLength');
       }
     }
     return null;
@@ -252,7 +247,7 @@ function DriverFormModal({
           driverType: form.driverType,
         };
         await apiFetch(`/drivers/${driver.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        onSaved('Driver updated.');
+        onSaved(t('driverUpdated'));
       } else {
         const payload: CreateDriverPayload = {
           firstName: form.firstName.trim(),
@@ -266,21 +261,21 @@ function DriverFormModal({
           driverType: form.driverType,
         };
         await apiFetch('/drivers', { method: 'POST', body: JSON.stringify(payload) });
-        onSaved('Driver added.');
+        onSaved(t('driverAdded'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit driver' : 'Add driver'} onClose={onClose}>
+    <Modal title={isEdit ? t('editDriverTitle') : t('addDriver')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">First name</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldFirstName')}</label>
             <input
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -288,7 +283,7 @@ function DriverFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Last name</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('fieldLastName')}</label>
             <input
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -298,7 +293,7 @@ function DriverFormModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Phone</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldPhone')}</label>
           <input
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -308,12 +303,12 @@ function DriverFormModal({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-txt">
-            Email{' '}
-            {!isEdit && <span className="font-normal text-txt-2">(the driver&apos;s own)</span>}
+            {t('fieldEmail')}{' '}
+            {!isEdit && <span className="font-normal text-txt-2">{t('emailOwnHint')}</span>}
           </label>
           {isEdit ? (
             <p className="rounded border border-line bg-panel-2 px-3 py-2 text-sm text-txt-2">
-              {form.email} <span className="text-xs">(cannot be changed here)</span>
+              {form.email} <span className="text-xs">{t('emailCannotChange')}</span>
             </p>
           ) : (
             <>
@@ -323,17 +318,15 @@ function DriverFormModal({
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-txt-2">
-                He signs in with this address, and it is where his password reset code is sent. Use
-                an address he can actually open - if you invent one, you will be the only person who
-                can ever reset his password.
-              </p>
+              <p className="mt-1 text-xs text-txt-2">{t('emailHelpText')}</p>
             </>
           )}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">License number</label>
+          <label className="mb-1 block text-sm font-medium text-txt">
+            {t('fieldLicenseNumber')}
+          </label>
           <input
             value={form.licenseNumber}
             onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
@@ -342,7 +335,7 @@ function DriverFormModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Category</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldCategory')}</label>
           <select
             value={form.driverType}
             onChange={(e) => setForm({ ...form, driverType: e.target.value as DriverType })}
@@ -350,7 +343,7 @@ function DriverFormModal({
           >
             {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+                {t(CATEGORY_LABEL_KEY[c])}
               </option>
             ))}
           </select>
@@ -358,24 +351,23 @@ function DriverFormModal({
 
         {!isEdit && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Initial password</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('fieldInitialPassword')}
+            </label>
             <input
               type="password"
               value={form.initialPassword}
               onChange={(e) => setForm({ ...form, initialPassword: e.target.value })}
               className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
             />
-            <p className="mt-1 text-xs text-gray-500">
-              This is the driver's first login password — share it with them directly. At least 8
-              characters.
-            </p>
+            <p className="mt-1 text-xs text-gray-500">{t('initialPasswordHelp')}</p>
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-txt">
-              National ID (optional)
+              {t('fieldNationalIdOptional')}
             </label>
             <input
               value={form.nationalId}
@@ -385,7 +377,7 @@ function DriverFormModal({
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-txt">
-              Emergency contact (optional)
+              {t('fieldEmergencyContactOptional')}
             </label>
             <input
               value={form.emergencyContact}
@@ -403,14 +395,14 @@ function DriverFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -427,6 +419,8 @@ function ResetPasswordModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('drivers');
+  const { t: tCommon } = useTranslation('common');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -436,7 +430,7 @@ function ResetPasswordModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters.');
+      setError(t('errorPasswordLength'));
       return;
     }
     setSubmitting(true);
@@ -446,30 +440,25 @@ function ResetPasswordModal({
         method: 'PATCH',
         body: JSON.stringify({ newPassword }),
       });
-      const revoked =
+      const message =
         result.sessionsRevoked > 0
-          ? ` ${name} has been signed out on ${result.sessionsRevoked} device${
-              result.sessionsRevoked === 1 ? '' : 's'
-            }.`
-          : '';
-      onSaved(`Password updated - tell ${name} his new password.${revoked}`);
+          ? `${t('passwordUpdated', { name })} ${t('signedOutDevices', { name, count: result.sessionsRevoked })}`
+          : t('passwordUpdated', { name });
+      onSaved(message);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reset the password.');
+      setError(err instanceof ApiError ? err.message : t('resetPasswordError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={`Reset password - ${name}`} onClose={onClose}>
+    <Modal title={t('resetPasswordTitle', { name })} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <p className="text-sm text-gray-600">
-          Setting a new password signs {name} out everywhere. Share the new password with him
-          directly - he will need it to log in again.
-        </p>
+        <p className="text-sm text-gray-600">{t('resetPasswordIntro', { name })}</p>
         <div>
           <label htmlFor="reset-new-password" className="mb-1 block text-sm font-medium text-txt">
-            New password
+            {t('fieldNewPassword')}
           </label>
           <input
             id="reset-new-password"
@@ -478,7 +467,7 @@ function ResetPasswordModal({
             onChange={(e) => setNewPassword(e.target.value)}
             className="w-full rounded border border-line bg-panel text-txt px-3 py-2 text-sm"
           />
-          <p className="mt-1 text-xs text-gray-500">At least 8 characters.</p>
+          <p className="mt-1 text-xs text-gray-500">{t('newPasswordHelp')}</p>
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -489,14 +478,14 @@ function ResetPasswordModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Set password'}
+            {submitting ? tCommon('saving') : t('setPassword')}
           </button>
         </div>
       </form>

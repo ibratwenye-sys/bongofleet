@@ -1,0 +1,18 @@
+{
+  "referenceLine": "Rejea: {{value}}",
+  "expiryLine": "Muda wa mwisho: {{value}}",
+  "view": "Ona",
+  "opening": "Inafungua…",
+  "replace": "Badilisha",
+  "choosePhotoOrPdf": "Chagua Picha au PDF",
+  "chooseFileValidation": "Chagua faili la kupakia.",
+  "referenceNumberPlaceholder": "Nambari ya rejea (hiari)",
+  "upload": "Pakia",
+  "uploading": "Inapakia…",
+  "uploadReplacement": "Pakia Mbadala",
+  "openFileError": "Imeshindikana kufungua faili.",
+  "uploadError": "Upakiaji umeshindwa. Tafadhali jaribu tena.",
+  "deleteDocumentError": "Imeshindikana kufuta hati.",
+  "deleteTitle": "Futa {{label}}",
+  "deleteMessage": "Futa hati hii ya {{label}}? Hatua hii haiwezi kutenduliwa."
+}

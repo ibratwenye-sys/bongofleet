@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import type { Document, DocType, DocumentOwnerType } from '../lib/types';
 import { computeDocumentStatus } from '../lib/document-status';
@@ -24,6 +25,8 @@ export function DocumentSlot({
   documents: Document[];
   onChanged: () => void;
 }) {
+  const { t } = useTranslation('documentSlot');
+  const { t: tCommon } = useTranslation('common');
   const existing = documents.find((d) => d.docType === docType) ?? null;
   const [replacing, setReplacing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -54,7 +57,7 @@ export function DocumentSlot({
       const blob = await apiFetchBlob(`/documents/${existing.id}/file`);
       window.open(URL.createObjectURL(blob), '_blank');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not open the file.');
+      setError(err instanceof ApiError ? err.message : t('openFileError'));
     } finally {
       setViewing(false);
     }
@@ -92,7 +95,7 @@ export function DocumentSlot({
       setReplacing(false);
       onChanged();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Upload failed. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('uploadError'));
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +108,7 @@ export function DocumentSlot({
       setDeleting(false);
       onChanged();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete document.');
+      setError(err instanceof ApiError ? err.message : t('deleteDocumentError'));
       setDeleting(false);
     }
   }
@@ -127,8 +130,12 @@ export function DocumentSlot({
 
       {existing && !replacing ? (
         <div className="space-y-1 text-sm text-gray-600">
-          <p>Reference: {existing.referenceNumber ?? '—'}</p>
-          <p>Expiry: {existing.expiryDate ? existing.expiryDate.slice(0, 10) : '—'}</p>
+          <p>{t('referenceLine', { value: existing.referenceNumber ?? '—' })}</p>
+          <p>
+            {t('expiryLine', {
+              value: existing.expiryDate ? existing.expiryDate.slice(0, 10) : '—',
+            })}
+          </p>
           <div className="flex gap-3 pt-1">
             <button
               type="button"
@@ -136,21 +143,21 @@ export function DocumentSlot({
               onClick={() => void handleView()}
               className="text-sm font-medium text-gray-700 hover:underline disabled:opacity-50"
             >
-              {viewing ? 'Opening…' : 'View'}
+              {viewing ? t('opening') : t('view')}
             </button>
             <button
               type="button"
               onClick={() => setReplacing(true)}
               className="text-sm font-medium text-gray-700 hover:underline"
             >
-              Replace
+              {t('replace')}
             </button>
             <button
               type="button"
               onClick={() => setDeleting(true)}
               className="text-sm font-medium text-red-600 hover:underline"
             >
-              Delete
+              {tCommon('delete')}
             </button>
           </div>
         </div>
@@ -172,14 +179,14 @@ export function DocumentSlot({
               onClick={() => fileInputRef.current?.click()}
               className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
             >
-              Choose photo or PDF
+              {t('choosePhotoOrPdf')}
             </button>
             {file && <span className="truncate text-sm text-gray-600">{file.name}</span>}
           </div>
-          {noFileSelected && <p className="text-xs text-gray-500">Choose a file to upload.</p>}
+          {noFileSelected && <p className="text-xs text-gray-500">{t('chooseFileValidation')}</p>}
           <div className="grid grid-cols-2 gap-2">
             <input
-              placeholder="Reference number (optional)"
+              placeholder={t('referenceNumberPlaceholder')}
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
               className="rounded border border-gray-300 px-2 py-1 text-sm"
@@ -197,7 +204,7 @@ export function DocumentSlot({
               disabled={submitting}
               className="rounded bg-gray-900 px-3 py-1 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
-              {submitting ? 'Uploading…' : replacing ? 'Upload replacement' : 'Upload'}
+              {submitting ? t('uploading') : replacing ? t('uploadReplacement') : t('upload')}
             </button>
             {replacing && (
               <button
@@ -208,7 +215,7 @@ export function DocumentSlot({
                 }}
                 className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
               >
-                Cancel
+                {tCommon('cancel')}
               </button>
             )}
           </div>
@@ -219,9 +226,9 @@ export function DocumentSlot({
 
       {deleting && (
         <ConfirmDialog
-          title={`Delete ${label}`}
-          message={`Delete this ${label.toLowerCase()} document? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('deleteTitle', { label })}
+          message={t('deleteMessage', { label: label.toLowerCase() })}
+          confirmLabel={tCommon('delete')}
           danger
           onConfirm={handleDelete}
           onCancel={() => setDeleting(false)}

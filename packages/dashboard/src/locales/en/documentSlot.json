@@ -1,0 +1,18 @@
+{
+  "referenceLine": "Reference: {{value}}",
+  "expiryLine": "Expiry: {{value}}",
+  "view": "View",
+  "opening": "Opening…",
+  "replace": "Replace",
+  "choosePhotoOrPdf": "Choose photo or PDF",
+  "chooseFileValidation": "Choose a file to upload.",
+  "referenceNumberPlaceholder": "Reference number (optional)",
+  "upload": "Upload",
+  "uploading": "Uploading…",
+  "uploadReplacement": "Upload replacement",
+  "openFileError": "Could not open the file.",
+  "uploadError": "Upload failed. Please try again.",
+  "deleteDocumentError": "Could not delete document.",
+  "deleteTitle": "Delete {{label}}",
+  "deleteMessage": "Delete this {{label}} document? This cannot be undone."
+}

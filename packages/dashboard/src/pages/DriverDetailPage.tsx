@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, ApiError } from '../lib/api';
 import type {
   CreateGuarantorPayload,
@@ -24,6 +25,8 @@ function GuarantorFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('drivers');
+  const { t: tCommon } = useTranslation('common');
   const isEdit = guarantor != null;
   const [form, setForm] = useState({
     firstName: guarantor?.firstName ?? '',
@@ -38,7 +41,7 @@ function GuarantorFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim()) {
-      setError('First name, last name, and phone are required.');
+      setError(t('errorNameRequired'));
       return;
     }
     setError(null);
@@ -56,7 +59,7 @@ function GuarantorFormModal({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        onSaved('Guarantor updated.');
+        onSaved(t('guarantorUpdated'));
       } else {
         const payload: CreateGuarantorPayload = {
           firstName: form.firstName.trim(),
@@ -69,21 +72,23 @@ function GuarantorFormModal({
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        onSaved('Guarantor added.');
+        onSaved(t('guarantorAdded'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? 'Edit guarantor' : 'Add guarantor'} onClose={onClose}>
+    <Modal title={isEdit ? t('editGuarantorTitle') : t('addGuarantor')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">First name</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              {t('fieldFirstName')}
+            </label>
             <input
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -91,7 +96,9 @@ function GuarantorFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Last name</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              {t('fieldLastName')}
+            </label>
             <input
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -100,7 +107,7 @@ function GuarantorFormModal({
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">{t('fieldPhone')}</label>
           <input
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -110,7 +117,7 @@ function GuarantorFormModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              Relationship (optional)
+              {t('fieldRelationshipOptional')}
             </label>
             <input
               value={form.relationship}
@@ -120,7 +127,7 @@ function GuarantorFormModal({
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              National ID (optional)
+              {t('fieldNationalIdOptional')}
             </label>
             <input
               value={form.nationalId}
@@ -138,14 +145,14 @@ function GuarantorFormModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
@@ -162,6 +169,8 @@ function GuarantorRow({
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation('drivers');
+  const { t: tCommon } = useTranslation('common');
   const [documents, setDocuments] = useState<Document[] | null>(null);
 
   async function loadDocuments() {
@@ -194,21 +203,21 @@ function GuarantorRow({
         </div>
         <div className="flex gap-3">
           <button onClick={onEdit} className="text-sm font-medium text-gray-700 hover:underline">
-            Edit
+            {tCommon('edit')}
           </button>
           <button onClick={onRemove} className="text-sm font-medium text-red-600 hover:underline">
-            Remove
+            {t('remove')}
           </button>
         </div>
       </div>
       {documents === null ? (
-        <p className="text-sm text-gray-500">Loading document…</p>
+        <p className="text-sm text-gray-500">{t('loadingDocument')}</p>
       ) : (
         <DocumentSlot
           ownerType="GUARANTOR"
           ownerId={guarantor.id}
           docType="GUARANTOR_ID"
-          label="Guarantor ID"
+          label={t('documentGuarantorId')}
           documents={documents}
           onChanged={loadDocuments}
         />
@@ -218,6 +227,7 @@ function GuarantorRow({
 }
 
 export function DriverDetailPage() {
+  const { t } = useTranslation('drivers');
   const { driverId } = useParams<{ driverId: string }>();
   const [driver, setDriver] = useState<Driver | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -239,7 +249,7 @@ export function DriverDetailPage() {
       setDocuments(documentsData);
       setGuarantors(guarantorsData);
     } catch {
-      setError('Could not load driver. Please try again.');
+      setError(t('loadDriverError'));
     }
   }
 
@@ -264,23 +274,23 @@ export function DriverDetailPage() {
     if (!removing) return;
     try {
       await apiFetch(`/guarantors/${removing.id}`, { method: 'DELETE' });
-      setSuccessMessage('Guarantor removed.');
+      setSuccessMessage(t('guarantorRemoved'));
       setRemoving(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not remove guarantor.');
+      setError(err instanceof ApiError ? err.message : t('removeGuarantorError'));
       setRemoving(null);
     }
   }
 
   if (!driverId) return null;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!driver) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (!driver) return <p className="text-sm text-gray-500">{t('loading')}</p>;
 
   return (
     <div>
       <Link to="/drivers" className="mb-4 inline-block text-sm text-gray-600 hover:underline">
-        ← Back to drivers
+        {t('backToDrivers')}
       </Link>
       <h1 className="mb-4 text-xl font-semibold text-gray-900">
         {driver.user.firstName} {driver.user.lastName}
@@ -296,19 +306,19 @@ export function DriverDetailPage() {
           needs to have already read before a rider calls him locked out, not
           something to go hunting for once he has. */}
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium text-gray-900">Password recovery</h2>
+        <h2 className="mb-3 text-lg font-medium text-gray-900">{t('tablePasswordRecovery')}</h2>
         <p className="mb-3 text-sm text-gray-600">{driver.user.email}</p>
         <PasswordRecoveryNote emailProvenAt={driver.user.emailProvenAt} />
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium text-gray-900">Documents</h2>
+        <h2 className="mb-3 text-lg font-medium text-gray-900">{t('documentsHeading')}</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <DocumentSlot
             ownerType="RIDER"
             ownerId={driverId}
             docType="NATIONAL_ID"
-            label="National ID"
+            label={t('documentNationalId')}
             documents={documents}
             onChanged={load}
           />
@@ -316,7 +326,7 @@ export function DriverDetailPage() {
             ownerType="RIDER"
             ownerId={driverId}
             docType="DRIVERS_LICENSE"
-            label="Driver's License"
+            label={t('documentDriversLicense')}
             documents={documents}
             onChanged={load}
           />
@@ -325,20 +335,20 @@ export function DriverDetailPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900">Guarantors</h2>
+          <h2 className="text-lg font-medium text-gray-900">{t('guarantorsHeading')}</h2>
           <button
             onClick={() => setFormTarget('new')}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
           >
-            Add guarantor
+            {t('addGuarantor')}
           </button>
         </div>
         {guarantors.length < 2 && (
-          <p className="mb-3 text-sm text-amber-700">Add at least two guarantors.</p>
+          <p className="mb-3 text-sm text-amber-700">{t('addAtLeastTwoGuarantors')}</p>
         )}
         <div className="space-y-3">
           {guarantors.length === 0 ? (
-            <p className="text-sm text-gray-500">No guarantors yet.</p>
+            <p className="text-sm text-gray-500">{t('noGuarantorsYet')}</p>
           ) : (
             guarantors.map((g) => (
               <GuarantorRow
@@ -363,9 +373,12 @@ export function DriverDetailPage() {
 
       {removing && (
         <ConfirmDialog
-          title="Remove guarantor"
-          message={`Remove ${removing.firstName} ${removing.lastName} as a guarantor?`}
-          confirmLabel="Remove"
+          title={t('removeGuarantorTitle')}
+          message={t('removeGuarantorMessage', {
+            firstName: removing.firstName,
+            lastName: removing.lastName,
+          })}
+          confirmLabel={t('remove')}
           danger
           onConfirm={handleRemoveGuarantor}
           onCancel={() => setRemoving(null)}

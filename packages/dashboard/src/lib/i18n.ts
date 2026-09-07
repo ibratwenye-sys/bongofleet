@@ -18,6 +18,8 @@ import enAssignments from '../locales/en/assignments.json';
 import swAssignments from '../locales/sw/assignments.json';
 import enDrivers from '../locales/en/drivers.json';
 import swDrivers from '../locales/sw/drivers.json';
+import enDocumentSlot from '../locales/en/documentSlot.json';
+import swDocumentSlot from '../locales/sw/documentSlot.json';
 import type { Language } from './types';
 
 /**
@@ -32,9 +34,16 @@ import type { Language } from './types';
  * expenses, transport, fleet, maintenance, assignments, then drivers -
  * see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
  * need: a page gets its own namespace only once it's actually translated.
- * `drivers` covers only the DriversPage scoreboard/list body as of L10 -
- * DriverFormModal, ResetPasswordModal, and DriverDetailPage are batch b,
- * same "grows across two stages" shape as `transport` did at L5/L6.
+ * `drivers` grew across two stages, same shape `transport` did at L5/L6:
+ * L10 batch a covered only DriversPage's scoreboard/list body; batch b
+ * finishes it with DriverFormModal, ResetPasswordModal, and everything
+ * DriverDetailPage.tsx reaches (including its embedded GuarantorFormModal
+ * and GuarantorRow, and PasswordRecoveryNote).
+ * `documentSlot` is its own namespace, split out at L10 batch b, because
+ * DocumentSlot.tsx is a genuinely shared component - also used (still in
+ * English) by ApprovalsPage.tsx and MotorcycleDetailPage.tsx, which now
+ * inherit a fully-translated component for free once their own pages are
+ * eventually translated, instead of this work being redone per page.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -48,6 +57,7 @@ void i18n.use(initReactI18next).init({
       maintenance: enMaintenance,
       assignments: enAssignments,
       drivers: enDrivers,
+      documentSlot: enDocumentSlot,
     },
     sw: {
       common: sw,
@@ -59,6 +69,7 @@ void i18n.use(initReactI18next).init({
       maintenance: swMaintenance,
       assignments: swAssignments,
       drivers: swDrivers,
+      documentSlot: swDocumentSlot,
     },
   },
   lng: 'en',

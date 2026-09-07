@@ -40,16 +40,18 @@ export function PasswordRecoveryLabel({ emailProvenAt }: { emailProvenAt: string
   );
 }
 
-/** The fuller version for the driver's own page, where the explanation fits. */
+/** The fuller version for the driver's own page, where the explanation fits.
+ *  Stage L10 (DESIGN_SWAHILI_UI.md, batch b) - lives in the `drivers`
+ *  namespace, same as PasswordRecoveryLabel above; only DriverDetailPage
+ *  renders this component. */
 export function PasswordRecoveryNote({ emailProvenAt }: { emailProvenAt: string | null }) {
+  const { t } = useTranslation('drivers');
   if (canSelfRecover(emailProvenAt)) {
     return (
       <div className="rounded border border-gray-200 bg-white p-4">
-        <p className="text-sm font-medium text-gray-900">He can reset his own password</p>
+        <p className="text-sm font-medium text-gray-900">{t('canResetOwnTitle')}</p>
         <p className="mt-1 text-sm text-gray-600">
-          He has received a reset code at this email address and used it (
-          {emailProvenAt?.slice(0, 10)}), so the address reaches him. If he is locked out he can
-          recover on his own.
+          {t('canResetOwnBody', { date: emailProvenAt?.slice(0, 10) })}
         </p>
       </div>
     );
@@ -57,16 +59,9 @@ export function PasswordRecoveryNote({ emailProvenAt }: { emailProvenAt: string 
 
   return (
     <div className="rounded border border-amber-200 bg-amber-50 p-4">
-      <p className="text-sm font-medium text-amber-900">Only you can reset his password</p>
-      <p className="mt-1 text-sm text-amber-800">
-        This email address has never been used to receive a reset code, so there is no evidence it
-        reaches him. If he is locked out, he cannot recover on his own - you will have to set a new
-        password for him and tell him what it is.
-      </p>
-      <p className="mt-2 text-sm text-amber-800">
-        If the address is wrong, correcting it does not change this on its own: it counts once he
-        has used a code sent to it.
-      </p>
+      <p className="text-sm font-medium text-amber-900">{t('onlyYouCanResetTitle')}</p>
+      <p className="mt-1 text-sm text-amber-800">{t('onlyYouCanResetBody1')}</p>
+      <p className="mt-2 text-sm text-amber-800">{t('onlyYouCanResetBody2')}</p>
     </div>
   );
 }
