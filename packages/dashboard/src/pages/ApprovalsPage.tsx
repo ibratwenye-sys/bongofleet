@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import type { Driver, Expense, ExpenseCategoryCap, Motorcycle } from '../lib/types';
 import { Modal } from '../components/Modal';
@@ -8,22 +10,45 @@ import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 import { useAuth } from '../lib/auth-context';
 
+// Stage L11 (DESIGN_SWAHILI_UI.md) - the 7 fixed categories a rider
+// submission always uses (RIDER_EXPENSE_CATEGORIES in the backend's
+// rider-expense-categories.ts). Reuses MatumiziScreen.tsx's own shipped
+// Swahili wording rather than drafting new translations - riders already
+// see these exact 7 values translated this way in their own app.
+// Puncture/Wash/Parking deliberately keep their English wording there too
+// (no agreed Swahili term exists), so this map does the same.
+const CATEGORY_LABEL_KEY: Record<string, string> = {
+  Fuel: 'categoryFuel',
+  Repairs: 'categoryRepairs',
+  'Spare parts': 'categorySpareParts',
+  Puncture: 'categoryPuncture',
+  Wash: 'categoryWash',
+  Parking: 'categoryParking',
+  Other: 'categoryOther',
+};
+
+function categoryLabel(category: string, t: TFunction<'approvals'>): string {
+  return category in CATEGORY_LABEL_KEY ? t(CATEGORY_LABEL_KEY[category]) : category;
+}
+
 /** DESIGN_RIDER_EXPENSES.md step 5 - both advisory-only signals get the
  *  same amber-pill treatment (StatusBadge.tsx's own PENDING/EXPIRING_SOON
  *  convention), not a new visual language: neither is more or less severe
  *  than the other, just two independent "worth a second look" flags. */
 function OverCapBadge() {
+  const { t } = useTranslation('approvals');
   return (
     <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800">
-      Over cap
+      {t('overCap')}
     </span>
   );
 }
 
 function PossibleDuplicateBadge() {
+  const { t } = useTranslation('approvals');
   return (
     <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800">
-      Possible duplicate
+      {t('possibleDuplicate')}
     </span>
   );
 }
@@ -45,6 +70,8 @@ function CategoryCapsCard({
   isOwner: boolean;
   onSaved: (caps: ExpenseCategoryCap[], message: string) => void;
 }) {
+  const { t } = useTranslation('approvals');
+  const { t: tCommon } = useTranslation('common');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -69,32 +96,34 @@ function CategoryCapsCard({
         method: 'PUT',
         body: JSON.stringify(body),
       });
-      onSaved(saved, 'Category caps saved.');
+      onSaved(saved, t('capsSaved'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save category caps.');
+      setError(err instanceof ApiError ? err.message : t('capsSaveError'));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Card title="Category caps" subtitle="Daily, per rider">
+    <Card title={t('categoryCapsTitle')} subtitle={t('categoryCapsSubtitle')}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {caps.map((c) => (
           <div key={c.category}>
-            <label className="mb-1 block text-xs font-medium text-txt-2">{c.category}</label>
+            <label className="mb-1 block text-xs font-medium text-txt-2">
+              {categoryLabel(c.category, t)}
+            </label>
             {isOwner ? (
               <input
                 type="number"
                 min="0"
                 value={inputs[c.category] ?? ''}
                 onChange={(e) => setInputs({ ...inputs, [c.category]: e.target.value })}
-                placeholder="No cap"
+                placeholder={t('noCap')}
                 className="w-full rounded border border-line px-2 py-1.5 text-sm"
               />
             ) : (
               <p className="text-sm text-txt">
-                {c.dailyCapAmount ? formatTZS(c.dailyCapAmount) : 'No cap'}
+                {c.dailyCapAmount ? formatTZS(c.dailyCapAmount) : t('noCap')}
               </p>
             )}
           </div>
@@ -108,7 +137,7 @@ function CategoryCapsCard({
             disabled={saving}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       )}
@@ -125,6 +154,7 @@ function CategoryCapsCard({
  * opens the full file in a new tab. No receipt at all renders a plain "—".
  */
 function ReceiptCell({ expense }: { expense: Expense }) {
+  const { t } = useTranslation('approvals');
   const isImage = expense.receiptMimeType?.startsWith('image/') ?? false;
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -179,9 +209,9 @@ function ReceiptCell({ expense }: { expense: Expense }) {
             className="h-10 w-10 rounded border border-line object-cover"
           />
         ) : failed ? (
-          <span className="text-xs text-red-500">Failed to load</span>
+          <span className="text-xs text-red-500">{t('receiptFailedToLoad')}</span>
         ) : (
-          <span className="text-xs text-txt-3">Loading…</span>
+          <span className="text-xs text-txt-3">{t('loading')}</span>
         )}
       </button>
     );
@@ -194,7 +224,7 @@ function ReceiptCell({ expense }: { expense: Expense }) {
       disabled={opening}
       className="text-sm font-medium text-txt hover:underline disabled:opacity-50"
     >
-      {opening ? 'Opening…' : failed ? 'Could not open' : 'View receipt'}
+      {opening ? t('receiptOpening') : failed ? t('receiptCouldNotOpen') : t('receiptView')}
     </button>
   );
 }
@@ -208,6 +238,8 @@ function RejectExpenseModal({
   onClose: () => void;
   onRejected: () => void;
 }) {
+  const { t } = useTranslation('approvals');
+  const { t: tCommon } = useTranslation('common');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -219,7 +251,7 @@ function RejectExpenseModal({
     // The backend already 400s on a blank reason - this just stops the
     // dialog from even trying, per the task's own instruction.
     if (!reason.trim()) {
-      setError('A reason is required.');
+      setError(t('errorReasonRequired'));
       return;
     }
 
@@ -231,26 +263,26 @@ function RejectExpenseModal({
       });
       onRejected();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reject the expense.');
+      setError(err instanceof ApiError ? err.message : t('rejectExpenseError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="Reject expense" onClose={onClose}>
+    <Modal title={t('rejectExpenseTitle')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <p className="text-sm text-txt-2">
-          {expense.category} · {formatTZS(expense.amount)}
+          {categoryLabel(expense.category, t)} · {formatTZS(expense.amount)}
         </p>
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt">Reason</label>
+          <label className="mb-1 block text-sm font-medium text-txt">{t('fieldReason')}</label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             className="w-full rounded border border-line px-3 py-2 text-sm"
-            placeholder="Why is this being rejected?"
+            placeholder={t('reasonPlaceholder')}
             autoFocus
           />
         </div>
@@ -263,14 +295,14 @@ function RejectExpenseModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
-            {submitting ? 'Rejecting…' : 'Reject'}
+            {submitting ? t('rejecting') : t('reject')}
           </button>
         </div>
       </form>
@@ -282,7 +314,7 @@ function RejectExpenseModal({
  *  dashboard (§ no rail/closing row - forcing that content would mean
  *  inventing filler). All three tiles are computed from the same
  *  already-fetched pending-expenses list, not a separate backend call. */
-function pendingKpis(expenses: Expense[]): KpiTile[] {
+function pendingKpis(expenses: Expense[], t: TFunction<'approvals'>): KpiTile[] {
   const count = expenses.length;
   const totalValue = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const oldest =
@@ -293,17 +325,19 @@ function pendingKpis(expenses: Expense[]): KpiTile[] {
     ? Math.max(0, Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / 86_400_000))
     : 0;
   return [
-    { label: 'Pending', value: String(count), accentColor: count > 0 ? 'warn' : 'good' },
-    { label: 'Total value pending', value: formatTZS(totalValue), accentColor: 'c1' },
+    { label: t('kpiPending'), value: String(count), accentColor: count > 0 ? 'warn' : 'good' },
+    { label: t('kpiTotalValuePending'), value: formatTZS(totalValue), accentColor: 'c1' },
     {
-      label: 'Oldest pending',
-      value: oldest ? `${oldestDays} day${oldestDays === 1 ? '' : 's'}` : '—',
+      label: t('kpiOldestPending'),
+      value: oldest ? t('oldestPendingDays', { count: oldestDays }) : '—',
       accentColor: oldestDays > 3 ? 'crit' : 'good',
     },
   ];
 }
 
 export function ApprovalsPage() {
+  const { t } = useTranslation('approvals');
+  const { t: tCommon } = useTranslation('common');
   const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -320,7 +354,7 @@ export function ApprovalsPage() {
       const data = await apiFetch<Expense[]>('/expenses?status=PENDING');
       setExpenses(data);
     } catch {
-      setError('Could not load pending expenses. Please try again.');
+      setError(t('loadError'));
     }
   }
 
@@ -363,9 +397,9 @@ export function ApprovalsPage() {
     try {
       await apiFetch(`/expenses/${expense.id}/approve`, { method: 'PATCH' });
       setExpenses((prev) => (prev ? prev.filter((e) => e.id !== expense.id) : prev));
-      setSuccessMessage('Expense approved.');
+      setSuccessMessage(t('expenseApproved'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not approve the expense.');
+      setError(err instanceof ApiError ? err.message : t('approveError'));
     } finally {
       setApprovingId(null);
     }
@@ -374,15 +408,15 @@ export function ApprovalsPage() {
   function handleRejected() {
     if (!rejecting) return;
     setExpenses((prev) => (prev ? prev.filter((e) => e.id !== rejecting.id) : prev));
-    setSuccessMessage('Expense rejected.');
+    setSuccessMessage(t('expenseRejected'));
     setRejecting(null);
   }
 
   return (
     <PageChassis
-      title="Approvals"
-      statusPill={{ mode: 'live', text: 'LIVE' }}
-      kpis={pendingKpis(expenses ?? [])}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: tCommon('statusLive') }}
+      kpis={pendingKpis(expenses ?? [], t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -394,34 +428,34 @@ export function ApprovalsPage() {
       )}
 
       <Card
-        title="Pending expense claims"
+        title={t('pendingClaimsTitle')}
         subtitle={expenses ? String(expenses.length) : undefined}
       >
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Rider</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 text-right font-medium">Amount</th>
-                <th className="px-4 py-2 font-medium">Incurred</th>
-                <th className="px-4 py-2 font-medium">Submitted</th>
-                <th className="px-4 py-2 font-medium">Receipt</th>
-                <th className="px-4 py-2 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">{t('tableRider')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableCategory')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableAmount')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableIncurred')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableSubmitted')}</th>
+                <th className="px-4 py-2 font-medium">{t('tableReceipt')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody>
               {expenses === null ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-txt-2">
-                    Loading…
+                    {t('loading')}
                   </td>
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-txt-2">
-                    No pending expenses.
+                    {t('noPendingExpenses')}
                   </td>
                 </tr>
               ) : (
@@ -434,14 +468,14 @@ export function ApprovalsPage() {
                       <td className="px-4 py-2 font-medium text-txt">
                         {driver
                           ? `${driver.user.firstName} ${driver.user.lastName}`
-                          : 'Unknown rider'}
+                          : t('unknownRider')}
                       </td>
                       <td className="px-4 py-2 text-txt-2">
                         {e.motorcycleId ? (regById.get(e.motorcycleId) ?? '—') : '—'}
                       </td>
                       <td className="px-4 py-2 text-txt">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span>{e.category}</span>
+                          <span>{categoryLabel(e.category, t)}</span>
                           {e.overCapFlag && <OverCapBadge />}
                           {e.possibleDuplicateFlag && <PossibleDuplicateBadge />}
                         </div>
@@ -458,14 +492,14 @@ export function ApprovalsPage() {
                           disabled={approvingId === e.id}
                           className="mr-3 text-sm font-medium text-good hover:underline disabled:opacity-50"
                         >
-                          {approvingId === e.id ? 'Approving…' : 'Approve'}
+                          {approvingId === e.id ? t('approving') : t('approve')}
                         </button>
                         <button
                           onClick={() => setRejecting(e)}
                           disabled={approvingId === e.id}
                           className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
                         >
-                          Reject
+                          {t('reject')}
                         </button>
                       </td>
                     </tr>
@@ -478,9 +512,9 @@ export function ApprovalsPage() {
 
         <div className="md:hidden">
           {expenses === null ? (
-            <p className="p-4 text-center text-sm text-txt-2">Loading…</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('loading')}</p>
           ) : expenses.length === 0 ? (
-            <p className="p-4 text-center text-sm text-txt-2">No pending expenses.</p>
+            <p className="p-4 text-center text-sm text-txt-2">{t('noPendingExpenses')}</p>
           ) : (
             expenses.map((e) => {
               const driver = e.submittedByRiderId
@@ -492,9 +526,9 @@ export function ApprovalsPage() {
                     <span className="font-medium text-txt">
                       {driver
                         ? `${driver.user.firstName} ${driver.user.lastName}`
-                        : 'Unknown rider'}
+                        : t('unknownRider')}
                     </span>
-                    <span className="text-xs text-txt-2">{e.category}</span>
+                    <span className="text-xs text-txt-2">{categoryLabel(e.category, t)}</span>
                   </div>
                   {(e.overCapFlag || e.possibleDuplicateFlag) && (
                     <div className="mt-1 flex flex-wrap gap-2">
@@ -507,7 +541,10 @@ export function ApprovalsPage() {
                     {formatTZS(e.amount)}
                   </p>
                   <p className="mt-1 text-xs text-txt-2">
-                    Incurred {e.incurredAt.slice(0, 10)} · Submitted {formatDateTime(e.createdAt)}
+                    {t('mobileIncurredSubmitted', {
+                      incurred: e.incurredAt.slice(0, 10),
+                      submitted: formatDateTime(e.createdAt),
+                    })}
                   </p>
                   <div className="mt-2">
                     <ReceiptCell expense={e} />
@@ -518,14 +555,14 @@ export function ApprovalsPage() {
                       disabled={approvingId === e.id}
                       className="text-sm font-medium text-good hover:underline disabled:opacity-50"
                     >
-                      {approvingId === e.id ? 'Approving…' : 'Approve'}
+                      {approvingId === e.id ? t('approving') : t('approve')}
                     </button>
                     <button
                       onClick={() => setRejecting(e)}
                       disabled={approvingId === e.id}
                       className="text-sm font-medium text-crit hover:underline disabled:opacity-50"
                     >
-                      Reject
+                      {t('reject')}
                     </button>
                   </div>
                 </div>

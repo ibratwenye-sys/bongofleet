@@ -20,6 +20,8 @@ import enDrivers from '../locales/en/drivers.json';
 import swDrivers from '../locales/sw/drivers.json';
 import enDocumentSlot from '../locales/en/documentSlot.json';
 import swDocumentSlot from '../locales/sw/documentSlot.json';
+import enApprovals from '../locales/en/approvals.json';
+import swApprovals from '../locales/sw/approvals.json';
 import type { Language } from './types';
 
 /**
@@ -30,10 +32,11 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L10 translate them (operationsCenter, payments,
- * expenses, transport, fleet, maintenance, assignments, then drivers -
- * see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
- * need: a page gets its own namespace only once it's actually translated.
+ * batch as Stage L2-L11 translate them (operationsCenter, payments,
+ * expenses, transport, fleet, maintenance, assignments, drivers, then
+ * approvals - see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not
+ * built ahead of need: a page gets its own namespace only once it's
+ * actually translated.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -41,9 +44,11 @@ import type { Language } from './types';
  * and GuarantorRow, and PasswordRecoveryNote).
  * `documentSlot` is its own namespace, split out at L10 batch b, because
  * DocumentSlot.tsx is a genuinely shared component - also used (still in
- * English) by ApprovalsPage.tsx and MotorcycleDetailPage.tsx, which now
- * inherit a fully-translated component for free once their own pages are
- * eventually translated, instead of this work being redone per page.
+ * English) by MotorcycleDetailPage.tsx, which now inherits a
+ * fully-translated component for free once its own page is eventually
+ * translated, instead of this work being redone per page. ApprovalsPage
+ * itself uses DocumentSlot's sibling namespace `approvals` for its own
+ * page-specific strings as of L11.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -58,6 +63,7 @@ void i18n.use(initReactI18next).init({
       assignments: enAssignments,
       drivers: enDrivers,
       documentSlot: enDocumentSlot,
+      approvals: enApprovals,
     },
     sw: {
       common: sw,
@@ -70,6 +76,7 @@ void i18n.use(initReactI18next).init({
       assignments: swAssignments,
       drivers: swDrivers,
       documentSlot: swDocumentSlot,
+      approvals: swApprovals,
     },
   },
   lng: 'en',
