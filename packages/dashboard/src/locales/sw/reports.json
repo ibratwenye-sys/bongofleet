@@ -1,0 +1,62 @@
+{
+  "title": "Ripoti",
+
+  "kpiRevenue": "Mapato",
+  "kpiExpenses": "Gharama",
+  "kpiNetProfit": "Faida Halisi",
+  "kpiNetProfitPerVehicle": "Faida Halisi kwa Gari",
+  "kpiBestMargin": "Faida ya Asilimia Bora Zaidi",
+  "kpiRecoverable": "Inayoweza Kurejeshwa",
+
+  "filterCategory": "Aina",
+  "filterFrom": "Kuanzia",
+  "filterTo": "Hadi",
+  "apply": "Tumia",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia ripoti. Tafadhali jaribu tena.",
+  "allVehicles": "Magari Yote",
+
+  "segmentTitle": "Faida na Hasara kwa Aina",
+  "tableType": "Aina",
+  "tableVehicles": "Magari",
+  "tableRevenue": "Mapato",
+  "tableExpenses": "Gharama",
+  "tableNet": "Faida Halisi",
+  "tableMargin": "Faida ya Asilimia",
+  "tableNetPerVehicle": "Faida Halisi / Gari",
+  "total": "Jumla",
+  "marginByTypeLabel": "Faida ya Asilimia kwa Aina ya Gari",
+
+  "aiInsightsTitle": "Maarifa ya AI",
+  "nothingToFlag": "Hakuna kinachohitaji kuangaliwa kwa sasa.",
+  "idleVehiclesTitle_one": "gari {{count}} halifanyi kazi",
+  "idleVehiclesTitle_other": "magari {{count}} hayafanyi kazi",
+  "idleVehicleDescription_one": "{{registration}} limekaa muda mrefu zaidi bila dereva - siku {{count}}.",
+  "idleVehicleDescription_other": "{{registration}} limekaa muda mrefu zaidi bila dereva - siku {{count}}.",
+  "noDriverAssignedToday": "Hakuna dereva aliyegawiwa leo.",
+  "missedPaymentTitle": "{{amount}} inayoweza kurejeshwa kutoka kwa {{driverName}}",
+  "missedPaymentDescription_one": "Amekosa malipo kwa siku {{count}} mfululizo kwenye {{vehicle}}.",
+  "missedPaymentDescription_other": "Amekosa malipo kwa siku {{count}} mfululizo kwenye {{vehicle}}.",
+  "theirVehicleFallback": "gari lake",
+
+  "eatingProfitTitle": "Kinachomaliza Faida",
+  "nothingStandsOut": "Hakuna kilichojitokeza kipindi hiki.",
+  "worstPerformerSuffix": "{{registration}} (utendaji dhaifu zaidi)",
+  "ownershipArrearsAtRisk": "Malimbikizo ya Umiliki Hatarini",
+
+  "marginTrendTitle": "Mwenendo wa Faida",
+  "lastMonthsSubtitle_one": "mwezi {{count}} uliopita",
+  "lastMonthsSubtitle_other": "miezi {{count}} iliyopita",
+  "noDataInPeriod": "Hakuna data katika kipindi hiki.",
+  "marginTrendUp": "Faida ya asilimia imepanda kutoka {{first}}% hadi {{last}}% katika kipindi hiki.",
+  "marginTrendDown": "Faida ya asilimia imeshuka kutoka {{first}}% hadi {{last}}% katika kipindi hiki.",
+
+  "bestWorstTitle": "Gari Bora Zaidi na Baya Zaidi Kipindi Hiki",
+  "best": "Bora Zaidi",
+  "worst": "Baya Zaidi",
+  "noActivityThisPeriod": "Hakuna shughuli kipindi hiki.",
+  "onlyOneVehicleActivity": "Gari moja tu lilikuwa na shughuli kipindi hiki.",
+
+  "monthlyTitle": "Mapato na Faida kwa Mwezi",
+  "tableMonth": "Mwezi"
+}

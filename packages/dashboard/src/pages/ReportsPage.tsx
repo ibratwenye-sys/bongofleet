@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiFetch } from '../lib/api';
 import type {
   AssignmentSummaryResponse,
@@ -16,19 +18,34 @@ import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
-  ALL: 'All vehicles',
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
+// Stage L12 (DESIGN_SWAHILI_UI.md) - this is now the FOURTH page with its
+// own private copy of this exact VehicleType label wrapper (Fleet L7,
+// Maintenance L8, Assignments L9, now this). Unlike those three, ReportsPage
+// never shipped its own duplicate translated strings before this stage -
+// it read straight off the already-centralized common.json keys from day
+// one, so there was no separate cleanup step needed here.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
 };
-const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
-};
+
+function vehicleTypeLabel(vehicleType: VehicleType, tCommon: TFunction<'common'>): string {
+  return tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType]);
+}
+
+// Same "one extra ALL option" problem ExpensesPage.tsx's own
+// vehicleTypeFilterLabel() solved at L4 - 'ALL' isn't a real VehicleType,
+// so it gets its own reports.json key instead of a fifth VEHICLE_TYPE_LABEL_KEY entry.
+function categoryOptionLabel(
+  category: VehicleType | 'ALL',
+  t: TFunction<'reports'>,
+  tCommon: TFunction<'common'>,
+): string {
+  return category === 'ALL' ? t('allVehicles') : vehicleTypeLabel(category, tCommon);
+}
+
 const MONTHS_BACK = 6;
 
 interface ReportData {
@@ -40,7 +57,11 @@ interface ReportData {
   monthlySeries: MonthlyPnlPoint[];
 }
 
-function kpisToTiles(data: ReportData): KpiTile[] {
+function kpisToTiles(
+  data: ReportData,
+  t: TFunction<'reports'>,
+  tCommon: TFunction<'common'>,
+): KpiTile[] {
   const total = data.segments.find((s) => s.vehicleType === 'TOTAL');
   const nonTotal = data.segments.filter((s) => s.vehicleType !== 'TOTAL');
   const bestMargin = nonTotal.reduce<SegmentPnl | null>(
@@ -49,29 +70,29 @@ function kpisToTiles(data: ReportData): KpiTile[] {
   );
   const net = total ? parseFloat(total.netProfit) : 0;
   return [
-    { label: 'Revenue', value: formatTZS(total?.revenue ?? '0'), accentColor: 'c1' },
-    { label: 'Expenses', value: formatTZS(total?.expenses ?? '0'), accentColor: 'warn' },
+    { label: t('kpiRevenue'), value: formatTZS(total?.revenue ?? '0'), accentColor: 'c1' },
+    { label: t('kpiExpenses'), value: formatTZS(total?.expenses ?? '0'), accentColor: 'warn' },
     {
-      label: 'Net profit',
+      label: t('kpiNetProfit'),
       value: formatTZS(total?.netProfit ?? '0'),
       accentColor: net >= 0 ? 'good' : 'crit',
     },
     {
-      label: 'Net profit per vehicle',
+      label: t('kpiNetProfitPerVehicle'),
       value: formatTZS(total?.netProfitPerVehicle ?? '0'),
       accentColor: 'violet',
     },
     {
-      label: 'Best margin',
+      label: t('kpiBestMargin'),
       value: bestMargin ? `${bestMargin.marginPct}%` : '—',
       delta:
         bestMargin && bestMargin.vehicleType !== 'TOTAL'
-          ? VEHICLE_TYPE_LABELS[bestMargin.vehicleType as VehicleType]
+          ? vehicleTypeLabel(bestMargin.vehicleType as VehicleType, tCommon)
           : undefined,
       accentColor: 'good',
     },
     {
-      label: 'Recoverable',
+      label: t('kpiRecoverable'),
       value: formatTZS(data.ownership.kpis.moneyAtRisk),
       accentColor: data.ownership.kpis.moneyAtRisk !== '0.00' ? 'crit' : 'good',
     },
@@ -79,6 +100,8 @@ function kpisToTiles(data: ReportData): KpiTile[] {
 }
 
 function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
+  const { t } = useTranslation('reports');
+  const { t: tCommon } = useTranslation('common');
   const nonTotal = segments.filter((s) => s.vehicleType !== 'TOTAL');
   const total = segments.find((s) => s.vehicleType === 'TOTAL');
   const maxMargin = Math.max(...nonTotal.map((s) => Math.abs(s.marginPct)), 1);
@@ -88,20 +111,20 @@ function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-              <th className="px-4 py-2 font-medium">Type</th>
-              <th className="px-4 py-2 text-right font-medium">Vehicles</th>
-              <th className="px-4 py-2 text-right font-medium">Revenue</th>
-              <th className="px-4 py-2 text-right font-medium">Expenses</th>
-              <th className="px-4 py-2 text-right font-medium">Net</th>
-              <th className="px-4 py-2 text-right font-medium">Margin</th>
-              <th className="px-4 py-2 text-right font-medium">Net / vehicle</th>
+              <th className="px-4 py-2 font-medium">{t('tableType')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableVehicles')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableRevenue')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableExpenses')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableNet')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableMargin')}</th>
+              <th className="px-4 py-2 text-right font-medium">{t('tableNetPerVehicle')}</th>
             </tr>
           </thead>
           <tbody>
             {nonTotal.map((s) => (
               <tr key={s.vehicleType} className="border-b border-line-soft last:border-0">
                 <td className="px-4 py-2 font-medium text-txt">
-                  {VEHICLE_TYPE_LABELS[s.vehicleType as VehicleType]}
+                  {vehicleTypeLabel(s.vehicleType as VehicleType, tCommon)}
                 </td>
                 <td className="px-4 py-2 text-right text-txt-2">{s.vehicleCount}</td>
                 <td className="px-4 py-2 text-right text-txt-2">{formatTZS(s.revenue)}</td>
@@ -119,7 +142,7 @@ function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
             ))}
             {total && (
               <tr className="border-t border-line font-semibold">
-                <td className="px-4 py-2 text-txt">Total</td>
+                <td className="px-4 py-2 text-txt">{t('total')}</td>
                 <td className="px-4 py-2 text-right text-txt">{total.vehicleCount}</td>
                 <td className="px-4 py-2 text-right text-txt">{formatTZS(total.revenue)}</td>
                 <td className="px-4 py-2 text-right text-txt">{formatTZS(total.expenses)}</td>
@@ -138,12 +161,12 @@ function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
         </table>
       </div>
       <div className="p-4">
-        <p className="mb-2 text-xs font-medium text-txt-2">Margin by vehicle type</p>
+        <p className="mb-2 text-xs font-medium text-txt-2">{t('marginByTypeLabel')}</p>
         <div className="space-y-2">
           {nonTotal.map((s) => (
             <div key={s.vehicleType} className="flex items-center gap-2">
               <span className="w-20 shrink-0 text-xs text-txt-3">
-                {VEHICLE_TYPE_LABELS[s.vehicleType as VehicleType]}
+                {vehicleTypeLabel(s.vehicleType as VehicleType, tCommon)}
               </span>
               <div className="h-3 flex-1 overflow-hidden rounded-full bg-panel-2">
                 <div
@@ -160,7 +183,15 @@ function SegmentTable({ segments }: { segments: SegmentPnl[] }) {
   );
 }
 
+// Stage L12 - unlike every other page's AI Insights card, there is no
+// backend insight object here: this card builds `insights` entirely
+// client-side, string-templating title/description straight from
+// data.assignments/data.ownership numbers. That makes this content
+// dashboard-authored (the same category as any other page's KPI/detail-
+// line templates), not the usual backend-content exemption - it needs
+// real translation keys.
 function ReportsInsightsCard({ data }: { data: ReportData }) {
+  const { t } = useTranslation('reports');
   const idleCount = data.assignments.kpis.inStockToday.count;
   const topIdle = data.assignments.unassignedNow[0];
   const topMissed = data.ownership.missedDaysTable[0];
@@ -168,23 +199,32 @@ function ReportsInsightsCard({ data }: { data: ReportData }) {
   const insights: { title: string; description: string }[] = [];
   if (idleCount > 0) {
     insights.push({
-      title: `${idleCount} vehicle${idleCount === 1 ? '' : 's'} sitting idle`,
+      title: t('idleVehiclesTitle', { count: idleCount }),
       description: topIdle
-        ? `${topIdle.registrationNumber} has gone longest without a driver - ${topIdle.daysUnassigned} days.`
-        : 'No driver assigned today.',
+        ? t('idleVehicleDescription', {
+            registration: topIdle.registrationNumber,
+            count: topIdle.daysUnassigned,
+          })
+        : t('noDriverAssignedToday'),
     });
   }
   if (topMissed) {
     insights.push({
-      title: `${formatTZS(topMissed.valueAtRisk)} recoverable from ${topMissed.driverName}`,
-      description: `${topMissed.missedStreak} day${topMissed.missedStreak === 1 ? '' : 's'} missed in a row on ${topMissed.vehicleRegistration ?? 'their vehicle'}.`,
+      title: t('missedPaymentTitle', {
+        amount: formatTZS(topMissed.valueAtRisk),
+        driverName: topMissed.driverName,
+      }),
+      description: t('missedPaymentDescription', {
+        count: topMissed.missedStreak,
+        vehicle: topMissed.vehicleRegistration ?? t('theirVehicleFallback'),
+      }),
     });
   }
 
   return (
-    <Card title="AI Insights">
+    <Card title={t('aiInsightsTitle')}>
       {insights.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+        <p className="p-4 text-sm text-txt-2">{t('nothingToFlag')}</p>
       ) : (
         <div className="divide-y divide-line-soft">
           {insights.map((insight, i) => (
@@ -199,7 +239,13 @@ function ReportsInsightsCard({ data }: { data: ReportData }) {
   );
 }
 
+// Stage L12 - c.category (the expense-breakdown item's own category text)
+// stays untranslated: it's the same free-text fleet-expense category field
+// ExpensesPage.tsx already established as deliberately-English at L4 (its
+// CATEGORY_SUGGESTIONS datalist), not a fixed enum - real stored data here
+// too, not UI chrome.
 function WhatIsEatingProfitCard({ data }: { data: ReportData }) {
+  const { t } = useTranslation('reports');
   const items: { label: string; displayAmount: string; amount: number }[] = [];
   for (const c of data.breakdown.slice(0, 2)) {
     items.push({
@@ -211,7 +257,7 @@ function WhatIsEatingProfitCard({ data }: { data: ReportData }) {
   const worst = data.perMotorcycle[data.perMotorcycle.length - 1];
   if (worst) {
     items.push({
-      label: `${worst.registrationNumber} (worst performer)`,
+      label: t('worstPerformerSuffix', { registration: worst.registrationNumber }),
       displayAmount: formatTZS(worst.netProfit),
       amount: Math.abs(parseFloat(worst.netProfit)),
     });
@@ -219,7 +265,7 @@ function WhatIsEatingProfitCard({ data }: { data: ReportData }) {
   const atRisk = parseFloat(data.ownership.kpis.moneyAtRisk);
   if (atRisk > 0) {
     items.push({
-      label: 'Ownership arrears at risk',
+      label: t('ownershipArrearsAtRisk'),
       displayAmount: formatTZS(data.ownership.kpis.moneyAtRisk),
       amount: atRisk,
     });
@@ -227,9 +273,9 @@ function WhatIsEatingProfitCard({ data }: { data: ReportData }) {
   items.sort((a, b) => b.amount - a.amount);
 
   return (
-    <Card title="What is eating the profit">
+    <Card title={t('eatingProfitTitle')}>
       {items.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">Nothing stands out this period.</p>
+        <p className="p-4 text-sm text-txt-2">{t('nothingStandsOut')}</p>
       ) : (
         <ul className="divide-y divide-line-soft">
           {items.map((item, i) => (
@@ -250,18 +296,27 @@ function marginOf(p: MonthlyPnlPoint): number {
 }
 
 function MarginTrendCard({ series }: { series: MonthlyPnlPoint[] }) {
+  const { t } = useTranslation('reports');
   if (series.length === 0) {
     return (
-      <Card title="Margin trend">
-        <p className="p-4 text-sm text-txt-2">No data in this period.</p>
+      <Card title={t('marginTrendTitle')}>
+        <p className="p-4 text-sm text-txt-2">{t('noDataInPeriod')}</p>
       </Card>
     );
   }
   const first = marginOf(series[0]);
   const last = marginOf(series[series.length - 1]);
-  const direction = last >= first ? 'up' : 'down';
+  // Stage L12 - direction is chosen in code (two full template keys) rather
+  // than interpolating a translated word into one shared sentence: Swahili
+  // word order for "moved up/down" doesn't necessarily match English's
+  // adverb-after-verb placement, so a single interpolated-direction
+  // template would be fragile.
+  const trendKey = last >= first ? 'marginTrendUp' : 'marginTrendDown';
   return (
-    <Card title="Margin trend" subtitle={`last ${series.length} months`}>
+    <Card
+      title={t('marginTrendTitle')}
+      subtitle={t('lastMonthsSubtitle', { count: series.length })}
+    >
       <div className="flex h-28 items-end gap-2 px-4 pt-4">
         {series.map((p) => {
           const margin = marginOf(p);
@@ -277,31 +332,32 @@ function MarginTrendCard({ series }: { series: MonthlyPnlPoint[] }) {
         })}
       </div>
       <p className="px-4 pb-4 pt-2 text-xs text-txt-2">
-        Margin moved {direction} from {first.toFixed(0)}% to {last.toFixed(0)}% over this period.
+        {t(trendKey, { first: first.toFixed(0), last: last.toFixed(0) })}
       </p>
     </Card>
   );
 }
 
 function BestWorstVehicleCard({ rows }: { rows: MotorcyclePnl[] }) {
+  const { t } = useTranslation('reports');
   const best = rows[0];
   const worst = rows.length > 1 ? rows[rows.length - 1] : null;
   return (
-    <Card title="Best and worst performing vehicle this period">
+    <Card title={t('bestWorstTitle')}>
       <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
         <div>
-          <p className="text-xs text-txt-2">Best</p>
+          <p className="text-xs text-txt-2">{t('best')}</p>
           {best ? (
             <>
               <p className="mt-1 text-sm font-medium text-txt">{best.registrationNumber}</p>
               <p className="text-lg font-semibold text-good">{formatTZS(best.netProfit)}</p>
             </>
           ) : (
-            <p className="mt-1 text-sm text-txt-2">No activity this period.</p>
+            <p className="mt-1 text-sm text-txt-2">{t('noActivityThisPeriod')}</p>
           )}
         </div>
         <div>
-          <p className="text-xs text-txt-2">Worst</p>
+          <p className="text-xs text-txt-2">{t('worst')}</p>
           {worst ? (
             <>
               <p className="mt-1 text-sm font-medium text-txt">{worst.registrationNumber}</p>
@@ -312,7 +368,7 @@ function BestWorstVehicleCard({ rows }: { rows: MotorcyclePnl[] }) {
               </p>
             </>
           ) : (
-            <p className="mt-1 text-sm text-txt-2">Only one vehicle had activity this period.</p>
+            <p className="mt-1 text-sm text-txt-2">{t('onlyOneVehicleActivity')}</p>
           )}
         </div>
       </div>
@@ -321,6 +377,8 @@ function BestWorstVehicleCard({ rows }: { rows: MotorcyclePnl[] }) {
 }
 
 export function ReportsPage() {
+  const { t } = useTranslation('reports');
+  const { t: tCommon } = useTranslation('common');
   const [from, setFrom] = useState<string>(startOfThisMonth());
   const [to, setTo] = useState<string>(today());
   const [category, setCategory] = useState<VehicleType | 'ALL'>('ALL');
@@ -346,11 +404,11 @@ export function ReportsPage() {
         ]);
       setData({ segments, ownership, assignments, breakdown, perMotorcycle, monthlySeries });
     } catch {
-      setError('Could not load reports. Please try again.');
+      setError(t('loadError'));
     } finally {
       setLoading(false);
     }
-  }, [from, to, category]);
+  }, [from, to, category, t]);
 
   useEffect(() => {
     void load();
@@ -361,20 +419,20 @@ export function ReportsPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!data) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   return (
     <PageChassis
-      title="Reports"
-      statusPill={{ mode: 'live', text: 'LIVE' }}
-      kpis={kpisToTiles(data)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: tCommon('statusLive') }}
+      kpis={kpisToTiles(data, t, tCommon)}
     >
       {error && <p className="rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-panel px-4 py-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-txt-3">Category</label>
+          <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterCategory')}</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as VehicleType | 'ALL')}
@@ -382,13 +440,13 @@ export function ReportsPage() {
           >
             {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+                {categoryOptionLabel(c, t, tCommon)}
               </option>
             ))}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-txt-3">From</label>
+          <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterFrom')}</label>
           <input
             type="date"
             value={from}
@@ -398,7 +456,7 @@ export function ReportsPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-txt-3">To</label>
+          <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterTo')}</label>
           <input
             type="date"
             value={to}
@@ -412,13 +470,13 @@ export function ReportsPage() {
           disabled={loading}
           className="rounded bg-c1 px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? 'Loading…' : 'Apply'}
+          {loading ? t('loading') : t('apply')}
         </button>
       </div>
 
       <ChassisGrid
         main={
-          <Card title="Profit and loss by segment">
+          <Card title={t('segmentTitle')}>
             <SegmentTable segments={data.segments} />
           </Card>
         }
@@ -430,15 +488,15 @@ export function ReportsPage() {
         }
       />
 
-      <Card title="Revenue and profit by month" subtitle={`last ${MONTHS_BACK} months`}>
+      <Card title={t('monthlyTitle')} subtitle={t('lastMonthsSubtitle', { count: MONTHS_BACK })}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                <th className="px-4 py-2 font-medium">Month</th>
-                <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                <th className="px-4 py-2 text-right font-medium">Expenses</th>
-                <th className="px-4 py-2 text-right font-medium">Net profit</th>
+                <th className="px-4 py-2 font-medium">{t('tableMonth')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('kpiRevenue')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('kpiExpenses')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('kpiNetProfit')}</th>
               </tr>
             </thead>
             <tbody>

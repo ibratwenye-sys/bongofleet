@@ -22,6 +22,8 @@ import enDocumentSlot from '../locales/en/documentSlot.json';
 import swDocumentSlot from '../locales/sw/documentSlot.json';
 import enApprovals from '../locales/en/approvals.json';
 import swApprovals from '../locales/sw/approvals.json';
+import enReports from '../locales/en/reports.json';
+import swReports from '../locales/sw/reports.json';
 import type { Language } from './types';
 
 /**
@@ -32,11 +34,11 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L11 translate them (operationsCenter, payments,
- * expenses, transport, fleet, maintenance, assignments, drivers, then
- * approvals - see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not
- * built ahead of need: a page gets its own namespace only once it's
- * actually translated.
+ * batch as Stage L2-L12 translate them (operationsCenter, payments,
+ * expenses, transport, fleet, maintenance, assignments, drivers,
+ * approvals, then reports - see DESIGN_SWAHILI_UI.md's per-page rollout
+ * plan). Not built ahead of need: a page gets its own namespace only
+ * once it's actually translated.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -64,6 +66,7 @@ void i18n.use(initReactI18next).init({
       drivers: enDrivers,
       documentSlot: enDocumentSlot,
       approvals: enApprovals,
+      reports: enReports,
     },
     sw: {
       common: sw,
@@ -77,6 +80,7 @@ void i18n.use(initReactI18next).init({
       drivers: swDrivers,
       documentSlot: swDocumentSlot,
       approvals: swApprovals,
+      reports: swReports,
     },
   },
   lng: 'en',

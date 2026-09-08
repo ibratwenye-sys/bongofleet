@@ -1,0 +1,62 @@
+{
+  "title": "Reports",
+
+  "kpiRevenue": "Revenue",
+  "kpiExpenses": "Expenses",
+  "kpiNetProfit": "Net profit",
+  "kpiNetProfitPerVehicle": "Net profit per vehicle",
+  "kpiBestMargin": "Best margin",
+  "kpiRecoverable": "Recoverable",
+
+  "filterCategory": "Category",
+  "filterFrom": "From",
+  "filterTo": "To",
+  "apply": "Apply",
+  "loading": "Loading…",
+  "loadError": "Could not load reports. Please try again.",
+  "allVehicles": "All vehicles",
+
+  "segmentTitle": "Profit and loss by segment",
+  "tableType": "Type",
+  "tableVehicles": "Vehicles",
+  "tableRevenue": "Revenue",
+  "tableExpenses": "Expenses",
+  "tableNet": "Net",
+  "tableMargin": "Margin",
+  "tableNetPerVehicle": "Net / vehicle",
+  "total": "Total",
+  "marginByTypeLabel": "Margin by vehicle type",
+
+  "aiInsightsTitle": "AI Insights",
+  "nothingToFlag": "Nothing to flag right now.",
+  "idleVehiclesTitle_one": "{{count}} vehicle sitting idle",
+  "idleVehiclesTitle_other": "{{count}} vehicles sitting idle",
+  "idleVehicleDescription_one": "{{registration}} has gone longest without a driver - {{count}} day.",
+  "idleVehicleDescription_other": "{{registration}} has gone longest without a driver - {{count}} days.",
+  "noDriverAssignedToday": "No driver assigned today.",
+  "missedPaymentTitle": "{{amount}} recoverable from {{driverName}}",
+  "missedPaymentDescription_one": "{{count}} day missed in a row on {{vehicle}}.",
+  "missedPaymentDescription_other": "{{count}} days missed in a row on {{vehicle}}.",
+  "theirVehicleFallback": "their vehicle",
+
+  "eatingProfitTitle": "What is eating the profit",
+  "nothingStandsOut": "Nothing stands out this period.",
+  "worstPerformerSuffix": "{{registration}} (worst performer)",
+  "ownershipArrearsAtRisk": "Ownership arrears at risk",
+
+  "marginTrendTitle": "Margin trend",
+  "lastMonthsSubtitle_one": "last {{count}} month",
+  "lastMonthsSubtitle_other": "last {{count}} months",
+  "noDataInPeriod": "No data in this period.",
+  "marginTrendUp": "Margin moved up from {{first}}% to {{last}}% over this period.",
+  "marginTrendDown": "Margin moved down from {{first}}% to {{last}}% over this period.",
+
+  "bestWorstTitle": "Best and worst performing vehicle this period",
+  "best": "Best",
+  "worst": "Worst",
+  "noActivityThisPeriod": "No activity this period.",
+  "onlyOneVehicleActivity": "Only one vehicle had activity this period.",
+
+  "monthlyTitle": "Revenue and profit by month",
+  "tableMonth": "Month"
+}
