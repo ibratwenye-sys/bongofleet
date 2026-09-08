@@ -1,0 +1,20 @@
+{
+  "title": "Billing",
+  "ownerOnlyGate": "Only the fleet owner can view billing.",
+  "loading": "Loading…",
+  "loadError": "Could not load billing.",
+
+  "exemptBanner": "This account is exempt from billing.",
+  "pastDueBanner": "Payment past due.",
+  "cancelledBanner": "Subscription cancelled.",
+  "pendingVerificationBanner": "Account not yet verified.",
+  "trialEndsInDays_one": "Trial ends in {{count}} day ({{date}}).",
+  "trialEndsInDays_other": "Trial ends in {{count}} days ({{date}}).",
+  "activeBanner": "Active.",
+
+  "kpiActiveBikes": "Active bikes",
+  "kpiPricePerBikeMonth": "Price per bike / month",
+  "kpiEstimatedMonthlyTotal": "Estimated monthly total",
+
+  "disclaimer": "Payment collection isn't connected yet — nothing above is being charged automatically. This is an estimate for your own planning only."
+}

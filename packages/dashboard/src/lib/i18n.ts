@@ -28,6 +28,8 @@ import enMotorcycleDetail from '../locales/en/motorcycleDetail.json';
 import swMotorcycleDetail from '../locales/sw/motorcycleDetail.json';
 import enGpsProviderSettings from '../locales/en/gpsProviderSettings.json';
 import swGpsProviderSettings from '../locales/sw/gpsProviderSettings.json';
+import enBilling from '../locales/en/billing.json';
+import swBilling from '../locales/sw/billing.json';
 import type { Language } from './types';
 
 /**
@@ -38,12 +40,18 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L14 translate them (operationsCenter, payments,
+ * batch as Stage L2-L15 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
- * approvals, reports, motorcycleDetail, then gpsProviderSettings - see
- * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
- * need: a page gets its own namespace only once it's actually
- * translated.
+ * approvals, reports, motorcycleDetail, gpsProviderSettings, then
+ * billing - see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not
+ * built ahead of need: a page gets its own namespace only once it's
+ * actually translated.
+ * `gpsProviderSettings`'s `ownerOnlyGate` (L14) and `billing`'s own
+ * (L15) are the first two data points of an identical five-page
+ * "Only the fleet owner (or a manager) can X" pattern also used by
+ * BulkImportPage/TrackingLinksPage/TrackingMapPage (not yet
+ * translated) - each page keeps its own page-local key of that exact
+ * name so the five stay easy to compare once all five exist.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -74,6 +82,7 @@ void i18n.use(initReactI18next).init({
       reports: enReports,
       motorcycleDetail: enMotorcycleDetail,
       gpsProviderSettings: enGpsProviderSettings,
+      billing: enBilling,
     },
     sw: {
       common: sw,
@@ -90,6 +99,7 @@ void i18n.use(initReactI18next).init({
       reports: swReports,
       motorcycleDetail: swMotorcycleDetail,
       gpsProviderSettings: swGpsProviderSettings,
+      billing: swBilling,
     },
   },
   lng: 'en',

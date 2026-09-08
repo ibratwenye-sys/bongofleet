@@ -1,0 +1,20 @@
+{
+  "title": "Bili",
+  "ownerOnlyGate": "Ni mmiliki wa Fleet pekee anayeweza kuona bili.",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia bili.",
+
+  "exemptBanner": "Akaunti hii imesamehewa bili.",
+  "pastDueBanner": "Malipo yamechelewa.",
+  "cancelledBanner": "Usajili umeghairiwa.",
+  "pendingVerificationBanner": "Akaunti bado haijathibitishwa.",
+  "trialEndsInDays_one": "Muda wa majaribio unaisha baada ya siku {{count}} ({{date}}).",
+  "trialEndsInDays_other": "Muda wa majaribio unaisha baada ya siku {{count}} ({{date}}).",
+  "activeBanner": "Inafanya kazi.",
+
+  "kpiActiveBikes": "Pikipiki Zinazofanya Kazi",
+  "kpiPricePerBikeMonth": "Bei kwa Pikipiki / Mwezi",
+  "kpiEstimatedMonthlyTotal": "Jumla ya Makadirio kwa Mwezi",
+
+  "disclaimer": "Ukusanyaji wa malipo bado haujaunganishwa — hakuna kinachotozwa kiotomatiki hapo juu. Hii ni makadirio kwa ajili ya mipango yako mwenyewe pekee."
+}
