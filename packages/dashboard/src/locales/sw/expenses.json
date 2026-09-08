@@ -54,7 +54,7 @@
   "tableAmount": "Kiasi",
   "tableActions": "Vitendo",
   "noExpensesInPeriod": "Hakuna matumizi katika kipindi hiki.",
-  "fleetWide": "Meli Nzima",
+  "fleetWide": "Fleet Nzima",
   "edit": "Hariri",
   "delete": "Futa",
 
@@ -75,7 +75,7 @@
   "fieldDate": "Tarehe",
   "fieldVehicle": "Gari",
   "optional": "(hiari)",
-  "fleetWideOption": "Meli Nzima (si gari maalum)",
+  "fleetWideOption": "Fleet Nzima (si gari maalum)",
   "fieldDescription": "Maelezo",
 
   "errorCategoryRequired": "Aina inahitajika.",

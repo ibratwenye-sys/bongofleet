@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../lib/api';
 import type { Document, Motorcycle } from '../lib/types';
 import { DocumentSlot } from '../components/DocumentSlot';
 
 export function MotorcycleDetailPage() {
+  const { t } = useTranslation('motorcycleDetail');
   const { motorcycleId } = useParams<{ motorcycleId: string }>();
   const [motorcycle, setMotorcycle] = useState<Motorcycle | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -22,7 +24,7 @@ export function MotorcycleDetailPage() {
       setMotorcycle(motorcycleData);
       setDocuments(documentsData);
     } catch {
-      setError('Could not load vehicle. Please try again.');
+      setError(t('loadError'));
     }
   }
 
@@ -33,12 +35,12 @@ export function MotorcycleDetailPage() {
 
   if (!motorcycleId) return null;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!motorcycle) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (!motorcycle) return <p className="text-sm text-gray-500">{t('loading')}</p>;
 
   return (
     <div>
       <Link to="/fleet" className="mb-4 inline-block text-sm text-gray-600 hover:underline">
-        ← Back to fleet
+        {t('backToFleet')}
       </Link>
       <h1 className="mb-4 text-xl font-semibold text-gray-900">
         {motorcycle.registrationNumber}
@@ -50,13 +52,13 @@ export function MotorcycleDetailPage() {
       </h1>
 
       <section>
-        <h2 className="mb-3 text-lg font-medium text-gray-900">Documents</h2>
+        <h2 className="mb-3 text-lg font-medium text-gray-900">{t('documentsHeading')}</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <DocumentSlot
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="INSURANCE"
-            label="Insurance"
+            label={t('documentInsurance')}
             documents={documents}
             onChanged={load}
           />
@@ -64,7 +66,7 @@ export function MotorcycleDetailPage() {
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="REGISTRATION_CARD"
-            label="Registration Card"
+            label={t('documentRegistrationCard')}
             documents={documents}
             onChanged={load}
           />
@@ -72,7 +74,7 @@ export function MotorcycleDetailPage() {
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="LATRA"
-            label="LATRA"
+            label={t('documentLatra')}
             documents={documents}
             onChanged={load}
           />
@@ -80,7 +82,7 @@ export function MotorcycleDetailPage() {
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="VEHICLE_INSPECTION"
-            label="Vehicle Inspection"
+            label={t('documentVehicleInspection')}
             documents={documents}
             onChanged={load}
           />
@@ -88,7 +90,7 @@ export function MotorcycleDetailPage() {
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="ROAD_SAFETY_WEEK"
-            label="Road Safety Week"
+            label={t('documentRoadSafetyWeek')}
             documents={documents}
             onChanged={load}
           />
@@ -96,8 +98,8 @@ export function MotorcycleDetailPage() {
             ownerType="MOTORCYCLE"
             ownerId={motorcycleId}
             docType="TBS_CERTIFICATE"
-            label="TBS Certificate"
-            hint="(for delivery bikes)"
+            label={t('documentTbsCertificate')}
+            hint={t('tbsCertificateHint')}
             documents={documents}
             onChanged={load}
           />

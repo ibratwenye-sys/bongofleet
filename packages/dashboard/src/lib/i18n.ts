@@ -24,6 +24,8 @@ import enApprovals from '../locales/en/approvals.json';
 import swApprovals from '../locales/sw/approvals.json';
 import enReports from '../locales/en/reports.json';
 import swReports from '../locales/sw/reports.json';
+import enMotorcycleDetail from '../locales/en/motorcycleDetail.json';
+import swMotorcycleDetail from '../locales/sw/motorcycleDetail.json';
 import type { Language } from './types';
 
 /**
@@ -34,23 +36,23 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L12 translate them (operationsCenter, payments,
+ * batch as Stage L2-L13 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
- * approvals, then reports - see DESIGN_SWAHILI_UI.md's per-page rollout
- * plan). Not built ahead of need: a page gets its own namespace only
- * once it's actually translated.
+ * approvals, reports, then motorcycleDetail - see DESIGN_SWAHILI_UI.md's
+ * per-page rollout plan). Not built ahead of need: a page gets its own
+ * namespace only once it's actually translated.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
  * DriverDetailPage.tsx reaches (including its embedded GuarantorFormModal
  * and GuarantorRow, and PasswordRecoveryNote).
  * `documentSlot` is its own namespace, split out at L10 batch b, because
- * DocumentSlot.tsx is a genuinely shared component - also used (still in
- * English) by MotorcycleDetailPage.tsx, which now inherits a
- * fully-translated component for free once its own page is eventually
- * translated, instead of this work being redone per page. ApprovalsPage
- * itself uses DocumentSlot's sibling namespace `approvals` for its own
- * page-specific strings as of L11.
+ * DocumentSlot.tsx is a genuinely shared component - the payoff of that
+ * split lands at L13: MotorcycleDetailPage inherits DocumentSlot's fully-
+ * translated internal strings for free, only needing its own small
+ * `motorcycleDetail` namespace for the caller-supplied labels/hint it
+ * passes in. ApprovalsPage similarly uses its own sibling namespace
+ * `approvals` for its page-specific strings as of L11.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -67,6 +69,7 @@ void i18n.use(initReactI18next).init({
       documentSlot: enDocumentSlot,
       approvals: enApprovals,
       reports: enReports,
+      motorcycleDetail: enMotorcycleDetail,
     },
     sw: {
       common: sw,
@@ -81,6 +84,7 @@ void i18n.use(initReactI18next).init({
       documentSlot: swDocumentSlot,
       approvals: swApprovals,
       reports: swReports,
+      motorcycleDetail: swMotorcycleDetail,
     },
   },
   lng: 'en',

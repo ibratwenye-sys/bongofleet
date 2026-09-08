@@ -1,0 +1,14 @@
+{
+  "backToFleet": "← Back to fleet",
+  "documentsHeading": "Documents",
+  "loading": "Loading…",
+  "loadError": "Could not load vehicle. Please try again.",
+
+  "documentInsurance": "Insurance",
+  "documentRegistrationCard": "Registration Card",
+  "documentLatra": "LATRA",
+  "documentVehicleInspection": "Vehicle Inspection",
+  "documentRoadSafetyWeek": "Road Safety Week",
+  "documentTbsCertificate": "TBS Certificate",
+  "tbsCertificateHint": "(for delivery bikes)"
+}

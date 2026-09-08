@@ -1,5 +1,5 @@
 {
-  "title": "Meli",
+  "title": "Fleet",
   "statusLive": "HAI · {{count}} zinaripoti",
   "addVehicle": "Ongeza gari",
   "loading": "Inapakia…",
@@ -20,10 +20,10 @@
   "kpiNetPerVehicle": "Faida Halisi kwa Gari",
   "kpiNetPerVehicleDelta": "mwezi huu",
 
-  "liveFleetTitle": "Meli kwa Wakati Halisi",
+  "liveFleetTitle": "Fleet kwa Wakati Halisi",
   "reportingCount": "{{count}} zinaripoti",
 
-  "fleetByTypeTitle": "Meli kwa Aina",
+  "fleetByTypeTitle": "Fleet kwa Aina",
   "fleetByTypeSubtitle_one": "gari {{count}}",
   "fleetByTypeSubtitle_other": "magari {{count}}",
 
@@ -85,7 +85,7 @@
   "fieldOperatingArea": "Eneo la Uendeshaji",
   "operatingAreaOptional": "(hiari, unaweka mwenyewe)",
   "operatingAreaPlaceholder": "mfano: Kariakoo",
-  "operatingAreaHelp": "Maandishi huru - hakuna ugunduzi wa eneo. Ukurasa wa Meli hupanga magari kwa chochote unachoandika hapa.",
+  "operatingAreaHelp": "Maandishi huru - hakuna ugunduzi wa eneo. Ukurasa wa Fleet hupanga magari kwa chochote unachoandika hapa.",
   "fieldStatus": "Hali",
   "errorRegistrationRequired": "Namba ya usajili inahitajika.",
   "vehicleUpdated": "Gari limesasishwa.",

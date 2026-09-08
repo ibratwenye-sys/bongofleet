@@ -1,0 +1,14 @@
+{
+  "backToFleet": "← Rudi kwa Fleet",
+  "documentsHeading": "Hati",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia gari. Tafadhali jaribu tena.",
+
+  "documentInsurance": "Bima",
+  "documentRegistrationCard": "Kadi ya Usajili",
+  "documentLatra": "LATRA",
+  "documentVehicleInspection": "Ukaguzi wa Gari",
+  "documentRoadSafetyWeek": "Wiki ya Usalama Barabarani",
+  "documentTbsCertificate": "Cheti cha TBS",
+  "tbsCertificateHint": "(kwa pikipiki za kusafirisha)"
+}
