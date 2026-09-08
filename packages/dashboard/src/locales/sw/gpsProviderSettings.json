@@ -1,0 +1,37 @@
+{
+  "title": "Mtoa Huduma wa GPS",
+  "subtitle": "Unganisha seva ya Traccar ili maeneo ya magari yenye vifaa vya ufuatiliaji yaingizwe kiotomatiki.",
+  "ownerOnlyGate": "Ni mmiliki wa Fleet pekee anayeweza kusimamia muunganisho wa mtoa huduma wa GPS.",
+  "loading": "Inapakia…",
+  "loadError": "Imeshindikana kupakia mipangilio ya mtoa huduma wa GPS.",
+
+  "statusLabel": "Hali",
+  "dtConnection": "Muunganisho",
+  "dtLastPolled": "Jaribio la Mwisho",
+  "dtLastSuccessfulPoll": "Jaribio la Mwisho Lililofanikiwa",
+  "connectionStatusActive": "Inafanya Kazi",
+  "connectionStatusDeactivated": "Imezimwa",
+  "never": "Kamwe",
+  "lastErrorPrefix": "Hitilafu ya Mwisho:",
+  "deactivateConnectionButton": "Zima Muunganisho",
+
+  "replaceConnectionHeading": "Badilisha Taarifa za Muunganisho",
+  "connectTraccarHeading": "Unganisha Seva ya Traccar",
+  "fieldServerUrl": "URL ya Seva",
+  "fieldApiToken": "Tokeni ya API",
+  "tokenSavedPlaceholder": "Tokeni imehifadhiwa - weka mpya ili kuibadilisha",
+  "saving": "Inahifadhi…",
+  "saveChanges": "Hifadhi Mabadiliko",
+  "connect": "Unganisha",
+
+  "connectionSavedMessage": "Muunganisho wa mtoa huduma wa GPS umehifadhiwa.",
+  "connectionDeactivatedMessage": "Muunganisho wa mtoa huduma wa GPS umezimwa.",
+  "errorUrlRequired": "Weka URL ya seva ya Traccar.",
+  "errorTokenRequired": "Weka tokeni ya API ya Traccar.",
+  "genericError": "Hitilafu imetokea. Tafadhali jaribu tena.",
+  "deactivateError": "Imeshindikana kuzima muunganisho.",
+
+  "deactivateDialogTitle": "Zima Muunganisho wa Mtoa Huduma wa GPS",
+  "deactivateDialogMessage": "Magari yenye vifaa vya ufuatiliaji yataacha kutuma maeneo yake hadi muunganisho huu utakapowekwa tena. Hii haifuti tokeni iliyohifadhiwa.",
+  "deactivateConfirmLabel": "Zima"
+}

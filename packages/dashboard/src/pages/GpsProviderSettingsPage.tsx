@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/auth-context';
 import { apiFetch, ApiError } from '../lib/api';
 import type { GpsProviderConfig } from '../lib/types';
@@ -22,6 +23,7 @@ interface FormState {
  * saved token is never re-displayed, masked or otherwise.
  */
 export function GpsProviderSettingsPage() {
+  const { t } = useTranslation('gpsProviderSettings');
   const { user } = useAuth();
   const [config, setConfig] = useState<GpsProviderConfig | null | undefined>(undefined);
   const [form, setForm] = useState<FormState>({ baseUrl: '', token: '' });
@@ -37,10 +39,10 @@ export function GpsProviderSettingsPage() {
       setConfig(data);
       setForm((f) => ({ ...f, baseUrl: data?.baseUrl ?? f.baseUrl }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load GPS provider settings.');
+      setError(err instanceof ApiError ? err.message : t('loadError'));
       setConfig(null);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -55,8 +57,8 @@ export function GpsProviderSettingsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.baseUrl.trim()) return setError('Enter the Traccar server URL.');
-    if (!form.token.trim()) return setError('Enter the Traccar API token.');
+    if (!form.baseUrl.trim()) return setError(t('errorUrlRequired'));
+    if (!form.token.trim()) return setError(t('errorTokenRequired'));
 
     setSaving(true);
     try {
@@ -66,9 +68,9 @@ export function GpsProviderSettingsPage() {
       });
       setConfig(saved);
       setForm({ baseUrl: saved.baseUrl, token: '' });
-      setSuccessMessage('GPS provider connection saved.');
+      setSuccessMessage(t('connectionSavedMessage'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSaving(false);
     }
@@ -82,9 +84,9 @@ export function GpsProviderSettingsPage() {
         method: 'PATCH',
       });
       setConfig(updated);
-      setSuccessMessage('GPS provider connection deactivated.');
+      setSuccessMessage(t('connectionDeactivatedMessage'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not deactivate the connection.');
+      setError(err instanceof ApiError ? err.message : t('deactivateError'));
     }
   }
 
@@ -94,17 +96,15 @@ export function GpsProviderSettingsPage() {
   if (user && user.role !== 'OWNER') {
     return (
       <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
-        Only the fleet owner can manage the GPS provider connection.
+        {t('ownerOnlyGate')}
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold text-txt">GPS provider</h1>
-      <p className="mb-4 text-sm text-txt-2">
-        Connect a Traccar server so box-tracked vehicles' positions are pulled in automatically.
-      </p>
+      <h1 className="mb-1 text-xl font-semibold text-txt">{t('title')}</h1>
+      <p className="mb-4 text-sm text-txt-2">{t('subtitle')}</p>
 
       {successMessage && (
         <p className="mb-4 rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -112,35 +112,37 @@ export function GpsProviderSettingsPage() {
       {error && <p className="mb-4 rounded bg-crit-d px-3 py-2 text-sm text-crit-x">{error}</p>}
 
       {config === undefined ? (
-        <p className="text-sm text-txt-2">Loading…</p>
+        <p className="text-sm text-txt-2">{t('loading')}</p>
       ) : (
         <div className="space-y-4">
           {config && (
             <div className="rounded-lg border border-line bg-panel p-6 shadow-sm">
-              <p className="mb-3 text-sm font-medium text-txt-2">Status</p>
+              <p className="mb-3 text-sm font-medium text-txt-2">{t('statusLabel')}</p>
               <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                 <div>
-                  <dt className="text-txt-3">Connection</dt>
+                  <dt className="text-txt-3">{t('dtConnection')}</dt>
                   <dd className={config.isActive ? 'text-good' : 'text-txt-2'}>
-                    {config.isActive ? 'Active' : 'Deactivated'}
+                    {config.isActive
+                      ? t('connectionStatusActive')
+                      : t('connectionStatusDeactivated')}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-txt-3">Last polled</dt>
+                  <dt className="text-txt-3">{t('dtLastPolled')}</dt>
                   <dd className="text-txt">
-                    {config.lastPolledAt ? formatDateTime(config.lastPolledAt) : 'Never'}
+                    {config.lastPolledAt ? formatDateTime(config.lastPolledAt) : t('never')}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-txt-3">Last successful poll</dt>
+                  <dt className="text-txt-3">{t('dtLastSuccessfulPoll')}</dt>
                   <dd className="text-txt">
-                    {config.lastSuccessAt ? formatDateTime(config.lastSuccessAt) : 'Never'}
+                    {config.lastSuccessAt ? formatDateTime(config.lastSuccessAt) : t('never')}
                   </dd>
                 </div>
               </dl>
               {config.lastErrorMessage && (
                 <p className="mt-4 rounded bg-crit-d px-3 py-2 text-sm text-crit-x">
-                  Last error: {config.lastErrorMessage}
+                  {t('lastErrorPrefix')} {config.lastErrorMessage}
                 </p>
               )}
               {config.isActive && (
@@ -148,7 +150,7 @@ export function GpsProviderSettingsPage() {
                   onClick={() => setConfirmingDeactivate(true)}
                   className="mt-4 text-sm font-medium text-crit hover:underline"
                 >
-                  Deactivate connection
+                  {t('deactivateConnectionButton')}
                 </button>
               )}
             </div>
@@ -159,11 +161,13 @@ export function GpsProviderSettingsPage() {
             className="max-w-md space-y-3 rounded-lg border border-line bg-panel p-6 shadow-sm"
           >
             <p className="text-sm font-medium text-txt-2">
-              {config ? 'Replace connection details' : 'Connect a Traccar server'}
+              {config ? t('replaceConnectionHeading') : t('connectTraccarHeading')}
             </p>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-txt-2">Server URL</label>
+              <label className="mb-1 block text-sm font-medium text-txt-2">
+                {t('fieldServerUrl')}
+              </label>
               <input
                 value={form.baseUrl}
                 onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
@@ -173,14 +177,14 @@ export function GpsProviderSettingsPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-txt-2">API token</label>
+              <label className="mb-1 block text-sm font-medium text-txt-2">
+                {t('fieldApiToken')}
+              </label>
               <input
                 type="password"
                 value={form.token}
                 onChange={(e) => setForm({ ...form, token: e.target.value })}
-                placeholder={
-                  config?.hasCredentials ? 'Token saved - enter a new one to replace it' : ''
-                }
+                placeholder={config?.hasCredentials ? t('tokenSavedPlaceholder') : ''}
                 autoComplete="new-password"
                 className="w-full rounded border border-line px-3 py-2 text-sm"
               />
@@ -192,7 +196,7 @@ export function GpsProviderSettingsPage() {
                 disabled={saving}
                 className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? 'Saving…' : config ? 'Save changes' : 'Connect'}
+                {saving ? t('saving') : config ? t('saveChanges') : t('connect')}
               </button>
             </div>
           </form>
@@ -201,9 +205,9 @@ export function GpsProviderSettingsPage() {
 
       {confirmingDeactivate && (
         <ConfirmDialog
-          title="Deactivate GPS provider connection"
-          message="Box-tracked vehicles will stop reporting positions until this is reconnected. This does not delete the saved token."
-          confirmLabel="Deactivate"
+          title={t('deactivateDialogTitle')}
+          message={t('deactivateDialogMessage')}
+          confirmLabel={t('deactivateConfirmLabel')}
           danger
           onConfirm={() => void handleDeactivate()}
           onCancel={() => setConfirmingDeactivate(false)}

@@ -26,6 +26,8 @@ import enReports from '../locales/en/reports.json';
 import swReports from '../locales/sw/reports.json';
 import enMotorcycleDetail from '../locales/en/motorcycleDetail.json';
 import swMotorcycleDetail from '../locales/sw/motorcycleDetail.json';
+import enGpsProviderSettings from '../locales/en/gpsProviderSettings.json';
+import swGpsProviderSettings from '../locales/sw/gpsProviderSettings.json';
 import type { Language } from './types';
 
 /**
@@ -36,11 +38,12 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L13 translate them (operationsCenter, payments,
+ * batch as Stage L2-L14 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
- * approvals, reports, then motorcycleDetail - see DESIGN_SWAHILI_UI.md's
- * per-page rollout plan). Not built ahead of need: a page gets its own
- * namespace only once it's actually translated.
+ * approvals, reports, motorcycleDetail, then gpsProviderSettings - see
+ * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
+ * need: a page gets its own namespace only once it's actually
+ * translated.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -70,6 +73,7 @@ void i18n.use(initReactI18next).init({
       approvals: enApprovals,
       reports: enReports,
       motorcycleDetail: enMotorcycleDetail,
+      gpsProviderSettings: enGpsProviderSettings,
     },
     sw: {
       common: sw,
@@ -85,6 +89,7 @@ void i18n.use(initReactI18next).init({
       approvals: swApprovals,
       reports: swReports,
       motorcycleDetail: swMotorcycleDetail,
+      gpsProviderSettings: swGpsProviderSettings,
     },
   },
   lng: 'en',

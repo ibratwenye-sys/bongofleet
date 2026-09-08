@@ -1,0 +1,37 @@
+{
+  "title": "GPS provider",
+  "subtitle": "Connect a Traccar server so box-tracked vehicles' positions are pulled in automatically.",
+  "ownerOnlyGate": "Only the fleet owner can manage the GPS provider connection.",
+  "loading": "Loading…",
+  "loadError": "Could not load GPS provider settings.",
+
+  "statusLabel": "Status",
+  "dtConnection": "Connection",
+  "dtLastPolled": "Last polled",
+  "dtLastSuccessfulPoll": "Last successful poll",
+  "connectionStatusActive": "Active",
+  "connectionStatusDeactivated": "Deactivated",
+  "never": "Never",
+  "lastErrorPrefix": "Last error:",
+  "deactivateConnectionButton": "Deactivate connection",
+
+  "replaceConnectionHeading": "Replace connection details",
+  "connectTraccarHeading": "Connect a Traccar server",
+  "fieldServerUrl": "Server URL",
+  "fieldApiToken": "API token",
+  "tokenSavedPlaceholder": "Token saved - enter a new one to replace it",
+  "saving": "Saving…",
+  "saveChanges": "Save changes",
+  "connect": "Connect",
+
+  "connectionSavedMessage": "GPS provider connection saved.",
+  "connectionDeactivatedMessage": "GPS provider connection deactivated.",
+  "errorUrlRequired": "Enter the Traccar server URL.",
+  "errorTokenRequired": "Enter the Traccar API token.",
+  "genericError": "Something went wrong. Please try again.",
+  "deactivateError": "Could not deactivate the connection.",
+
+  "deactivateDialogTitle": "Deactivate GPS provider connection",
+  "deactivateDialogMessage": "Box-tracked vehicles will stop reporting positions until this is reconnected. This does not delete the saved token.",
+  "deactivateConfirmLabel": "Deactivate"
+}
