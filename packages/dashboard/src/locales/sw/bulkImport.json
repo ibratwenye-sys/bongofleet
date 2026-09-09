@@ -1,0 +1,51 @@
+{
+  "title": "Uingizaji kwa Wingi",
+  "ownerOnlyGate": "Ni mmiliki wa Fleet pekee anayeweza kuingiza data kwa wingi.",
+
+  "sheetVehicles": "Magari",
+  "sheetDrivers": "Madereva",
+  "sheetAssignments": "Migawo",
+  "sheetOwnershipPlans": "Mipango ya Umiliki",
+
+  "countVehiclesCreated": "Magari Yaliyoongezwa",
+  "countVehiclesUpdated": "Magari Yaliyosasishwa",
+  "countDriversCreated": "Madereva Walioongezwa",
+  "countDriversUpdated": "Madereva Waliosasishwa",
+  "countOwnershipPlansCreated": "Mipango ya Umiliki Iliyoongezwa",
+  "countOwnershipPlansUpdated": "Mipango ya Umiliki Iliyosasishwa",
+
+  "statusNew": "Mpya",
+  "statusUpdate": "Sasisho",
+  "statusReference": "Rejea",
+  "statusError": "Hitilafu",
+
+  "rowCount_one": "safu {{count}}",
+  "rowCount_other": "safu {{count}}",
+  "errorCount_one": "hitilafu {{count}}",
+  "errorCount_other": "hitilafu {{count}}",
+  "warningCount_one": "onyo {{count}}",
+  "warningCount_other": "maonyo {{count}}",
+  "noRowsInSheet": "Hakuna safu kwenye laha hii.",
+  "rowLabel": "Safu {{row}}",
+
+  "step1Heading": "1. Pakua Violezo",
+  "templatesIntro": "Jaza hivi kwa taarifa za Fleet yako, kisha pakia kitabu cha kazi hapa chini. Kila kimoja kina safu moja ya mfano iliyokamilika na maelezo kwenye kila safu wima - weka fomati ya safu za simu/NIDA/usajili kama Maandishi ukiongeza safu wima zako mwenyewe.",
+  "templateVehicles": "Kiolezo cha Magari",
+  "templateDrivers": "Kiolezo cha Madereva",
+  "templateAssignments": "Kiolezo cha Migawo",
+  "templateOwnershipPlans": "Kiolezo cha Mipango ya Umiliki",
+
+  "step2Heading": "2. Pakia Kitabu Chako cha Kazi",
+  "preview": "Hakiki",
+  "checking": "Inakagua…",
+  "import": "Ingiza",
+  "importing": "Inaingiza…",
+  "importTooltip": "Rekebisha kila hitilafu iliyoonyeshwa hapa chini kabla ya kuingiza.",
+  "importComplete": "Uingizaji Umekamilika",
+  "canCommitTrue": "Hakuna hitilafu - tayari kwa kuingiza.",
+  "canCommitFalse": "Baadhi ya safu zina hitilafu - zirekebishe kwenye kitabu cha kazi, kisha pakia na uhakiki tena.",
+
+  "downloadTemplateError": "Imeshindikana kupakua kiolezo.",
+  "runPreviewError": "Imeshindikana kuhakiki kitabu hiki cha kazi.",
+  "runCommitError": "Imeshindikana kuingiza kitabu hiki cha kazi."
+}

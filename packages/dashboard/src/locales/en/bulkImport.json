@@ -1,0 +1,51 @@
+{
+  "title": "Bulk import",
+  "ownerOnlyGate": "Only the fleet owner can bulk import.",
+
+  "sheetVehicles": "Vehicles",
+  "sheetDrivers": "Drivers",
+  "sheetAssignments": "Assignments",
+  "sheetOwnershipPlans": "Ownership plans",
+
+  "countVehiclesCreated": "Vehicles created",
+  "countVehiclesUpdated": "Vehicles updated",
+  "countDriversCreated": "Drivers created",
+  "countDriversUpdated": "Drivers updated",
+  "countOwnershipPlansCreated": "Ownership plans created",
+  "countOwnershipPlansUpdated": "Ownership plans updated",
+
+  "statusNew": "New",
+  "statusUpdate": "Update",
+  "statusReference": "Reference",
+  "statusError": "Error",
+
+  "rowCount_one": "{{count}} row",
+  "rowCount_other": "{{count}} rows",
+  "errorCount_one": "{{count}} error",
+  "errorCount_other": "{{count}} errors",
+  "warningCount_one": "{{count}} warning",
+  "warningCount_other": "{{count}} warnings",
+  "noRowsInSheet": "No rows in this sheet.",
+  "rowLabel": "Row {{row}}",
+
+  "step1Heading": "1. Download the templates",
+  "templatesIntro": "Fill these in with your fleet's data, then upload the workbook below. Each has one worked example row and notes on every column - format phone/NIDA/registration columns as Text if you add columns of your own.",
+  "templateVehicles": "Vehicles template",
+  "templateDrivers": "Drivers template",
+  "templateAssignments": "Assignments template",
+  "templateOwnershipPlans": "Ownership plans template",
+
+  "step2Heading": "2. Upload your workbook",
+  "preview": "Preview",
+  "checking": "Checking…",
+  "import": "Import",
+  "importing": "Importing…",
+  "importTooltip": "Fix every error shown below before importing",
+  "importComplete": "Import complete",
+  "canCommitTrue": "No errors - ready to import.",
+  "canCommitFalse": "Some rows have errors - fix them in the workbook, then upload and preview again.",
+
+  "downloadTemplateError": "Could not download the template.",
+  "runPreviewError": "Could not validate this workbook.",
+  "runCommitError": "Could not commit this workbook."
+}

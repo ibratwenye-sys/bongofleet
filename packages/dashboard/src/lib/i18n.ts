@@ -30,6 +30,8 @@ import enGpsProviderSettings from '../locales/en/gpsProviderSettings.json';
 import swGpsProviderSettings from '../locales/sw/gpsProviderSettings.json';
 import enBilling from '../locales/en/billing.json';
 import swBilling from '../locales/sw/billing.json';
+import enBulkImport from '../locales/en/bulkImport.json';
+import swBulkImport from '../locales/sw/bulkImport.json';
 import type { Language } from './types';
 
 /**
@@ -40,18 +42,19 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L15 translate them (operationsCenter, payments,
+ * batch as Stage L2-L16 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
- * approvals, reports, motorcycleDetail, gpsProviderSettings, then
- * billing - see DESIGN_SWAHILI_UI.md's per-page rollout plan). Not
- * built ahead of need: a page gets its own namespace only once it's
- * actually translated.
- * `gpsProviderSettings`'s `ownerOnlyGate` (L14) and `billing`'s own
- * (L15) are the first two data points of an identical five-page
- * "Only the fleet owner (or a manager) can X" pattern also used by
- * BulkImportPage/TrackingLinksPage/TrackingMapPage (not yet
- * translated) - each page keeps its own page-local key of that exact
- * name so the five stay easy to compare once all five exist.
+ * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
+ * then bulkImport - see DESIGN_SWAHILI_UI.md's per-page rollout plan).
+ * Not built ahead of need: a page gets its own namespace only once
+ * it's actually translated.
+ * `gpsProviderSettings` (L14), `billing` (L15), and `bulkImport` (L16)
+ * each carry their own `ownerOnlyGate` key - three data points so far
+ * of an identical five-page "Only the fleet owner (or a manager) can
+ * X" pattern, the remaining two being TrackingLinksPage/TrackingMapPage
+ * (not yet translated, and needing the "or a manager" variant). Each
+ * page keeps its own page-local key of that exact name so the five
+ * stay easy to compare once all five exist.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -83,6 +86,7 @@ void i18n.use(initReactI18next).init({
       motorcycleDetail: enMotorcycleDetail,
       gpsProviderSettings: enGpsProviderSettings,
       billing: enBilling,
+      bulkImport: enBulkImport,
     },
     sw: {
       common: sw,
@@ -100,6 +104,7 @@ void i18n.use(initReactI18next).init({
       motorcycleDetail: swMotorcycleDetail,
       gpsProviderSettings: swGpsProviderSettings,
       billing: swBilling,
+      bulkImport: swBulkImport,
     },
   },
   lng: 'en',

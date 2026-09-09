@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useAuth } from '../lib/auth-context';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import type {
@@ -9,22 +11,41 @@ import type {
   BulkImportSheet,
 } from '../lib/types';
 
-const SHEET_LABEL: Record<BulkImportSheet, string> = {
-  vehicles: 'Vehicles',
-  drivers: 'Drivers',
-  assignments: 'Assignments',
-  ownershipPlans: 'Ownership plans',
+const SHEET_LABEL_KEY: Record<BulkImportSheet, string> = {
+  vehicles: 'sheetVehicles',
+  drivers: 'sheetDrivers',
+  assignments: 'sheetAssignments',
+  ownershipPlans: 'sheetOwnershipPlans',
 };
 
 const SHEETS: BulkImportSheet[] = ['vehicles', 'drivers', 'assignments', 'ownershipPlans'];
 
-const COUNT_LABEL: Record<keyof BulkImportCommitCounts, string> = {
-  vehiclesCreated: 'Vehicles created',
-  vehiclesUpdated: 'Vehicles updated',
-  driversCreated: 'Drivers created',
-  driversUpdated: 'Drivers updated',
-  ownershipPlansCreated: 'Ownership plans created',
-  ownershipPlansUpdated: 'Ownership plans updated',
+// "{{sheet}} template" is a noun-noun compound, not a verb-agreement risk
+// like COUNT_LABEL_KEY below (the possessive connector, if any, would agree
+// with "template" itself, not the sheet noun) - still written as four
+// independent phrases per sheet rather than a single interpolated template,
+// so each stays reviewable on its own.
+const TEMPLATE_LABEL_KEY: Record<BulkImportSheet, string> = {
+  vehicles: 'templateVehicles',
+  drivers: 'templateDrivers',
+  assignments: 'templateAssignments',
+  ownershipPlans: 'templateOwnershipPlans',
+};
+
+// Stage L16 (DESIGN_SWAHILI_UI.md) - each of these 6 is its own fully
+// composed Swahili phrase, not a generic noun+suffix template: "vehicles"
+// (magari, ya- agreement), "drivers" (madereva - a person noun, takes wa-
+// agreement despite its ma- plural shape, same precedent as drivers.json's
+// own "Hakuna madereva waliopatikana"), and "ownership plans" (mipango ya
+// umiliki, mi-/i- agreement) each need their own correct verb agreement -
+// a single shared suffix would have been wrong for at least two of the three.
+const COUNT_LABEL_KEY: Record<keyof BulkImportCommitCounts, string> = {
+  vehiclesCreated: 'countVehiclesCreated',
+  vehiclesUpdated: 'countVehiclesUpdated',
+  driversCreated: 'countDriversCreated',
+  driversUpdated: 'countDriversUpdated',
+  ownershipPlansCreated: 'countOwnershipPlansCreated',
+  ownershipPlansUpdated: 'countOwnershipPlansUpdated',
 };
 
 // A downloaded template needs a real save-as-filename, unlike the PDF/blob
@@ -42,22 +63,25 @@ function saveBlobAs(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function statusBadge(status: BulkImportRowResult['status']) {
+// Second, unrelated enum-label map on this page - BulkImportRowResult's own
+// status, distinct from SHEET_LABEL_KEY/COUNT_LABEL_KEY above.
+const STATUS_LABEL_KEY: Record<BulkImportRowResult['status'], string> = {
+  new: 'statusNew',
+  update: 'statusUpdate',
+  reference: 'statusReference',
+  error: 'statusError',
+};
+
+function statusBadge(status: BulkImportRowResult['status'], t: TFunction<'bulkImport'>) {
   const styles: Record<BulkImportRowResult['status'], string> = {
     new: 'bg-good-d text-good',
     update: 'bg-c1-d text-c1',
     reference: 'bg-panel-2 text-txt-2',
     error: 'bg-crit-d text-crit',
   };
-  const label: Record<BulkImportRowResult['status'], string> = {
-    new: 'New',
-    update: 'Update',
-    reference: 'Reference',
-    error: 'Error',
-  };
   return (
     <span className={`rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
-      {label[status]}
+      {t(STATUS_LABEL_KEY[status])}
     </span>
   );
 }
@@ -77,28 +101,35 @@ function RowMessages({ row }: { row: BulkImportRowResult }) {
 }
 
 function SheetResultCard({ sheet, rows }: { sheet: BulkImportSheet; rows: BulkImportRowResult[] }) {
+  const { t } = useTranslation('bulkImport');
   const errorCount = rows.filter((r) => r.status === 'error').length;
   const warningCount = rows.filter((r) => r.messages.some((m) => m.severity === 'warning')).length;
 
   return (
     <div className="rounded-lg border border-line bg-panel shadow-sm">
       <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
-        <h3 className="text-sm font-semibold text-txt">{SHEET_LABEL[sheet]}</h3>
+        <h3 className="text-sm font-semibold text-txt">{t(SHEET_LABEL_KEY[sheet])}</h3>
         <p className="text-xs text-txt-2">
-          {rows.length} row{rows.length === 1 ? '' : 's'}
-          {errorCount > 0 && <span className="ml-2 text-crit">{errorCount} error(s)</span>}
-          {warningCount > 0 && <span className="ml-2 text-warn">{warningCount} warning(s)</span>}
+          {t('rowCount', { count: rows.length })}
+          {errorCount > 0 && (
+            <span className="ml-2 text-crit">{t('errorCount', { count: errorCount })}</span>
+          )}
+          {warningCount > 0 && (
+            <span className="ml-2 text-warn">{t('warningCount', { count: warningCount })}</span>
+          )}
         </p>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-3 text-sm text-txt-2">No rows in this sheet.</p>
+        <p className="px-4 py-3 text-sm text-txt-2">{t('noRowsInSheet')}</p>
       ) : (
         <div className="max-h-80 divide-y divide-line-soft overflow-y-auto">
           {rows.map((row) => (
             <div key={row.row} className="px-4 py-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-txt-2">Row {row.row}</span>
-                {statusBadge(row.status)}
+                <span className="text-xs font-medium text-txt-2">
+                  {t('rowLabel', { row: row.row })}
+                </span>
+                {statusBadge(row.status, t)}
               </div>
               <RowMessages row={row} />
             </div>
@@ -110,6 +141,7 @@ function SheetResultCard({ sheet, rows }: { sheet: BulkImportSheet; rows: BulkIm
 }
 
 export function BulkImportPage() {
+  const { t } = useTranslation('bulkImport');
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -126,7 +158,7 @@ export function BulkImportPage() {
       const blob = await apiFetchBlob(`/bulk-import/templates/${sheet}`);
       saveBlobAs(blob, `bongofleet-${sheet}-template.xlsx`);
     } catch (err) {
-      setTemplateError(err instanceof ApiError ? err.message : 'Could not download the template.');
+      setTemplateError(err instanceof ApiError ? err.message : t('downloadTemplateError'));
     }
   }
 
@@ -151,7 +183,7 @@ export function BulkImportPage() {
       });
       setPreview(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not validate this workbook.');
+      setError(err instanceof ApiError ? err.message : t('runPreviewError'));
       setPreview(null);
     } finally {
       setPreviewLoading(false);
@@ -172,7 +204,7 @@ export function BulkImportPage() {
       setPreview(result.preview);
       setCommitCounts(result.counts);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not commit this workbook.');
+      setError(err instanceof ApiError ? err.message : t('runCommitError'));
     } finally {
       setCommitting(false);
     }
@@ -184,22 +216,18 @@ export function BulkImportPage() {
   if (user && user.role !== 'OWNER') {
     return (
       <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
-        Only the fleet owner can bulk import.
+        {t('ownerOnlyGate')}
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-txt">Bulk import</h1>
+      <h1 className="mb-4 text-xl font-semibold text-txt">{t('title')}</h1>
 
       <div className="mb-4 rounded-lg border border-line bg-panel p-4 shadow-sm">
-        <h2 className="mb-2 text-sm font-semibold text-txt">1. Download the templates</h2>
-        <p className="mb-3 text-xs text-txt-2">
-          Fill these in with your fleet's data, then upload the workbook below. Each has one worked
-          example row and notes on every column - format phone/NIDA/registration columns as Text if
-          you add columns of your own.
-        </p>
+        <h2 className="mb-2 text-sm font-semibold text-txt">{t('step1Heading')}</h2>
+        <p className="mb-3 text-xs text-txt-2">{t('templatesIntro')}</p>
         <div className="flex flex-wrap gap-2">
           {SHEETS.map((sheet) => (
             <button
@@ -207,7 +235,7 @@ export function BulkImportPage() {
               onClick={() => void downloadTemplate(sheet)}
               className="rounded border border-line px-3 py-1.5 text-sm text-txt-2 hover:bg-panel-2"
             >
-              {SHEET_LABEL[sheet]} template
+              {t(TEMPLATE_LABEL_KEY[sheet])}
             </button>
           ))}
         </div>
@@ -215,7 +243,7 @@ export function BulkImportPage() {
       </div>
 
       <div className="mb-4 rounded-lg border border-line bg-panel p-4 shadow-sm">
-        <h2 className="mb-2 text-sm font-semibold text-txt">2. Upload your workbook</h2>
+        <h2 className="mb-2 text-sm font-semibold text-txt">{t('step2Heading')}</h2>
         <div className="flex flex-wrap items-center gap-3">
           <input
             ref={fileInputRef}
@@ -229,19 +257,15 @@ export function BulkImportPage() {
             disabled={!file || previewLoading}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
-            {previewLoading ? 'Checking…' : 'Preview'}
+            {previewLoading ? t('checking') : t('preview')}
           </button>
           <button
             onClick={() => void runCommit()}
             disabled={!preview?.canCommit || committing}
             className="rounded bg-green-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-            title={
-              preview && !preview.canCommit
-                ? 'Fix every error shown below before importing'
-                : undefined
-            }
+            title={preview && !preview.canCommit ? t('importTooltip') : undefined}
           >
-            {committing ? 'Importing…' : 'Import'}
+            {committing ? t('importing') : t('import')}
           </button>
         </div>
         {error && <p className="mt-2 text-xs text-crit">{error}</p>}
@@ -249,11 +273,12 @@ export function BulkImportPage() {
 
       {commitCounts && (
         <div className="mb-4 rounded-lg bg-good-d p-4">
-          <h2 className="mb-2 text-sm font-semibold text-good">Import complete</h2>
+          <h2 className="mb-2 text-sm font-semibold text-good">{t('importComplete')}</h2>
           <div className="grid grid-cols-2 gap-2 text-sm text-good sm:grid-cols-3">
-            {(Object.keys(COUNT_LABEL) as (keyof BulkImportCommitCounts)[]).map((key) => (
+            {(Object.keys(COUNT_LABEL_KEY) as (keyof BulkImportCommitCounts)[]).map((key) => (
               <div key={key}>
-                {COUNT_LABEL[key]}: <span className="font-semibold">{commitCounts[key]}</span>
+                {t(COUNT_LABEL_KEY[key])}:{' '}
+                <span className="font-semibold">{commitCounts[key]}</span>
               </div>
             ))}
           </div>
@@ -263,9 +288,7 @@ export function BulkImportPage() {
       {preview && (
         <div className="space-y-4">
           <p className={`text-sm ${preview.canCommit ? 'text-good' : 'text-crit'}`}>
-            {preview.canCommit
-              ? 'No errors - ready to import.'
-              : 'Some rows have errors - fix them in the workbook, then upload and preview again.'}
+            {preview.canCommit ? t('canCommitTrue') : t('canCommitFalse')}
           </p>
           {preview.sheets.map((s) => (
             <SheetResultCard key={s.sheet} sheet={s.sheet} rows={s.rows} />
