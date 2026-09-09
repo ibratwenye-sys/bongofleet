@@ -38,6 +38,8 @@ import enTrackingMap from '../locales/en/trackingMap.json';
 import swTrackingMap from '../locales/sw/trackingMap.json';
 import enLogin from '../locales/en/login.json';
 import swLogin from '../locales/sw/login.json';
+import enOwnership from '../locales/en/ownership.json';
+import swOwnership from '../locales/sw/ownership.json';
 import type { Language } from './types';
 
 /**
@@ -48,10 +50,10 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L19 translate them (operationsCenter, payments,
+ * batch as Stage L2-L20 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
  * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
- * bulkImport, trackingLinks, trackingMap, then login - see
+ * bulkImport, trackingLinks, trackingMap, login, then ownership - see
  * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
  * need: a page gets its own namespace only once it's actually
  * translated.
@@ -80,6 +82,10 @@ import type { Language } from './types';
  * English on logout. There's no pre-login LanguageToggle yet, so this
  * page still renders in English in practice until one exists; the
  * namespace is ready the moment it does.
+ * `ownership` (L20) covers OwnershipPage.tsx split across two stages,
+ * same discipline as `transport` (L5/L6) and `drivers` (L10 a/b): L20
+ * Part 1 is everything except CreatePlanFormModal (the "Create plan"
+ * form) - that modal keeps this namespace growing at a later Part 2.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -103,6 +109,7 @@ void i18n.use(initReactI18next).init({
       trackingLinks: enTrackingLinks,
       trackingMap: enTrackingMap,
       login: enLogin,
+      ownership: enOwnership,
     },
     sw: {
       common: sw,
@@ -124,6 +131,7 @@ void i18n.use(initReactI18next).init({
       trackingLinks: swTrackingLinks,
       trackingMap: swTrackingMap,
       login: swLogin,
+      ownership: swOwnership,
     },
   },
   lng: 'en',

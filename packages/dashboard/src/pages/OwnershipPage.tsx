@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { estimatePlanTerm, positionSeverity, type PlanTermOption } from '@bongofleet/shared-lib';
 import { apiFetch, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
@@ -9,6 +11,7 @@ import type {
   Guarantor,
   Motorcycle,
   OwnershipPlan,
+  OwnershipPlanStatus,
   OwnershipSummaryResponse,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
@@ -26,6 +29,17 @@ const OWNERSHIP_PLAN_STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-gray-100 text-gray-600',
 };
 
+// Stage L20 Part 1 - the same missing-`label`-prop enum-badge bug already
+// found and fixed at Fleet/Drivers/Assignments/TrackingLinks: StatusBadge's
+// own `label` prop was never passed here, so ACTIVE/COMPLETED/DEFAULTED/
+// CANCELLED rendered as the raw enum even in Swahili mode.
+const OWNERSHIP_PLAN_STATUS_LABEL_KEY: Record<OwnershipPlanStatus, string> = {
+  ACTIVE: 'statusActive',
+  COMPLETED: 'statusCompleted',
+  DEFAULTED: 'statusDefaulted',
+  CANCELLED: 'statusCancelled',
+};
+
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_ACTIVE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -41,18 +55,18 @@ const SEVERITY_TEXT_STYLES: Record<'ok' | 'amber' | 'red', string> = {
   red: 'text-crit font-medium',
 };
 
-function positionLabel(daysBehind: number, daysAhead: number): string {
-  if (daysBehind > 0) return `${daysBehind} day${daysBehind === 1 ? '' : 's'} behind`;
-  if (daysAhead > 0) return `${daysAhead} day${daysAhead === 1 ? '' : 's'} ahead`;
-  return 'On track';
+function positionLabel(daysBehind: number, daysAhead: number, t: TFunction<'ownership'>): string {
+  if (daysBehind > 0) return t('daysBehind', { count: daysBehind });
+  if (daysAhead > 0) return t('daysAhead', { count: daysAhead });
+  return t('onTrack');
 }
 
 /** Stage G2 Part 1 - the run length itself, shown separately from
  *  positionLabel's cumulative-position read so an owner deciding whether to
  *  repossess sees the number the red threshold actually watches. */
-function missedStreakLabel(consecutiveMissedDays: number): string {
+function missedStreakLabel(consecutiveMissedDays: number, t: TFunction<'ownership'>): string {
   if (consecutiveMissedDays <= 0) return '—';
-  return `${consecutiveMissedDays} day${consecutiveMissedDays === 1 ? '' : 's'} missed in a row`;
+  return t('missedStreak', { count: consecutiveMissedDays });
 }
 
 /** Stage G10 - a THIRD signal, deliberately separate from positionSeverity's
@@ -65,9 +79,9 @@ const PAST_DEADLINE_BADGE_STYLES = 'bg-violet-d text-violet';
  *  threshold this turns red at. The point is only to make "excused twelve
  *  days this quarter" visible instead of invisible one day at a time, so an
  *  owner can go have that conversation. */
-function recentExcusalLabel(recentExcusalCount: number): string {
+function recentExcusalLabel(recentExcusalCount: number, t: TFunction<'ownership'>): string {
   if (recentExcusalCount <= 0) return '—';
-  return `${recentExcusalCount} in last 90 days`;
+  return t('recentExcusalWindow', { count: recentExcusalCount });
 }
 
 /** Stage H1 - contractEndDate (what was actually typed into the contract)
@@ -84,15 +98,13 @@ function EndDateCell({
   contractEndDate: string | null;
   derivedEndDate: string;
 }) {
+  const { t } = useTranslation('ownership');
   if (contractEndDate) {
     return <span>{contractEndDate.slice(0, 10)}</span>;
   }
   return (
-    <span
-      className="italic text-txt-3"
-      title="Not typed into the contract - worked out from the plan's own terms (days, start date, active weekdays)."
-    >
-      {derivedEndDate} (derived)
+    <span className="italic text-txt-3" title={t('derivedDateTooltip')}>
+      {t('derivedDateSuffix', { date: derivedEndDate })}
     </span>
   );
 }
@@ -691,24 +703,24 @@ function CreatePlanFormModal({
 
 // ---- Stage UI3 chassis pieces ----
 
-function kpisToTiles(data: OwnershipSummaryResponse): KpiTile[] {
+function kpisToTiles(data: OwnershipSummaryResponse, t: TFunction<'ownership'>): KpiTile[] {
   const k = data.kpis;
   return [
-    { label: 'Active plans', value: String(k.activePlanCount), accentColor: 'c1' },
-    { label: 'On schedule', value: String(k.onScheduleCount), accentColor: 'good' },
+    { label: t('activePlans'), value: String(k.activePlanCount), accentColor: 'c1' },
+    { label: t('onSchedule'), value: String(k.onScheduleCount), accentColor: 'good' },
     {
-      label: 'Slipping',
+      label: t('slipping'),
       value: String(k.slippingCount),
       accentColor: k.slippingCount > 0 ? 'warn' : 'good',
     },
     {
-      label: 'To terminate',
+      label: t('toTerminate'),
       value: String(k.toTerminateCount),
       accentColor: k.toTerminateCount > 0 ? 'crit' : 'good',
     },
-    { label: 'Finishing early', value: String(k.finishingEarlyCount), accentColor: 'violet' },
+    { label: t('finishingEarly'), value: String(k.finishingEarlyCount), accentColor: 'violet' },
     {
-      label: 'Money at risk',
+      label: t('moneyAtRisk'),
       value: formatTZS(k.moneyAtRisk),
       accentColor: k.moneyAtRisk !== '0.00' ? 'crit' : 'good',
     },
@@ -716,28 +728,34 @@ function kpisToTiles(data: OwnershipSummaryResponse): KpiTile[] {
 }
 
 function PlanHealthCard({ health }: { health: OwnershipSummaryResponse['planHealth'] }) {
+  const { t } = useTranslation('ownership');
   const total = health.onSchedule + health.slipping + health.toTerminate + health.finishingEarly;
   const segments: { label: string; count: number; barColor: string; textColor: string }[] = [
-    { label: 'On schedule', count: health.onSchedule, barColor: 'bg-good', textColor: 'text-good' },
-    { label: 'Slipping', count: health.slipping, barColor: 'bg-warn', textColor: 'text-warn' },
     {
-      label: 'To terminate',
+      label: t('onSchedule'),
+      count: health.onSchedule,
+      barColor: 'bg-good',
+      textColor: 'text-good',
+    },
+    { label: t('slipping'), count: health.slipping, barColor: 'bg-warn', textColor: 'text-warn' },
+    {
+      label: t('toTerminate'),
       count: health.toTerminate,
       barColor: 'bg-crit',
       textColor: 'text-crit',
     },
     {
-      label: 'Finishing early',
+      label: t('finishingEarly'),
       count: health.finishingEarly,
       barColor: 'bg-violet',
       textColor: 'text-violet',
     },
   ];
   return (
-    <Card title="Plan health">
+    <Card title={t('planHealthTitle')}>
       <div className="p-4">
         {total === 0 ? (
-          <p className="text-sm text-txt-2">No active plans yet.</p>
+          <p className="text-sm text-txt-2">{t('planHealthEmpty')}</p>
         ) : (
           <>
             <div className="flex h-3 w-full overflow-hidden rounded-full bg-panel-2">
@@ -766,10 +784,11 @@ function PlanHealthCard({ health }: { health: OwnershipSummaryResponse['planHeal
 }
 
 function OwnershipInsightsCard({ insights }: { insights: OwnershipSummaryResponse['insights'] }) {
+  const { t } = useTranslation('ownership');
   return (
-    <Card title="AI Insights">
+    <Card title={t('aiInsightsTitle')}>
       {insights.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">Nothing to flag right now.</p>
+        <p className="p-4 text-sm text-txt-2">{t('nothingToFlag')}</p>
       ) : (
         <div className="divide-y divide-line-soft">
           {insights.map((insight, i) => (
@@ -789,9 +808,10 @@ function ExpectedCompletionsCard({
 }: {
   points: OwnershipSummaryResponse['expectedCompletions'];
 }) {
+  const { t } = useTranslation('ownership');
   const max = Math.max(...points.map((p) => p.count), 1);
   return (
-    <Card title="Expected completions" subtitle="next 18 months">
+    <Card title={t('expectedCompletionsTitle')} subtitle={t('expectedCompletionsSubtitle')}>
       <div className="flex h-28 items-end gap-1 overflow-x-auto px-4 pb-4">
         {points.map((p) => (
           <div key={p.month} className="flex w-6 shrink-0 flex-col items-center gap-1">
@@ -813,26 +833,29 @@ const VERDICT_STYLES: Record<'Terminate' | 'Watch', string> = {
   Watch: 'bg-warn-d text-warn',
 };
 
+const VERDICT_LABEL_KEY: Record<'Terminate' | 'Watch', string> = {
+  Terminate: 'verdictTerminate',
+  Watch: 'verdictWatch',
+};
+
 function MissedDaysTable({ rows }: { rows: OwnershipSummaryResponse['missedDaysTable'] }) {
+  const { t } = useTranslation('ownership');
   return (
-    <Card
-      title="Missed days and what they are worth"
-      subtitle={rows.length > 0 ? String(rows.length) : undefined}
-    >
+    <Card title={t('missedDaysTitle')} subtitle={rows.length > 0 ? String(rows.length) : undefined}>
       {rows.length === 0 ? (
-        <p className="p-4 text-sm text-txt-2">No plan is currently behind or in a missed streak.</p>
+        <p className="p-4 text-sm text-txt-2">{t('missedDaysEmpty')}</p>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                  <th className="px-4 py-2 font-medium">Driver</th>
-                  <th className="px-4 py-2 font-medium">Vehicle</th>
-                  <th className="px-4 py-2 text-right font-medium">Missed streak</th>
-                  <th className="px-4 py-2 text-right font-medium">Value at risk</th>
-                  <th className="px-4 py-2 text-right font-medium">Recent excusals</th>
-                  <th className="px-4 py-2 font-medium">Verdict</th>
+                  <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                  <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableMissedStreak')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableValueAtRisk')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('tableRecentExcusals')}</th>
+                  <th className="px-4 py-2 font-medium">{t('tableVerdict')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -845,7 +868,7 @@ function MissedDaysTable({ rows }: { rows: OwnershipSummaryResponse['missedDaysT
                     </td>
                     <td className="px-4 py-2 text-txt-2">{r.vehicleRegistration ?? '—'}</td>
                     <td className="px-4 py-2 text-right text-txt-2">
-                      {r.missedStreak} day{r.missedStreak === 1 ? '' : 's'}
+                      {t('missedDaysCellCount', { count: r.missedStreak })}
                     </td>
                     <td className="px-4 py-2 text-right text-txt-2">{formatTZS(r.valueAtRisk)}</td>
                     <td className="px-4 py-2 text-right text-txt-2">
@@ -855,7 +878,7 @@ function MissedDaysTable({ rows }: { rows: OwnershipSummaryResponse['missedDaysT
                       <span
                         className={`rounded px-1.5 py-0.5 text-xs font-medium ${VERDICT_STYLES[r.verdict]}`}
                       >
-                        {r.verdict}
+                        {t(VERDICT_LABEL_KEY[r.verdict])}
                       </span>
                     </td>
                   </tr>
@@ -877,14 +900,16 @@ function MissedDaysTable({ rows }: { rows: OwnershipSummaryResponse['missedDaysT
                   <span
                     className={`rounded px-1.5 py-0.5 text-xs font-medium ${VERDICT_STYLES[r.verdict]}`}
                   >
-                    {r.verdict}
+                    {t(VERDICT_LABEL_KEY[r.verdict])}
                   </span>
                 </div>
                 <p className="mt-0.5 text-xs text-txt-2">{r.vehicleRegistration ?? '—'}</p>
                 <div className="mt-1 flex items-center justify-between text-xs text-txt-2">
                   <span>
-                    {r.missedStreak} day{r.missedStreak === 1 ? '' : 's'} missed ·{' '}
-                    {r.recentExcusalCount || '—'} recent excusals
+                    {t('missedDaysMobileMissed', { count: r.missedStreak })} ·{' '}
+                    {r.recentExcusalCount
+                      ? t('recentExcusalsCount', { count: r.recentExcusalCount })
+                      : '—'}
                   </span>
                   <span className="text-sm font-medium text-txt">{formatTZS(r.valueAtRisk)}</span>
                 </div>
@@ -902,18 +927,22 @@ function ContractValueCard({
 }: {
   totals: OwnershipSummaryResponse['contractValueTotals'];
 }) {
+  const { t } = useTranslation('ownership');
   const total = Math.max(parseFloat(totals.totalOwed), 1);
   const segments = [
-    { label: 'Paid in', amount: totals.paidIn, barColor: 'bg-good' },
-    { label: 'At risk', amount: totals.atRisk, barColor: 'bg-crit' },
-    { label: 'Still to come', amount: totals.stillToCome, barColor: 'bg-panel-2' },
+    { label: t('segPaidIn'), amount: totals.paidIn, barColor: 'bg-good' },
+    { label: t('segAtRisk'), amount: totals.atRisk, barColor: 'bg-crit' },
+    { label: t('segStillToCome'), amount: totals.stillToCome, barColor: 'bg-panel-2' },
   ];
   return (
-    <Card title="Contract value across all plans">
+    <Card title={t('contractValueTitle')}>
       <div className="p-4">
         <p className="text-2xl font-semibold text-txt">{formatTZS(totals.collectedToDate)}</p>
         <p className="text-xs text-txt-2">
-          collected to date of {formatTZS(totals.totalOwed)} owed
+          {t('collectedSummary', {
+            collected: formatTZS(totals.collectedToDate),
+            owed: formatTZS(totals.totalOwed),
+          })}
         </p>
         <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-panel-2">
           {segments.map((s) => (
@@ -939,31 +968,32 @@ function ContractValueCard({
 }
 
 function TwoBalancesCard({ balances }: { balances: OwnershipSummaryResponse['twoBalances'] }) {
+  const { t } = useTranslation('ownership');
   return (
-    <Card title="Two balances, never one">
+    <Card title={t('twoBalancesTitle')}>
       <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
         <div>
-          <p className="text-xs text-txt-2">Remaining to own</p>
+          <p className="text-xs text-txt-2">{t('remainingToOwnLabel')}</p>
           <p className="mt-1 text-lg font-semibold text-txt [overflow-wrap:anywhere]">
             {formatTZS(balances.remainingToOwn)}
           </p>
-          <p className="text-[11px] text-txt-3">what drivers still owe</p>
+          <p className="text-[11px] text-txt-3">{t('remainingToOwnCaption')}</p>
         </div>
         <div>
-          <p className="text-xs text-txt-2">Remaining to bill</p>
+          <p className="text-xs text-txt-2">{t('remainingToBillLabel')}</p>
           <p className="mt-1 text-lg font-semibold text-txt [overflow-wrap:anywhere]">
             {formatTZS(balances.remainingToBill)}
           </p>
-          <p className="text-[11px] text-txt-3">what the generator may still bill</p>
+          <p className="text-[11px] text-txt-3">{t('remainingToBillCaption')}</p>
         </div>
         <div>
-          <p className="text-xs text-txt-2">Arrears</p>
+          <p className="text-xs text-txt-2">{t('arrearsLabel')}</p>
           <p
             className={`mt-1 text-lg font-semibold [overflow-wrap:anywhere] ${balances.arrears !== '0.00' ? 'text-crit' : 'text-txt'}`}
           >
             {formatTZS(balances.arrears)}
           </p>
-          <p className="text-[11px] text-txt-3">billed but not yet paid</p>
+          <p className="text-[11px] text-txt-3">{t('arrearsCaption')}</p>
         </div>
       </div>
     </Card>
@@ -971,6 +1001,8 @@ function TwoBalancesCard({ balances }: { balances: OwnershipSummaryResponse['two
 }
 
 export function OwnershipPage() {
+  const { t } = useTranslation('ownership');
+  const { t: tCommon } = useTranslation('common');
   const [plans, setPlans] = useState<OwnershipPlan[] | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
@@ -979,7 +1011,7 @@ export function OwnershipPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const [plansData, driversData, motorcyclesData, summaryData] = await Promise.all([
         apiFetch<OwnershipPlan[]>('/ownership-plans'),
@@ -993,13 +1025,13 @@ export function OwnershipPage() {
       setSummary(summaryData);
       setError(null);
     } catch {
-      setError('Could not load ownership plans. Please try again.');
+      setError(t('loadError'));
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -1017,15 +1049,15 @@ export function OwnershipPage() {
     return <p className="text-sm text-crit">{error}</p>;
   }
   if (!summary || !plans) {
-    return <p className="text-sm text-txt-2">Loading…</p>;
+    return <p className="text-sm text-txt-2">{t('loading')}</p>;
   }
 
   return (
     <PageChassis
-      title="Ownership plans"
-      statusPill={{ mode: 'live', text: 'LIVE' }}
-      primaryAction={{ label: 'Create plan', onClick: () => setCreating(true) }}
-      kpis={kpisToTiles(summary)}
+      title={t('title')}
+      statusPill={{ mode: 'live', text: tCommon('statusLive') }}
+      primaryAction={{ label: t('createPlan'), onClick: () => setCreating(true) }}
+      kpis={kpisToTiles(summary, t)}
     >
       {successMessage && (
         <p className="rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -1034,32 +1066,35 @@ export function OwnershipPage() {
 
       <ChassisGrid
         main={
-          <Card title="All plans" subtitle={`${plans.length} shown`}>
+          <Card
+            title={t('allPlansTitle')}
+            subtitle={t('allPlansSubtitle', { count: plans.length })}
+          >
             <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-line-soft text-left text-xs text-txt-3">
-                    <th className="px-4 py-2 font-medium">Driver</th>
-                    <th className="px-4 py-2 font-medium">Vehicle</th>
-                    <th className="px-4 py-2 text-right font-medium">Daily amount</th>
-                    <th className="px-4 py-2 font-medium">Progress</th>
-                    <th className="px-4 py-2 text-right font-medium">Remaining</th>
-                    <th className="px-4 py-2 font-medium">Position</th>
-                    <th className="px-4 py-2 font-medium">Missed streak</th>
-                    <th className="px-4 py-2 font-medium">Recent excusals</th>
-                    <th className="px-4 py-2 font-medium">Start</th>
-                    <th className="px-4 py-2 font-medium">End</th>
-                    <th className="px-4 py-2 text-right font-medium">Days left</th>
-                    <th className="px-4 py-2 font-medium">Projected completion</th>
-                    <th className="px-4 py-2 font-medium">Deadline</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">{t('tableDriver')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableVehicle')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('tableDailyAmount')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableProgress')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('tableRemaining')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tablePosition')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableMissedStreak')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableRecentExcusals')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableStart')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableEnd')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('tableDaysLeft')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableProjectedCompletion')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableDeadline')}</th>
+                    <th className="px-4 py-2 font-medium">{t('tableStatus')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {plans.length === 0 ? (
                     <tr>
                       <td colSpan={14} className="px-4 py-6 text-center text-txt-2">
-                        No ownership plans yet.
+                        {t('noPlansYet')}
                       </td>
                     </tr>
                   ) : (
@@ -1109,13 +1144,13 @@ export function OwnershipPage() {
                             {formatTZS(plan.remainingToOwn)}
                           </td>
                           <td className={`px-4 py-2 ${SEVERITY_TEXT_STYLES[severity]}`}>
-                            {positionLabel(plan.daysBehind, plan.daysAhead)}
+                            {positionLabel(plan.daysBehind, plan.daysAhead, t)}
                           </td>
                           <td className={`px-4 py-2 ${SEVERITY_TEXT_STYLES[severity]}`}>
-                            {missedStreakLabel(plan.consecutiveMissedDays)}
+                            {missedStreakLabel(plan.consecutiveMissedDays, t)}
                           </td>
                           <td className="px-4 py-2 text-txt-2">
-                            {recentExcusalLabel(plan.recentExcusalCount)}
+                            {recentExcusalLabel(plan.recentExcusalCount, t)}
                           </td>
                           <td className="px-4 py-2 text-txt-2">{plan.startDate.slice(0, 10)}</td>
                           <td className="px-4 py-2 text-txt-2">
@@ -1131,7 +1166,7 @@ export function OwnershipPage() {
                               <span
                                 className={`rounded px-1.5 py-0.5 text-xs font-medium ${PAST_DEADLINE_BADGE_STYLES}`}
                               >
-                                Past deadline, still owing
+                                {t('pastDeadlineBadge')}
                               </span>
                             )}
                           </td>
@@ -1139,6 +1174,7 @@ export function OwnershipPage() {
                             <StatusBadge
                               status={plan.status}
                               styles={OWNERSHIP_PLAN_STATUS_STYLES}
+                              label={t(OWNERSHIP_PLAN_STATUS_LABEL_KEY[plan.status])}
                             />
                           </td>
                         </tr>
@@ -1151,7 +1187,7 @@ export function OwnershipPage() {
 
             <div className="md:hidden">
               {plans.length === 0 ? (
-                <p className="p-4 text-center text-sm text-txt-2">No ownership plans yet.</p>
+                <p className="p-4 text-center text-sm text-txt-2">{t('noPlansYet')}</p>
               ) : (
                 plans.map((plan) => {
                   const severity = positionSeverity(
@@ -1185,7 +1221,11 @@ export function OwnershipPage() {
                             ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}`
                             : '—'}
                         </Link>
-                        <StatusBadge status={plan.status} styles={OWNERSHIP_PLAN_STATUS_STYLES} />
+                        <StatusBadge
+                          status={plan.status}
+                          styles={OWNERSHIP_PLAN_STATUS_STYLES}
+                          label={t(OWNERSHIP_PLAN_STATUS_LABEL_KEY[plan.status])}
+                        />
                       </div>
                       <p className="mt-0.5 text-xs text-txt-2">
                         {plan.motorcycle?.registrationNumber ?? '—'}
@@ -1194,7 +1234,7 @@ export function OwnershipPage() {
                         <span
                           className={`mt-1 inline-block rounded px-1.5 py-0.5 text-xs font-medium ${PAST_DEADLINE_BADGE_STYLES}`}
                         >
-                          Past deadline, still owing
+                          {t('pastDeadlineBadge')}
                         </span>
                       )}
                       <div className="mt-2 flex items-center gap-2">
@@ -1205,37 +1245,37 @@ export function OwnershipPage() {
                       </div>
                       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                         <div>
-                          <dt className="text-txt-3">Daily amount</dt>
+                          <dt className="text-txt-3">{t('tableDailyAmount')}</dt>
                           <dd className="text-txt">{formatTZS(plan.dailyAmount)}</dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Remaining</dt>
+                          <dt className="text-txt-3">{t('tableRemaining')}</dt>
                           <dd className="text-txt">{formatTZS(plan.remainingToOwn)}</dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Position</dt>
+                          <dt className="text-txt-3">{t('tablePosition')}</dt>
                           <dd className={SEVERITY_TEXT_STYLES[severity]}>
-                            {positionLabel(plan.daysBehind, plan.daysAhead)}
+                            {positionLabel(plan.daysBehind, plan.daysAhead, t)}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Missed streak</dt>
+                          <dt className="text-txt-3">{t('tableMissedStreak')}</dt>
                           <dd className={SEVERITY_TEXT_STYLES[severity]}>
-                            {missedStreakLabel(plan.consecutiveMissedDays)}
+                            {missedStreakLabel(plan.consecutiveMissedDays, t)}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Recent excusals</dt>
+                          <dt className="text-txt-3">{t('tableRecentExcusals')}</dt>
                           <dd className="text-txt">
-                            {recentExcusalLabel(plan.recentExcusalCount)}
+                            {recentExcusalLabel(plan.recentExcusalCount, t)}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Start</dt>
+                          <dt className="text-txt-3">{t('tableStart')}</dt>
                           <dd className="text-txt">{plan.startDate.slice(0, 10)}</dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">End</dt>
+                          <dt className="text-txt-3">{t('tableEnd')}</dt>
                           <dd className="text-txt">
                             <EndDateCell
                               contractEndDate={plan.contractEndDate}
@@ -1244,11 +1284,11 @@ export function OwnershipPage() {
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-txt-3">Days left</dt>
+                          <dt className="text-txt-3">{t('tableDaysLeft')}</dt>
                           <dd className="text-txt">{plan.daysLeft}</dd>
                         </div>
                         <div className="col-span-2">
-                          <dt className="text-txt-3">Projected completion</dt>
+                          <dt className="text-txt-3">{t('tableProjectedCompletion')}</dt>
                           <dd className="text-txt">{plan.projectedCompletion}</dd>
                         </div>
                       </dl>
