@@ -34,6 +34,8 @@ import enBulkImport from '../locales/en/bulkImport.json';
 import swBulkImport from '../locales/sw/bulkImport.json';
 import enTrackingLinks from '../locales/en/trackingLinks.json';
 import swTrackingLinks from '../locales/sw/trackingLinks.json';
+import enTrackingMap from '../locales/en/trackingMap.json';
+import swTrackingMap from '../locales/sw/trackingMap.json';
 import type { Language } from './types';
 
 /**
@@ -44,19 +46,20 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L17 translate them (operationsCenter, payments,
+ * batch as Stage L2-L18 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
  * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
- * bulkImport, then trackingLinks - see DESIGN_SWAHILI_UI.md's per-page
- * rollout plan). Not built ahead of need: a page gets its own
- * namespace only once it's actually translated.
+ * bulkImport, trackingLinks, then trackingMap - see
+ * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
+ * need: a page gets its own namespace only once it's actually
+ * translated.
  * `gpsProviderSettings` (L14), `billing` (L15), and `bulkImport` (L16)
  * each carry their own `ownerOnlyGate` key - the plain-owner variant of
- * a five-page pattern. `trackingLinks`'s own gate (L17) is genuinely a
- * different English sentence shape ("owner OR a manager"), so it keeps
- * a distinct `ownerOrManagerGate` key name instead - the reference
- * TrackingMapPage's own stage (the fifth and last of this pattern)
- * should match.
+ * a five-page pattern. `trackingLinks` (L17) and `trackingMap` (L18)
+ * both use `ownerOrManagerGate` instead - a genuinely different English
+ * sentence shape ("owner OR a manager") - with matching grammar
+ * (verb stays singular: "mmiliki"/"meneja" are the same Swahili noun
+ * class). This closes out the five-page pattern.
  * `drivers` grew across two stages, same shape `transport` did at L5/L6:
  * L10 batch a covered only DriversPage's scoreboard/list body; batch b
  * finishes it with DriverFormModal, ResetPasswordModal, and everything
@@ -90,6 +93,7 @@ void i18n.use(initReactI18next).init({
       billing: enBilling,
       bulkImport: enBulkImport,
       trackingLinks: enTrackingLinks,
+      trackingMap: enTrackingMap,
     },
     sw: {
       common: sw,
@@ -109,6 +113,7 @@ void i18n.use(initReactI18next).init({
       billing: swBilling,
       bulkImport: swBulkImport,
       trackingLinks: swTrackingLinks,
+      trackingMap: swTrackingMap,
     },
   },
   lng: 'en',

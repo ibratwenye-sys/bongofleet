@@ -1,0 +1,28 @@
+{
+  "title": "Live map",
+  "statusLive": "LIVE · {{count}} reporting",
+  "ownerOrManagerGate": "Only the fleet owner or a manager can view the live map.",
+  "loadError": "Could not load vehicle positions. Please try again.",
+  "allVehicles": "All vehicles",
+
+  "filterVehicle": "Vehicle",
+  "legendPhoneDevice": "📱 Phone · 📡 Device",
+  "currentlyOffline": "Currently offline ({{count}})",
+  "offlineSince": "offline since {{date}}",
+  "offlineDisclaimer": "No vehicles in this category are currently reporting a live position - offline vehicles aren't plotted (no coordinates to show), but still appear in the fleet.",
+
+  "mapPlaceholder": "Click a vehicle on the map to see details here.",
+  "dtStatus": "Status",
+  "dtTodayRider": "Today's rider",
+  "loading": "Loading…",
+  "noRiderAssignedToday": "No rider assigned today",
+  "dtLastFix": "Last fix",
+  "neverReported": "Never reported",
+  "dtSpeed": "Speed",
+
+  "replayPathFor": "Replay path for",
+  "loadingPath": "Loading path…",
+  "pointsPlotted": "{{count}} points plotted on the map above.",
+  "onlyOneFix": "Only one fix that day - not enough to draw a path.",
+  "noFixesRecorded": "No fixes recorded that day."
+}

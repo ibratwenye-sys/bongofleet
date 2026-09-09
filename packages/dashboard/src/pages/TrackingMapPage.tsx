@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Marker, Polyline } from 'react-leaflet';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useAuth } from '../lib/auth-context';
 import { apiFetch } from '../lib/api';
 import type {
@@ -16,13 +18,34 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import type { KpiTile } from '../components/chassis/KpiRail';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-const CATEGORY_LABELS: Record<VehicleType | 'ALL', string> = {
-  ALL: 'All vehicles',
-  MOTORBIKE: 'Motorbike',
-  BAJAJI: 'Bajaji',
-  CAR: 'Car',
-  TRUCK: 'Truck',
+
+// Stage L18 (DESIGN_SWAHILI_UI.md) - this is now the FIFTH page with its own
+// private copy of this exact VehicleType label wrapper (Fleet L7,
+// Maintenance L8, Assignments L9, Reports L12, now this). Like Reports,
+// this page never shipped its own duplicate translated strings before this
+// stage, so it reads straight off the already-centralized common.json keys
+// from day one - no separate cleanup step needed here.
+const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
+  MOTORBIKE: 'vehicleTypeMotorbike',
+  BAJAJI: 'vehicleTypeBajaji',
+  CAR: 'vehicleTypeCar',
+  TRUCK: 'vehicleTypeTruck',
 };
+
+function vehicleTypeLabel(vehicleType: VehicleType, tCommon: TFunction<'common'>): string {
+  return tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType]);
+}
+
+// 'ALL' isn't a real VehicleType, so it gets its own trackingMap.json key -
+// same wording ReportsPage's own allVehicles key already established at
+// L12 for the identical concept (a fresh page-local key, not an import).
+function categoryOptionLabel(
+  category: VehicleType | 'ALL',
+  t: TFunction<'trackingMap'>,
+  tCommon: TFunction<'common'>,
+): string {
+  return category === 'ALL' ? t('allVehicles') : vehicleTypeLabel(category, tCommon);
+}
 
 // Dar es Salaam - a reasonable default centre for a fleet with no vehicles
 // reporting yet; the map recentres on nothing else automatically once real
@@ -43,6 +66,8 @@ function fixTime(position: FleetVehiclePosition): string | null {
 }
 
 export function TrackingMapPage() {
+  const { t } = useTranslation('trackingMap');
+  const { t: tCommon } = useTranslation('common');
   const { user } = useAuth();
   const [positions, setPositions] = useState<FleetVehiclePosition[] | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -54,15 +79,15 @@ export function TrackingMapPage() {
   const [pathLoading, setPathLoading] = useState(false);
   const [todayRiderName, setTodayRiderName] = useState<string | null | undefined>(undefined);
 
-  async function loadPositions() {
+  const loadPositions = useCallback(async () => {
     try {
       const data = await apiFetch<FleetVehiclePosition[]>('/gps/fleet-positions');
       setPositions(data);
       setError(null);
     } catch {
-      setError('Could not load vehicle positions. Please try again.');
+      setError(t('loadError'));
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     void loadPositions();
@@ -71,7 +96,7 @@ export function TrackingMapPage() {
       .catch(() => setDrivers([]));
     const interval = setInterval(() => void loadPositions(), FLEET_POLL_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadPositions]);
 
   const selected = useMemo(
     () => positions?.find((p) => p.motorcycleId === selectedId) ?? null,
@@ -145,7 +170,7 @@ export function TrackingMapPage() {
   if (user && user.role !== 'OWNER' && user.role !== 'MANAGER') {
     return (
       <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2">
-        Only the fleet owner or a manager can view the live map.
+        {t('ownerOrManagerGate')}
       </div>
     );
   }
@@ -166,16 +191,16 @@ export function TrackingMapPage() {
 
   return (
     <PageChassis
-      title="Live map"
+      title={t('title')}
       statusPill={{
         mode: 'live',
-        text: `LIVE · ${(positions ?? []).filter((p) => !p.offline).length} reporting`,
+        text: t('statusLive', { count: (positions ?? []).filter((p) => !p.offline).length }),
       }}
       kpis={kpis}
     >
       <div className="flex flex-wrap items-center justify-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-txt-3">Vehicle</label>
+          <label className="mb-1 block text-xs font-medium text-txt-3">{t('filterVehicle')}</label>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as VehicleType | 'ALL')}
@@ -183,7 +208,7 @@ export function TrackingMapPage() {
           >
             {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+                {categoryOptionLabel(c, t, tCommon)}
               </option>
             ))}
           </select>
@@ -202,20 +227,22 @@ export function TrackingMapPage() {
             {statusLabel(status)}
           </span>
         ))}
-        <span>📱 Phone · 📡 Device</span>
+        <span>{t('legendPhoneDevice')}</span>
       </div>
 
       {currentlyOffline.length > 0 && (
         <div className="rounded-lg border border-line bg-panel p-4">
           <h3 className="mb-2 text-sm font-semibold text-txt">
-            Currently offline ({currentlyOffline.length})
+            {t('currentlyOffline', { count: currentlyOffline.length })}
           </h3>
           <ul className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
             {currentlyOffline.map((p) => (
               <li key={p.motorcycleId} className="flex items-center gap-2">
                 <span className="font-medium text-txt">{p.registrationNumber}</span>
                 <span className="text-txt-2">
-                  offline since {p.lastRecordedAt ? formatDateTime(p.lastRecordedAt) : '—'}
+                  {t('offlineSince', {
+                    date: p.lastRecordedAt ? formatDateTime(p.lastRecordedAt) : '—',
+                  })}
                 </span>
               </li>
             ))}
@@ -257,16 +284,13 @@ export function TrackingMapPage() {
             )}
           </VehicleMap>
           {positions !== null && visiblePositions.every((p) => p.offline) && (
-            <p className="mt-2 text-xs text-txt-3">
-              No vehicles in this category are currently reporting a live position - offline
-              vehicles aren't plotted (no coordinates to show), but still appear in the fleet.
-            </p>
+            <p className="mt-2 text-xs text-txt-3">{t('offlineDisclaimer')}</p>
           )}
         </div>
 
         <div className="rounded-lg border border-line bg-panel p-4">
           {!selected ? (
-            <p className="text-sm text-txt-2">Click a vehicle on the map to see details here.</p>
+            <p className="text-sm text-txt-2">{t('mapPlaceholder')}</p>
           ) : (
             <div>
               <div className="mb-3 flex items-start justify-between">
@@ -274,11 +298,13 @@ export function TrackingMapPage() {
                   <h2 className="text-base font-semibold text-txt">
                     {selected.registrationNumber}
                   </h2>
-                  <p className="text-xs text-txt-2">{selected.vehicleType}</p>
+                  <p className="text-xs text-txt-2">
+                    {vehicleTypeLabel(selected.vehicleType, tCommon)}
+                  </p>
                 </div>
                 <button
                   onClick={() => setSelectedId(null)}
-                  aria-label="Close"
+                  aria-label={tCommon('close')}
                   className="text-txt-3 hover:text-txt"
                 >
                   ✕
@@ -287,7 +313,7 @@ export function TrackingMapPage() {
 
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-txt-2">Status</dt>
+                  <dt className="text-txt-2">{t('dtStatus')}</dt>
                   <dd
                     className="font-medium"
                     style={{ color: STATUS_COLOR[markerStatus(selected)] }}
@@ -296,24 +322,24 @@ export function TrackingMapPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-txt-2">Today's rider</dt>
+                  <dt className="text-txt-2">{t('dtTodayRider')}</dt>
                   <dd className="text-txt">
                     {todayRiderName === undefined
-                      ? 'Loading…'
-                      : (todayRiderName ?? 'No rider assigned today')}
+                      ? t('loading')
+                      : (todayRiderName ?? t('noRiderAssignedToday'))}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-txt-2">Last fix</dt>
+                  <dt className="text-txt-2">{t('dtLastFix')}</dt>
                   <dd className="text-txt">
                     {(() => {
-                      const t = fixTime(selected);
-                      return t ? formatDateTime(t) : 'Never reported';
+                      const fix = fixTime(selected);
+                      return fix ? formatDateTime(fix) : t('neverReported');
                     })()}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-txt-2">Speed</dt>
+                  <dt className="text-txt-2">{t('dtSpeed')}</dt>
                   <dd className="text-txt">
                     {(() => {
                       const speed = speedFromPath(path ?? []);
@@ -324,7 +350,9 @@ export function TrackingMapPage() {
               </dl>
 
               <div className="mt-4 border-t border-line-soft pt-3">
-                <label className="mb-1 block text-xs font-medium text-txt-2">Replay path for</label>
+                <label className="mb-1 block text-xs font-medium text-txt-2">
+                  {t('replayPathFor')}
+                </label>
                 <input
                   type="date"
                   value={pathDate}
@@ -334,12 +362,12 @@ export function TrackingMapPage() {
                 />
                 <p className="mt-2 text-xs text-txt-2">
                   {pathLoading
-                    ? 'Loading path…'
+                    ? t('loadingPath')
                     : path && path.length > 1
-                      ? `${path.length} points plotted on the map above.`
+                      ? t('pointsPlotted', { count: path.length })
                       : path && path.length === 1
-                        ? 'Only one fix that day - not enough to draw a path.'
-                        : 'No fixes recorded that day.'}
+                        ? t('onlyOneFix')
+                        : t('noFixesRecorded')}
                 </p>
               </div>
             </div>

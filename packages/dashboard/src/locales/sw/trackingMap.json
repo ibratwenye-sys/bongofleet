@@ -1,0 +1,28 @@
+{
+  "title": "Ramani ya Wakati Halisi",
+  "statusLive": "HAI · {{count}} zinaripoti",
+  "ownerOrManagerGate": "Ni mmiliki wa Fleet au meneja pekee anayeweza kuona ramani ya wakati halisi.",
+  "loadError": "Imeshindikana kupakia maeneo ya magari. Tafadhali jaribu tena.",
+  "allVehicles": "Magari Yote",
+
+  "filterVehicle": "Gari",
+  "legendPhoneDevice": "📱 Simu · 📡 Kifaa",
+  "currentlyOffline": "Hayapo Mtandaoni Sasa ({{count}})",
+  "offlineSince": "haipo mtandaoni tangu {{date}}",
+  "offlineDisclaimer": "Hakuna magari ya aina hii yanayoripoti eneo la wakati halisi kwa sasa - magari yaliyo nje ya mtandao hayaonyeshwi (hakuna kuratibu za kuonyesha), lakini bado yanaonekana kwenye Fleet.",
+
+  "mapPlaceholder": "Bofya gari kwenye ramani ili kuona maelezo hapa.",
+  "dtStatus": "Hali",
+  "dtTodayRider": "Dereva wa Leo",
+  "loading": "Inapakia…",
+  "noRiderAssignedToday": "Hakuna dereva aliyegawiwa leo",
+  "dtLastFix": "Nukta ya Mwisho",
+  "neverReported": "Halijawahi Kuripoti",
+  "dtSpeed": "Kasi",
+
+  "replayPathFor": "Cheza Tena Njia ya",
+  "loadingPath": "Inapakia njia…",
+  "pointsPlotted": "Nukta {{count}} zimewekwa kwenye ramani iliyo juu.",
+  "onlyOneFix": "Nukta moja tu siku hiyo - haitoshi kuchora njia.",
+  "noFixesRecorded": "Hakuna nukta zilizorekodiwa siku hiyo."
+}
