@@ -1,0 +1,44 @@
+{
+  "title": "Tracking links",
+  "newLink": "New link",
+  "intro": "Shareable, no-login-required links for checking a vehicle's position - hand one to a customer watching a delivery, or keep one for yourself on your phone.",
+  "ownerOrManagerGate": "Only the fleet owner or a manager can view tracking links.",
+
+  "tableLabel": "Label",
+  "tableVehicle": "Vehicle",
+  "tableStatus": "Status",
+  "tableViews": "Views",
+  "tableLastViewed": "Last viewed",
+  "tableActions": "Actions",
+  "loading": "Loading…",
+  "noLinksYet": "No tracking links yet.",
+  "wholeFleet": "Whole fleet",
+  "never": "Never",
+
+  "copyLink": "Copy link",
+  "revoke": "Revoke",
+
+  "revokeDialogTitle": "Revoke tracking link",
+  "revokeDialogMessage": "Revoke \"{{label}}\"? Anyone with this link will immediately lose access - this cannot be undone.",
+
+  "loadError": "Could not load tracking links. Please try again.",
+  "copySuccess": "Link copied to clipboard.",
+  "copyError": "Could not copy the link - your browser may be blocking clipboard access.",
+  "revokeSuccess": "Tracking link revoked.",
+  "revokeError": "Could not revoke the link.",
+
+  "statusActive": "Active",
+  "statusExpired": "Expired",
+  "statusRevoked": "Revoked",
+
+  "modalTitle": "New tracking link",
+  "labelPlaceholder": "e.g. Truck T203 - Mombasa delivery",
+  "fieldExpires": "Expires",
+  "neverExpires": "Never expires",
+  "errorLabelRequired": "Give the link a label.",
+  "errorExpiryInvalid": "Pick a valid expiry date, or check \"Never expires\".",
+  "genericError": "Something went wrong. Please try again.",
+  "createLink": "Create link",
+  "creating": "Creating…",
+  "linkCreated": "Tracking link created."
+}

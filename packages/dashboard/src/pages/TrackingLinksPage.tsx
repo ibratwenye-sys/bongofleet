@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/auth-context';
 import { apiFetch, ApiError } from '../lib/api';
-import type { CreateTrackingLinkPayload, Motorcycle, TrackingLink } from '../lib/types';
+import type {
+  CreateTrackingLinkPayload,
+  Motorcycle,
+  TrackingLink,
+  TrackingLinkStatus,
+} from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { StatusBadge, TRACKING_LINK_STATUS_STYLES } from '../components/StatusBadge';
@@ -14,6 +20,16 @@ function sevenDaysFromNow(): string {
 function publicUrl(token: string): string {
   return `${window.location.origin}/track/${token}`;
 }
+
+// Stage L17 (DESIGN_SWAHILI_UI.md) - real bug fix: StatusBadge's own `label`
+// prop (added at L3) was never passed here, so the raw ACTIVE/EXPIRED/
+// REVOKED enum rendered untranslated even in Swahili mode. First label map
+// for this specific type.
+const TRACKING_LINK_STATUS_LABEL_KEY: Record<TrackingLinkStatus, string> = {
+  ACTIVE: 'statusActive',
+  EXPIRED: 'statusExpired',
+  REVOKED: 'statusRevoked',
+};
 
 interface CreateFormState {
   motorcycleId: string; // '' = whole fleet
@@ -31,6 +47,8 @@ function CreateLinkModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('trackingLinks');
+  const { t: tCommon } = useTranslation('common');
   const [form, setForm] = useState<CreateFormState>({
     motorcycleId: '',
     label: '',
@@ -43,9 +61,9 @@ function CreateLinkModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.label.trim()) return setError('Give the link a label.');
+    if (!form.label.trim()) return setError(t('errorLabelRequired'));
     if (!form.neverExpires && Number.isNaN(new Date(form.expiryDate).getTime())) {
-      return setError('Pick a valid expiry date, or check "Never expires".');
+      return setError(t('errorExpiryInvalid'));
     }
 
     setSubmitting(true);
@@ -56,25 +74,25 @@ function CreateLinkModal({
         expiresAt: form.neverExpires ? null : new Date(form.expiryDate).toISOString(),
       };
       await apiFetch('/tracking-links', { method: 'POST', body: JSON.stringify(payload) });
-      onSaved('Tracking link created.');
+      onSaved(t('linkCreated'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="New tracking link" onClose={onClose}>
+    <Modal title={t('modalTitle')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt-2">Vehicle</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">{t('tableVehicle')}</label>
           <select
             value={form.motorcycleId}
             onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
             className="w-full rounded border border-line px-3 py-2 text-sm"
           >
-            <option value="">Whole fleet</option>
+            <option value="">{t('wholeFleet')}</option>
             {motorcycles.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.registrationNumber}
@@ -84,17 +102,17 @@ function CreateLinkModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt-2">Label</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">{t('tableLabel')}</label>
           <input
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
-            placeholder="e.g. Truck T203 - Mombasa delivery"
+            placeholder={t('labelPlaceholder')}
             className="w-full rounded border border-line px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-txt-2">Expires</label>
+          <label className="mb-1 block text-sm font-medium text-txt-2">{t('fieldExpires')}</label>
           <input
             type="date"
             value={form.expiryDate}
@@ -109,7 +127,7 @@ function CreateLinkModal({
               checked={form.neverExpires}
               onChange={(e) => setForm({ ...form, neverExpires: e.target.checked })}
             />
-            Never expires
+            {t('neverExpires')}
           </label>
         </div>
 
@@ -121,14 +139,14 @@ function CreateLinkModal({
             onClick={onClose}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Creating…' : 'Create link'}
+            {submitting ? t('creating') : t('createLink')}
           </button>
         </div>
       </form>
@@ -137,6 +155,7 @@ function CreateLinkModal({
 }
 
 export function TrackingLinksPage() {
+  const { t } = useTranslation('trackingLinks');
   const { user } = useAuth();
   const [links, setLinks] = useState<TrackingLink[] | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
@@ -145,22 +164,22 @@ export function TrackingLinksPage() {
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<TrackingLink | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setError(null);
     try {
       const data = await apiFetch<TrackingLink[]>('/tracking-links');
       setLinks(data);
     } catch {
-      setError('Could not load tracking links. Please try again.');
+      setError(t('loadError'));
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     apiFetch<Motorcycle[]>('/motorcycles')
       .then(setMotorcycles)
       .catch(() => setMotorcycles([]));
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -179,9 +198,9 @@ export function TrackingLinksPage() {
   async function handleCopy(token: string) {
     try {
       await navigator.clipboard.writeText(publicUrl(token));
-      setSuccessMessage('Link copied to clipboard.');
+      setSuccessMessage(t('copySuccess'));
     } catch {
-      setError('Could not copy the link - your browser may be blocking clipboard access.');
+      setError(t('copyError'));
     }
   }
 
@@ -189,11 +208,11 @@ export function TrackingLinksPage() {
     if (!revoking) return;
     try {
       await apiFetch(`/tracking-links/${revoking.id}/revoke`, { method: 'PATCH' });
-      setSuccessMessage('Tracking link revoked.');
+      setSuccessMessage(t('revokeSuccess'));
       setRevoking(null);
       void load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not revoke the link.');
+      setError(err instanceof ApiError ? err.message : t('revokeError'));
       setRevoking(null);
     }
   }
@@ -204,7 +223,7 @@ export function TrackingLinksPage() {
   if (user && user.role !== 'OWNER' && user.role !== 'MANAGER') {
     return (
       <div className="rounded-lg border border-line bg-panel p-6 text-sm text-txt-2 shadow-sm">
-        Only the fleet owner or a manager can view tracking links.
+        {t('ownerOrManagerGate')}
       </div>
     );
   }
@@ -212,19 +231,16 @@ export function TrackingLinksPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-txt">Tracking links</h1>
+        <h1 className="text-xl font-semibold text-txt">{t('title')}</h1>
         <button
           onClick={() => setCreating(true)}
           className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          New link
+          {t('newLink')}
         </button>
       </div>
 
-      <p className="mb-4 text-sm text-txt-2">
-        Shareable, no-login-required links for checking a vehicle's position - hand one to a
-        customer watching a delivery, or keep one for yourself on your phone.
-      </p>
+      <p className="mb-4 text-sm text-txt-2">{t('intro')}</p>
 
       {successMessage && (
         <p className="mb-4 rounded bg-good-d px-3 py-2 text-sm text-good-x">{successMessage}</p>
@@ -235,25 +251,25 @@ export function TrackingLinksPage() {
         <table className="min-w-full divide-y divide-line-soft text-sm">
           <thead className="bg-panel-2">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Label</th>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Vehicle</th>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Status</th>
-              <th className="px-4 py-2 text-right font-medium text-txt-3">Views</th>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Last viewed</th>
-              <th className="px-4 py-2 text-right font-medium text-txt-3">Actions</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('tableLabel')}</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('tableVehicle')}</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('tableStatus')}</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">{t('tableViews')}</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('tableLastViewed')}</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">{t('tableActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line-soft">
             {links === null ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                  Loading…
+                  {t('loading')}
                 </td>
               </tr>
             ) : links.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                  No tracking links yet.
+                  {t('noLinksYet')}
                 </td>
               </tr>
             ) : (
@@ -261,28 +277,32 @@ export function TrackingLinksPage() {
                 <tr key={link.id}>
                   <td className="px-4 py-2 font-medium text-txt">{link.label}</td>
                   <td className="px-4 py-2 text-txt-2">
-                    {link.motorcycleId ? (regById.get(link.motorcycleId) ?? '—') : 'Whole fleet'}
+                    {link.motorcycleId ? (regById.get(link.motorcycleId) ?? '—') : t('wholeFleet')}
                   </td>
                   <td className="px-4 py-2">
-                    <StatusBadge status={link.status} styles={TRACKING_LINK_STATUS_STYLES} />
+                    <StatusBadge
+                      status={link.status}
+                      styles={TRACKING_LINK_STATUS_STYLES}
+                      label={t(TRACKING_LINK_STATUS_LABEL_KEY[link.status])}
+                    />
                   </td>
                   <td className="px-4 py-2 text-right text-txt-2">{link.viewCount}</td>
                   <td className="px-4 py-2 text-txt-2">
-                    {link.lastViewedAt ? formatDateTime(link.lastViewedAt) : 'Never'}
+                    {link.lastViewedAt ? formatDateTime(link.lastViewedAt) : t('never')}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => void handleCopy(link.token)}
                       className="mr-3 text-sm font-medium text-txt-2 hover:underline"
                     >
-                      Copy link
+                      {t('copyLink')}
                     </button>
                     {link.status !== 'REVOKED' && (
                       <button
                         onClick={() => setRevoking(link)}
                         className="text-sm font-medium text-crit hover:underline"
                       >
-                        Revoke
+                        {t('revoke')}
                       </button>
                     )}
                   </td>
@@ -303,9 +323,9 @@ export function TrackingLinksPage() {
 
       {revoking && (
         <ConfirmDialog
-          title="Revoke tracking link"
-          message={`Revoke "${revoking.label}"? Anyone with this link will immediately lose access - this cannot be undone.`}
-          confirmLabel="Revoke"
+          title={t('revokeDialogTitle')}
+          message={t('revokeDialogMessage', { label: revoking.label })}
+          confirmLabel={t('revoke')}
           danger
           onConfirm={() => void handleRevoke()}
           onCancel={() => setRevoking(null)}

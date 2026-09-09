@@ -1,0 +1,44 @@
+{
+  "title": "Viungo vya Ufuatiliaji",
+  "newLink": "Kiungo Kipya",
+  "intro": "Viungo vinavyoweza kushirikiwa, visivyohitaji kuingia, kwa ajili ya kuangalia mahali gari lilipo - mpe mteja anayefuatilia usafirishaji, au weka kimoja kwa ajili yako mwenyewe kwenye simu yako.",
+  "ownerOrManagerGate": "Ni mmiliki wa Fleet au meneja pekee anayeweza kuona viungo vya ufuatiliaji.",
+
+  "tableLabel": "Lebo",
+  "tableVehicle": "Gari",
+  "tableStatus": "Hali",
+  "tableViews": "Mionekano",
+  "tableLastViewed": "Ilipoonekana Mwisho",
+  "tableActions": "Vitendo",
+  "loading": "Inapakia…",
+  "noLinksYet": "Hakuna viungo vya ufuatiliaji bado.",
+  "wholeFleet": "Fleet Nzima",
+  "never": "Kamwe",
+
+  "copyLink": "Nakili Kiungo",
+  "revoke": "Batilisha",
+
+  "revokeDialogTitle": "Batilisha Kiungo cha Ufuatiliaji",
+  "revokeDialogMessage": "Batilisha \"{{label}}\"? Yeyote mwenye kiungo hiki atapoteza ufikiaji mara moja - hatua hii haiwezi kutenduliwa.",
+
+  "loadError": "Imeshindikana kupakia viungo vya ufuatiliaji. Tafadhali jaribu tena.",
+  "copySuccess": "Kiungo kimenakiliwa kwenye ubao wa kunakili.",
+  "copyError": "Imeshindikana kunakili kiungo - kivinjari chako huenda kinazuia ufikiaji wa ubao wa kunakili.",
+  "revokeSuccess": "Kiungo cha ufuatiliaji kimebatilishwa.",
+  "revokeError": "Imeshindikana kubatilisha kiungo.",
+
+  "statusActive": "Inafanya Kazi",
+  "statusExpired": "Imeisha Muda",
+  "statusRevoked": "Imebatilishwa",
+
+  "modalTitle": "Kiungo Kipya cha Ufuatiliaji",
+  "labelPlaceholder": "mfano: Lori T203 - usafirishaji Mombasa",
+  "fieldExpires": "Muda wa Mwisho",
+  "neverExpires": "Bila Muda wa Mwisho",
+  "errorLabelRequired": "Weka lebo ya kiungo.",
+  "errorExpiryInvalid": "Chagua tarehe sahihi ya mwisho, au chagua \"Bila Muda wa Mwisho\".",
+  "genericError": "Hitilafu imetokea. Tafadhali jaribu tena.",
+  "createLink": "Unda Kiungo",
+  "creating": "Inaunda…",
+  "linkCreated": "Kiungo cha ufuatiliaji kimeundwa."
+}
