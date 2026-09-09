@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
 
 export function LoginPage() {
+  const { t } = useTranslation('login');
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -20,9 +22,9 @@ export function LoginPage() {
       navigate('/', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError('Invalid email or password');
+        setError(t('invalidCredentials'));
       } else {
-        setError('Something went wrong. Please try again.');
+        setError(t('genericError'));
       }
     } finally {
       setSubmitting(false);
@@ -38,7 +40,7 @@ export function LoginPage() {
         <h1 className="mb-6 text-xl font-semibold text-txt">BongoFleet</h1>
 
         <label className="mb-1 block text-sm font-medium text-txt-2" htmlFor="email">
-          Email
+          {t('emailLabel')}
         </label>
         <input
           id="email"
@@ -50,7 +52,7 @@ export function LoginPage() {
         />
 
         <label className="mb-1 block text-sm font-medium text-txt-2" htmlFor="password">
-          Password
+          {t('passwordLabel')}
         </label>
         <input
           id="password"
@@ -68,7 +70,7 @@ export function LoginPage() {
           disabled={submitting}
           className="w-full rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {submitting ? 'Signing in…' : 'Sign in'}
+          {submitting ? t('signingIn') : t('signIn')}
         </button>
       </form>
     </div>

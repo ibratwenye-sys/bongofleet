@@ -36,6 +36,8 @@ import enTrackingLinks from '../locales/en/trackingLinks.json';
 import swTrackingLinks from '../locales/sw/trackingLinks.json';
 import enTrackingMap from '../locales/en/trackingMap.json';
 import swTrackingMap from '../locales/sw/trackingMap.json';
+import enLogin from '../locales/en/login.json';
+import swLogin from '../locales/sw/login.json';
 import type { Language } from './types';
 
 /**
@@ -46,10 +48,10 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L18 translate them (operationsCenter, payments,
+ * batch as Stage L2-L19 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
  * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
- * bulkImport, trackingLinks, then trackingMap - see
+ * bulkImport, trackingLinks, trackingMap, then login - see
  * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
  * need: a page gets its own namespace only once it's actually
  * translated.
@@ -72,6 +74,12 @@ import type { Language } from './types';
  * `motorcycleDetail` namespace for the caller-supplied labels/hint it
  * passes in. ApprovalsPage similarly uses its own sibling namespace
  * `approvals` for its page-specific strings as of L11.
+ * `login` (L19) is translate-only infrastructure: LoginPage renders
+ * pre-auth, and the account's language preference (applied via
+ * applyLanguage below) is only known once login succeeds - it resets to
+ * English on logout. There's no pre-login LanguageToggle yet, so this
+ * page still renders in English in practice until one exists; the
+ * namespace is ready the moment it does.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -94,6 +102,7 @@ void i18n.use(initReactI18next).init({
       bulkImport: enBulkImport,
       trackingLinks: enTrackingLinks,
       trackingMap: enTrackingMap,
+      login: enLogin,
     },
     sw: {
       common: sw,
@@ -114,6 +123,7 @@ void i18n.use(initReactI18next).init({
       bulkImport: swBulkImport,
       trackingLinks: swTrackingLinks,
       trackingMap: swTrackingMap,
+      login: swLogin,
     },
   },
   lng: 'en',

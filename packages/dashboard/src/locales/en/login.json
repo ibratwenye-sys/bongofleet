@@ -1,0 +1,8 @@
+{
+  "emailLabel": "Email",
+  "passwordLabel": "Password",
+  "invalidCredentials": "Invalid email or password",
+  "genericError": "Something went wrong. Please try again.",
+  "signIn": "Sign in",
+  "signingIn": "Signing in…"
+}
