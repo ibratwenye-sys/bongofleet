@@ -82,10 +82,11 @@ import type { Language } from './types';
  * English on logout. There's no pre-login LanguageToggle yet, so this
  * page still renders in English in practice until one exists; the
  * namespace is ready the moment it does.
- * `ownership` (L20) covers OwnershipPage.tsx split across two stages,
- * same discipline as `transport` (L5/L6) and `drivers` (L10 a/b): L20
- * Part 1 is everything except CreatePlanFormModal (the "Create plan"
- * form) - that modal keeps this namespace growing at a later Part 2.
+ * `ownership` (L20-L21) covers OwnershipPage.tsx, split across two
+ * stages the same discipline as `transport` (L5/L6) and `drivers` (L10
+ * a/b): L20 Part 1 covered everything except CreatePlanFormModal, and
+ * L21 Part 2 finished it by translating that "Create plan" form,
+ * closing out the page.
  */
 void i18n.use(initReactI18next).init({
   resources: {

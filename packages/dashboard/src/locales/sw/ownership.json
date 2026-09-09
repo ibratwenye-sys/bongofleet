@@ -80,5 +80,64 @@
   "statusActive": "Inafanya Kazi",
   "statusCompleted": "Imekamilika",
   "statusDefaulted": "Imekiuka Mkataba",
-  "statusCancelled": "Imeghairiwa"
+  "statusCancelled": "Imeghairiwa",
+
+  "createModalTitle": "Unda Mpango wa Umiliki",
+
+  "driverLabel": "Dereva",
+  "selectDriverPlaceholder": "Chagua dereva…",
+  "vehicleLabel": "Gari",
+  "selectVehiclePlaceholder": "Chagua gari…",
+  "guarantorLabel": "Mdhamini (hiari)",
+  "noGuarantorOnContract": "Hakuna Mdhamini kwenye Mkataba Huu",
+  "selectDriverFirst": "Chagua dereva kwanza…",
+
+  "declaredValueLabel": "Thamani Iliyotajwa (TZS)",
+  "declaredValueHint": "Thamani ya gari, kwa ajili ya mkataba tu - haihusiani na mpango wa malipo hapa chini.",
+  "downPaymentLabel": "Malipo ya Awali (TZS)",
+  "depositAppliedLabel": "Inatumika Kwenye Ratiba",
+  "depositHeldLabel": "Inashikiliwa, Inarejeshwa",
+
+  "activeWeekdaysLabel": "Siku za Wiki Zinazotumika",
+  "weekdaySun": "Jpi",
+  "weekdayMon": "Jtt",
+  "weekdayTue": "Jnn",
+  "weekdayWed": "Jtn",
+  "weekdayThu": "Alh",
+  "weekdayFri": "Ijm",
+  "weekdaySat": "Jms",
+
+  "startDateLabel": "Tarehe ya Kuanza",
+
+  "dailyAmountFieldLabel": "Kiasi cha Kila Siku (TZS)",
+  "termModePrompt": "Kisha Ingiza Muda Kama",
+  "termModeDaysLabel": "Idadi ya Siku",
+  "termModeTotalLabel": "Jumla (TZS)",
+  "notExactIntro": "{{price}} haigawanyiki sawasawa na {{daily}}/siku. Chagua muda wa kutumia - patana na dereva kuhusu tofauti hiyo sasa, si kwenye mkataba uliochapishwa:",
+  "optionDaysCaption": "siku {{count}}",
+  "resolvedDaysSummary": "Siku {{days}} za malipo = {{total}}, sawasawa kabisa.",
+  "projectedEndDateLine": "Tarehe ya mwisho inayotarajiwa: {{date}} — imejazwa kiotomatiki hapa chini; ibadilishe kama muda ulioafikiwa ni tofauti.",
+  "termFallbackHint": "Weka kiasi cha kila siku, tarehe ya kuanza, angalau siku moja ya wiki inayotumika, na muda hapo juu ili kuona jumla na tarehe ya mwisho inayotarajiwa.",
+
+  "graceDaysLabel": "Siku za Neema (hiari)",
+
+  "contractEndDateLabel": "Tarehe ya Mwisho ya Mkataba",
+  "noEndDateWarning": "Hakuna tarehe ya mwisho - mpango huu hautakuwa na muda ulioafikiwa, na mkataba utachapisha nafasi tupu pale ambapo tarehe ya mwisho inapaswa kuwa.",
+
+  "notesLabel": "Maelezo (hiari)",
+
+  "errorDriverVehicleRequired": "Dereva na gari vinahitajika.",
+  "errorInvalidDeclaredValue": "Weka thamani sahihi iliyotajwa.",
+  "errorInvalidDailyAmount": "Weka kiasi sahihi cha kila siku.",
+  "errorWeekdayRequired": "Angalau siku moja ya wiki inayotumika inahitajika.",
+  "errorPickDayOption": "Chagua mojawapo ya chaguo mbili za idadi ya siku hapa chini kabla ya kuunda mpango.",
+  "errorEnterDaysOrTotal": "Weka idadi ya siku au jumla ili kubainisha muda.",
+  "genericError": "Hitilafu imetokea. Tafadhali jaribu tena.",
+
+  "successPlanCreated": "Mpango wa umiliki umeundwa.",
+  "creatingPlan": "Inaunda…",
+
+  "noEndDateDialogTitle": "Hakuna Tarehe ya Mwisho ya Mkataba",
+  "noEndDateDialogMessage": "Mpango huu hautakuwa na tarehe ya mwisho iliyoafikiwa, na mkataba utakaozalishwa utachapisha nafasi tupu pale muda unapopaswa kuwa. Uunde hata hivyo?",
+  "noEndDateConfirmLabel": "Unda Hata Hivyo"
 }

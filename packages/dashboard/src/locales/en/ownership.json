@@ -80,5 +80,64 @@
   "statusActive": "Active",
   "statusCompleted": "Completed",
   "statusDefaulted": "Defaulted",
-  "statusCancelled": "Cancelled"
+  "statusCancelled": "Cancelled",
+
+  "createModalTitle": "Create ownership plan",
+
+  "driverLabel": "Driver",
+  "selectDriverPlaceholder": "Select a driver…",
+  "vehicleLabel": "Vehicle",
+  "selectVehiclePlaceholder": "Select a vehicle…",
+  "guarantorLabel": "Guarantor (optional)",
+  "noGuarantorOnContract": "No guarantor on this contract",
+  "selectDriverFirst": "Select a driver first…",
+
+  "declaredValueLabel": "Declared value (TZS)",
+  "declaredValueHint": "The vehicle's value, for the contract only - independent of the payment plan below.",
+  "downPaymentLabel": "Down payment (TZS)",
+  "depositAppliedLabel": "Applied to schedule",
+  "depositHeldLabel": "Held, refundable",
+
+  "activeWeekdaysLabel": "Active weekdays",
+  "weekdaySun": "Sun",
+  "weekdayMon": "Mon",
+  "weekdayTue": "Tue",
+  "weekdayWed": "Wed",
+  "weekdayThu": "Thu",
+  "weekdayFri": "Fri",
+  "weekdaySat": "Sat",
+
+  "startDateLabel": "Start date",
+
+  "dailyAmountFieldLabel": "Daily amount (TZS)",
+  "termModePrompt": "Then enter the term as",
+  "termModeDaysLabel": "Number of days",
+  "termModeTotalLabel": "Total (TZS)",
+  "notExactIntro": "{{price}} does not divide evenly by {{daily}}/day. Pick the term to use - settle the difference with the driver now, not on the printed contract:",
+  "optionDaysCaption": "{{count}} days",
+  "resolvedDaysSummary": "{{days}} payment days = {{total}}, exactly.",
+  "projectedEndDateLine": "Projected calendar end date: {{date}} — filled in below automatically; edit it if the agreed term is different.",
+  "termFallbackHint": "Enter the daily amount, start date, at least one active weekday, and the term above to see the projected total and end date.",
+
+  "graceDaysLabel": "Grace days (optional)",
+
+  "contractEndDateLabel": "Contract end date",
+  "noEndDateWarning": "No end date - this plan will have no agreed term, and the contract will print a blank where the end date belongs.",
+
+  "notesLabel": "Notes (optional)",
+
+  "errorDriverVehicleRequired": "Driver and vehicle are required.",
+  "errorInvalidDeclaredValue": "Enter a valid declared value.",
+  "errorInvalidDailyAmount": "Enter a valid daily amount.",
+  "errorWeekdayRequired": "At least one active weekday is required.",
+  "errorPickDayOption": "Pick one of the two day-count options below before creating the plan.",
+  "errorEnterDaysOrTotal": "Enter the number of days or the total to determine the term.",
+  "genericError": "Something went wrong. Please try again.",
+
+  "successPlanCreated": "Ownership plan created.",
+  "creatingPlan": "Creating…",
+
+  "noEndDateDialogTitle": "No contract end date",
+  "noEndDateDialogMessage": "This plan will have no agreed end date, and the generated contract will print a blank where the term should be. Create it anyway?",
+  "noEndDateConfirmLabel": "Create anyway"
 }

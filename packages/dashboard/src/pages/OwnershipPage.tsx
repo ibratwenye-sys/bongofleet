@@ -40,7 +40,20 @@ const OWNERSHIP_PLAN_STATUS_LABEL_KEY: Record<OwnershipPlanStatus, string> = {
   CANCELLED: 'statusCancelled',
 };
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Stage L21 - the first screen in BongoFleet to show weekday names at all
+// (confirmed by grep before this stage - no existing abbreviation
+// precedent anywhere else in the app). Index 0=Sun..6=Sat matches
+// toggleWeekday's day-index numbers and form.activeWeekdays below - only
+// the DISPLAY label changes here, never the underlying index.
+const WEEKDAY_LABEL_KEYS = [
+  'weekdaySun',
+  'weekdayMon',
+  'weekdayTue',
+  'weekdayWed',
+  'weekdayThu',
+  'weekdayFri',
+  'weekdaySat',
+];
 const DEFAULT_ACTIVE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
 const SEVERITY_ROW_STYLES: Record<'ok' | 'amber' | 'red', string> = {
@@ -172,6 +185,8 @@ function CreatePlanFormModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useTranslation('ownership');
+  const { t: tCommon } = useTranslation('common');
   const [form, setForm] = useState<CreateFormState>({
     driverId: '',
     motorcycleId: '',
@@ -323,9 +338,9 @@ function CreatePlanFormModal({
         notes: form.notes.trim() || undefined,
       };
       await apiFetch('/ownership-plans', { method: 'POST', body: JSON.stringify(payload) });
-      onSaved('Ownership plan created.');
+      onSaved(t('successPlanCreated'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
@@ -336,26 +351,26 @@ function CreatePlanFormModal({
     setError(null);
 
     if (!form.driverId || !form.motorcycleId) {
-      setError('Driver and vehicle are required.');
+      setError(t('errorDriverVehicleRequired'));
       return;
     }
     if (!form.totalPrice || totalPrice <= 0) {
-      setError('Enter a valid declared value.');
+      setError(t('errorInvalidDeclaredValue'));
       return;
     }
     if (!form.dailyAmount || dailyAmount <= 0) {
-      setError('Enter a valid daily amount.');
+      setError(t('errorInvalidDailyAmount'));
       return;
     }
     if (form.activeWeekdays.length === 0) {
-      setError('At least one active weekday is required.');
+      setError(t('errorWeekdayRequired'));
       return;
     }
     if (resolvedDays === null) {
       setError(
         form.termMode === 'total' && notExactOptions
-          ? 'Pick one of the two day-count options below before creating the plan.'
-          : 'Enter the number of days or the total to determine the term.',
+          ? t('errorPickDayOption')
+          : t('errorEnterDaysOrTotal'),
       );
       return;
     }
@@ -374,7 +389,7 @@ function CreatePlanFormModal({
 
   return (
     <>
-      <Modal title="Create ownership plan" onClose={onClose}>
+      <Modal title={t('createModalTitle')} onClose={onClose}>
         {/* Stage H0d - this form used to carry its own
             `max-h-[75vh] overflow-y-auto pr-1`, a local workaround for the
             shared Modal having no scrolling of its own. Modal now bounds and
@@ -382,13 +397,13 @@ function CreatePlanFormModal({
             second scroll region inside the first. */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Driver</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('driverLabel')}</label>
             <select
               value={form.driverId}
               onChange={(e) => setForm({ ...form, driverId: e.target.value, guarantorId: '' })}
               className="w-full rounded border border-line px-3 py-2 text-sm"
             >
-              <option value="">Select a driver…</option>
+              <option value="">{t('selectDriverPlaceholder')}</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.user.firstName} {d.user.lastName} — {d.licenseNumber}
@@ -397,13 +412,13 @@ function CreatePlanFormModal({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Vehicle</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('vehicleLabel')}</label>
             <select
               value={form.motorcycleId}
               onChange={(e) => setForm({ ...form, motorcycleId: e.target.value })}
               className="w-full rounded border border-line px-3 py-2 text-sm"
             >
-              <option value="">Select a vehicle…</option>
+              <option value="">{t('selectVehiclePlaceholder')}</option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.registrationNumber} {[m.make, m.model].filter(Boolean).join(' ')}
@@ -412,7 +427,7 @@ function CreatePlanFormModal({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Guarantor (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('guarantorLabel')}</label>
             <select
               value={form.guarantorId}
               onChange={(e) => setForm({ ...form, guarantorId: e.target.value })}
@@ -420,7 +435,7 @@ function CreatePlanFormModal({
               className="w-full rounded border border-line px-3 py-2 text-sm disabled:bg-panel-2"
             >
               <option value="">
-                {form.driverId ? 'No guarantor on this contract' : 'Select a driver first…'}
+                {form.driverId ? t('noGuarantorOnContract') : t('selectDriverFirst')}
               </option>
               {guarantors.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -433,7 +448,7 @@ function CreatePlanFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-txt">
-                Declared value (TZS)
+                {t('declaredValueLabel')}
               </label>
               <input
                 type="number"
@@ -441,12 +456,12 @@ function CreatePlanFormModal({
                 onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
                 className="w-full rounded border border-line px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-txt-2">
-                The vehicle's value, for the contract only - independent of the payment plan below.
-              </p>
+              <p className="mt-1 text-xs text-txt-2">{t('declaredValueHint')}</p>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-txt">Down payment (TZS)</label>
+              <label className="mb-1 block text-sm font-medium text-txt">
+                {t('downPaymentLabel')}
+              </label>
               <input
                 type="number"
                 value={form.downPayment}
@@ -464,7 +479,7 @@ function CreatePlanFormModal({
                       checked={form.depositHandling === 'APPLIED'}
                       onChange={() => setForm({ ...form, depositHandling: 'APPLIED' })}
                     />
-                    Applied to schedule
+                    {t('depositAppliedLabel')}
                   </label>
                   <label className="inline-flex items-center gap-1">
                     <input
@@ -473,7 +488,7 @@ function CreatePlanFormModal({
                       checked={form.depositHandling === 'HELD_REFUNDABLE'}
                       onChange={() => setForm({ ...form, depositHandling: 'HELD_REFUNDABLE' })}
                     />
-                    Held, refundable
+                    {t('depositHeldLabel')}
                   </label>
                 </div>
               )}
@@ -481,9 +496,11 @@ function CreatePlanFormModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Active weekdays</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('activeWeekdaysLabel')}
+            </label>
             <div className="flex gap-2">
-              {WEEKDAY_LABELS.map((label, day) => (
+              {WEEKDAY_LABEL_KEYS.map((labelKey, day) => (
                 <button
                   type="button"
                   key={day}
@@ -494,14 +511,14 @@ function CreatePlanFormModal({
                       : 'border-line text-txt-2 hover:bg-panel-2'
                   }`}
                 >
-                  {label}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Start date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('startDateLabel')}</label>
             <input
               type="date"
               value={form.startDate}
@@ -515,7 +532,9 @@ function CreatePlanFormModal({
             other computed live and exactly (total = daily x days, always;
             never the reverse division rounded away). */}
           <div className="rounded border border-line bg-panel-2 p-3">
-            <label className="mb-1 block text-sm font-medium text-txt">Daily amount (TZS)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('dailyAmountFieldLabel')}
+            </label>
             <input
               type="number"
               value={form.dailyAmount}
@@ -523,7 +542,7 @@ function CreatePlanFormModal({
               className="mb-3 w-full rounded border border-line px-3 py-2 text-sm"
             />
 
-            <span className="mb-1 block text-sm font-medium text-txt">Then enter the term as</span>
+            <span className="mb-1 block text-sm font-medium text-txt">{t('termModePrompt')}</span>
             <div className="mb-3 flex overflow-hidden rounded border border-line text-sm">
               <button
                 type="button"
@@ -534,7 +553,7 @@ function CreatePlanFormModal({
                     : 'bg-panel-2 text-txt-2 hover:bg-panel'
                 }`}
               >
-                Number of days
+                {t('termModeDaysLabel')}
               </button>
               <button
                 type="button"
@@ -545,13 +564,15 @@ function CreatePlanFormModal({
                     : 'bg-panel-2 text-txt-2 hover:bg-panel'
                 }`}
               >
-                Total (TZS)
+                {t('termModeTotalLabel')}
               </button>
             </div>
 
             {form.termMode === 'days' ? (
               <div>
-                <label className="mb-1 block text-sm font-medium text-txt">Number of days</label>
+                <label className="mb-1 block text-sm font-medium text-txt">
+                  {t('termModeDaysLabel')}
+                </label>
                 <input
                   type="number"
                   min={1}
@@ -562,7 +583,9 @@ function CreatePlanFormModal({
               </div>
             ) : (
               <div>
-                <label className="mb-1 block text-sm font-medium text-txt">Total (TZS)</label>
+                <label className="mb-1 block text-sm font-medium text-txt">
+                  {t('termModeTotalLabel')}
+                </label>
                 <input
                   type="number"
                   min={1}
@@ -577,9 +600,10 @@ function CreatePlanFormModal({
               {notExactOptions ? (
                 <div className="space-y-2">
                   <p className="text-txt">
-                    {formatTZS(Number(form.total))} does not divide evenly by{' '}
-                    {formatTZS(dailyAmount)}/day. Pick the term to use - settle the difference with
-                    the driver now, not on the printed contract:
+                    {t('notExactIntro', {
+                      price: formatTZS(Number(form.total)),
+                      daily: formatTZS(dailyAmount),
+                    })}
                   </p>
                   <div className="flex gap-2">
                     {notExactOptions.map((option) => (
@@ -593,7 +617,9 @@ function CreatePlanFormModal({
                             : 'border-line bg-panel-2 hover:bg-panel'
                         }`}
                       >
-                        <span className="block font-medium text-txt">{option.days} days</span>
+                        <span className="block font-medium text-txt">
+                          {t('optionDaysCaption', { count: option.days })}
+                        </span>
                         <span className="block text-txt-2">{formatTZS(option.total)}</span>
                       </button>
                     ))}
@@ -602,26 +628,23 @@ function CreatePlanFormModal({
               ) : resolvedTerm ? (
                 <div className="space-y-1">
                   <p className="text-txt">
-                    <span className="font-medium">{resolvedTerm.days}</span> payment days ={' '}
-                    <span className="font-medium">{formatTZS(resolvedTerm.total)}</span>, exactly.
+                    {t('resolvedDaysSummary', {
+                      days: resolvedTerm.days,
+                      total: formatTZS(resolvedTerm.total),
+                    })}
                   </p>
                   <p className="text-txt">
-                    Projected calendar end date:{' '}
-                    <span className="font-medium">{resolvedTerm.calendarEndDate}</span> — filled in
-                    below automatically; edit it if the agreed term is different.
+                    {t('projectedEndDateLine', { date: resolvedTerm.calendarEndDate })}
                   </p>
                 </div>
               ) : (
-                <p className="text-txt-2">
-                  Enter the daily amount, start date, at least one active weekday, and the term
-                  above to see the projected total and end date.
-                </p>
+                <p className="text-txt-2">{t('termFallbackHint')}</p>
               )}
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Grace days (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('graceDaysLabel')}</label>
             <input
               type="number"
               min={0}
@@ -632,7 +655,9 @@ function CreatePlanFormModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Contract end date</label>
+            <label className="mb-1 block text-sm font-medium text-txt">
+              {t('contractEndDateLabel')}
+            </label>
             <input
               type="date"
               value={form.contractEndDate}
@@ -647,15 +672,12 @@ function CreatePlanFormModal({
               warning is too late for someone who half-typed a date and moved
               on without noticing it didn't take. */}
             {!form.contractEndDate && (
-              <p className="mt-1 text-xs text-amber-700">
-                No end date - this plan will have no agreed term, and the contract will print a
-                blank where the end date belongs.
-              </p>
+              <p className="mt-1 text-xs text-amber-700">{t('noEndDateWarning')}</p>
             )}
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-txt">Notes (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-txt">{t('notesLabel')}</label>
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -672,23 +694,23 @@ function CreatePlanFormModal({
               onClick={onClose}
               className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
             >
-              Cancel
+              {tCommon('cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
-              {submitting ? 'Creating…' : 'Create plan'}
+              {submitting ? t('creatingPlan') : t('createPlan')}
             </button>
           </div>
         </form>
       </Modal>
       {confirmingNoEndDate && (
         <ConfirmDialog
-          title="No contract end date"
-          message="This plan will have no agreed end date, and the generated contract will print a blank where the term should be. Create it anyway?"
-          confirmLabel="Create anyway"
+          title={t('noEndDateDialogTitle')}
+          message={t('noEndDateDialogMessage')}
+          confirmLabel={t('noEndDateConfirmLabel')}
           danger
           onConfirm={() => {
             setConfirmingNoEndDate(false);
