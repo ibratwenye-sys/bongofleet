@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, apiFetchBlob, ApiError } from '../lib/api';
 import { formatTZS } from '../lib/format';
 import type {
@@ -21,10 +22,15 @@ const DAY_EXCUSAL_STATUS_STYLES: Record<string, string> = {
   DECLINED: 'bg-gray-100 text-gray-500',
 };
 
-const DAY_EXCUSAL_STATUS_LABELS: Record<string, string> = {
-  APPROVED: 'Excused',
-  REQUESTED: 'Pending approval',
-  DECLINED: 'Declined',
+// Stage L22 - the same missing-`label`-prop enum-badge bug already found and
+// fixed at Fleet/Drivers/Assignments/TrackingLinks/Ownership: StatusBadge's
+// own `label` prop was never passed here, even though DAY_EXCUSAL_STATUS_
+// LABELS already existed for the caption text just below it. One map, two
+// render sites now.
+const DAY_EXCUSAL_STATUS_LABEL_KEY: Record<string, string> = {
+  APPROVED: 'statusExcused',
+  REQUESTED: 'statusPendingApproval',
+  DECLINED: 'statusDeclinedLabel',
 };
 
 function runningPositionClass(value: string): string {
@@ -41,6 +47,8 @@ function ContractSection({
   planId: string;
   hasContractEndDate: boolean;
 }) {
+  const { t } = useTranslation('ownershipPlanDetail');
+  const { t: tOwnership } = useTranslation('ownership');
   const [contracts, setContracts] = useState<Document[] | null>(null);
   const [activePaymentAccounts, setActivePaymentAccounts] = useState<PaymentAccount[] | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -79,7 +87,7 @@ function ContractSection({
       await apiFetch(`/ownership-plans/${planId}/contract`, { method: 'POST' });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not generate the contract.');
+      setError(err instanceof ApiError ? err.message : t('generateError'));
     } finally {
       setGenerating(false);
     }
@@ -92,7 +100,7 @@ function ContractSection({
       const blob = await apiFetchBlob(`/ownership-plans/${planId}/contract`);
       window.open(URL.createObjectURL(blob), '_blank');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not open the contract.');
+      setError(err instanceof ApiError ? err.message : t('openError'));
     } finally {
       setDownloading(false);
     }
@@ -125,30 +133,28 @@ function ContractSection({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-3 text-lg font-medium text-txt">Contract</h2>
+      <h2 className="mb-3 text-lg font-medium text-txt">{t('contractSectionTitle')}</h2>
       <div className="rounded border border-line bg-panel p-4">
         {contracts === null ? (
-          <p className="text-sm text-txt-2">Loading…</p>
+          <p className="text-sm text-txt-2">{t('loading')}</p>
         ) : latest === null ? (
-          <p className="mb-3 text-sm text-txt-2">No contract generated yet.</p>
+          <p className="mb-3 text-sm text-txt-2">{t('contractEmpty')}</p>
         ) : (
           <p className="mb-3 text-sm text-txt-2">
-            Latest: {latest.fileName} — generated {latest.uploadedAt.slice(0, 10)}
-            {contracts.length > 1 && ` (${contracts.length} versions on file)`}
+            {t('latestLine', { fileName: latest.fileName, date: latest.uploadedAt.slice(0, 10) })}
+            {contracts.length > 1 && t('versionsSuffix', { count: contracts.length })}
           </p>
         )}
 
         {!hasContractEndDate && (
           <p className="mb-3 rounded bg-warn-d px-3 py-2 text-sm text-warn">
-            No contract end date is set for this plan - the contract will print &quot;Haijajazwa /
-            Not on file&quot; where the end date belongs.
+            {t('endDateMissingWarning')}
           </p>
         )}
 
         {activePaymentAccounts !== null && activePaymentAccounts.length === 0 && (
           <p className="mb-3 rounded bg-warn-d px-3 py-2 text-sm text-warn">
-            No active payment account is configured for this tenant - the contract will print
-            &quot;Hakuna akaunti ya malipo iliyowekwa&quot; (no payment account configured).
+            {t('noPaymentAccountWarning')}
           </p>
         )}
 
@@ -158,7 +164,11 @@ function ContractSection({
             disabled={generating}
             className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {generating ? 'Generating…' : latest ? 'Regenerate contract' : 'Generate contract'}
+            {generating
+              ? t('generating')
+              : latest
+                ? t('regenerateContract')
+                : t('generateContract')}
           </button>
           {latest && (
             <button
@@ -166,7 +176,7 @@ function ContractSection({
               disabled={downloading}
               className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2 disabled:opacity-50"
             >
-              {downloading ? 'Opening…' : 'Download latest'}
+              {downloading ? t('opening') : t('downloadLatest')}
             </button>
           )}
         </div>
@@ -176,9 +186,9 @@ function ContractSection({
 
       {confirmingNoEndDate && (
         <ConfirmDialog
-          title="No contract end date"
-          message='This plan has no agreed end date. The contract will print "Haijajazwa / Not on file" where the driver expects to see the term. Download anyway?'
-          confirmLabel="Download anyway"
+          title={tOwnership('noEndDateDialogTitle')}
+          message={t('noEndDateDownloadMessage')}
+          confirmLabel={t('downloadAnyway')}
           danger
           onConfirm={() => {
             setConfirmingNoEndDate(false);
@@ -190,9 +200,9 @@ function ContractSection({
 
       {confirmingNoPaymentAccount && (
         <ConfirmDialog
-          title="No payment account configured"
-          message='This tenant has no active payment account. The contract will print "Hakuna akaunti ya malipo iliyowekwa" (no payment account configured) where the driver expects to see where to pay. Download anyway?'
-          confirmLabel="Download anyway"
+          title={t('noPaymentAccountDialogTitle')}
+          message={t('noPaymentAccountDownloadMessage')}
+          confirmLabel={t('downloadAnyway')}
           danger
           onConfirm={() => {
             setConfirmingNoPaymentAccount(false);
@@ -220,6 +230,8 @@ function ExcuseDayDialog({
   onClose: () => void;
   onExcused: () => void;
 }) {
+  const { t } = useTranslation('ownershipPlanDetail');
+  const { t: tCommon } = useTranslation('common');
   const [excusedDate, setExcusedDate] = useState(initialDate ?? '');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -239,21 +251,21 @@ function ExcuseDayDialog({
       });
       onExcused();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not excuse this day.');
+      setError(err instanceof ApiError ? err.message : t('excuseError'));
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="Excuse a day" onClose={onClose}>
+    <Modal title={t('excuseADay')} onClose={onClose}>
       <p className="mb-4 rounded bg-warn-d px-3 py-2 text-sm text-warn">
-        Excusing a day does <strong>not</strong> change what the driver owes. He still owes that
-        money and pays it later — this only stops the day from counting as a missed day on his
-        record.
+        {t('excuseWarningPart1')}
+        <strong>{t('excuseWarningBold')}</strong>
+        {t('excuseWarningPart2')}
       </p>
 
       <label className="mb-3 block text-sm font-medium text-txt-2">
-        Date
+        {t('dateLabel')}
         <input
           type="date"
           value={excusedDate}
@@ -263,12 +275,12 @@ function ExcuseDayDialog({
       </label>
 
       <label className="mb-4 block text-sm font-medium text-txt-2">
-        Reason (required)
+        {t('reasonLabel')}
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={3}
-          placeholder="e.g. Msiba wa jamaa - alimjulisha msimamizi wake (family bereavement - told his supervisor)"
+          placeholder={t('reasonPlaceholder')}
           className="mt-1 block w-full rounded border border-line px-3 py-1.5 text-sm"
         />
       </label>
@@ -281,7 +293,7 @@ function ExcuseDayDialog({
           onClick={onClose}
           className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
         >
-          Cancel
+          {tCommon('cancel')}
         </button>
         <button
           type="button"
@@ -289,7 +301,7 @@ function ExcuseDayDialog({
           disabled={!canSubmit}
           className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {submitting ? 'Excusing…' : 'Excuse day'}
+          {submitting ? t('excusing') : t('excuseDaySubmit')}
         </button>
       </div>
     </Modal>
@@ -331,6 +343,8 @@ function buildMergedRows(
 }
 
 function LedgerSection({ planId }: { planId: string }) {
+  const { t } = useTranslation('ownershipPlanDetail');
+  const { t: tTrackingLinks } = useTranslation('trackingLinks');
   const [ledgerRows, setLedgerRows] = useState<OwnershipPlanLedgerRow[] | null>(null);
   const [excusals, setExcusals] = useState<DayExcusal[] | null>(null);
   const [excuseDialogDate, setExcuseDialogDate] = useState<string | null | undefined>(undefined);
@@ -365,9 +379,7 @@ function LedgerSection({ planId }: { planId: string }) {
       setRevoking(null);
       await load();
     } catch (err) {
-      setActionError(
-        err instanceof ApiError ? err.message : 'Could not decline/revoke this excusal.',
-      );
+      setActionError(err instanceof ApiError ? err.message : t('declineRevokeError'));
       setRevoking(null);
     }
   }
@@ -378,13 +390,13 @@ function LedgerSection({ planId }: { planId: string }) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-medium text-txt">Instalment ledger</h2>
+        <h2 className="text-lg font-medium text-txt">{t('ledgerSectionTitle')}</h2>
         <button
           type="button"
           onClick={() => setExcuseDialogDate(null)}
           className="rounded border border-line px-3 py-1.5 text-sm font-medium text-txt-2 hover:bg-panel-2"
         >
-          Excuse a day
+          {t('excuseADay')}
         </button>
       </div>
 
@@ -394,11 +406,13 @@ function LedgerSection({ planId }: { planId: string }) {
         <table className="min-w-full divide-y divide-line-soft text-sm">
           <thead className="sticky top-0 bg-panel-2">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Date</th>
-              <th className="px-4 py-2 text-right font-medium text-txt-3">Owed</th>
-              <th className="px-4 py-2 text-right font-medium text-txt-3">Paid</th>
-              <th className="px-4 py-2 text-right font-medium text-txt-3">Running position</th>
-              <th className="px-4 py-2 text-left font-medium text-txt-3">Excusal</th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('dateLabel')}</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">{t('colOwed')}</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">{t('colPaid')}</th>
+              <th className="px-4 py-2 text-right font-medium text-txt-3">
+                {t('colRunningPosition')}
+              </th>
+              <th className="px-4 py-2 text-left font-medium text-txt-3">{t('colExcusal')}</th>
               <th className="px-4 py-2 text-left font-medium text-txt-3"></th>
             </tr>
           </thead>
@@ -406,13 +420,13 @@ function LedgerSection({ planId }: { planId: string }) {
             {rows === null ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                  Loading…
+                  {t('loading')}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-txt-2">
-                  No instalments generated yet.
+                  {t('ledgerEmpty')}
                 </td>
               </tr>
             ) : (
@@ -439,14 +453,19 @@ function LedgerSection({ planId }: { planId: string }) {
                         <StatusBadge
                           status={row.excusal.status}
                           styles={DAY_EXCUSAL_STATUS_STYLES}
+                          label={t(
+                            DAY_EXCUSAL_STATUS_LABEL_KEY[row.excusal.status] ?? row.excusal.status,
+                          )}
                         />
                         <p className="mt-1 text-xs text-txt-2">
-                          {DAY_EXCUSAL_STATUS_LABELS[row.excusal.status] ?? row.excusal.status}
+                          {t(
+                            DAY_EXCUSAL_STATUS_LABEL_KEY[row.excusal.status] ?? row.excusal.status,
+                          )}
                           {row.excusal.reason && ` — ${row.excusal.reason}`}
                         </p>
                         {row.excusal.status !== 'REQUESTED' && row.excusal.decidedByName && (
                           <p className="text-xs text-txt-3">
-                            by {row.excusal.decidedByName}
+                            {t('byName', { name: row.excusal.decidedByName })}
                             {row.excusal.decidedAt && ` · ${row.excusal.decidedAt.slice(0, 10)}`}
                           </p>
                         )}
@@ -462,7 +481,9 @@ function LedgerSection({ planId }: { planId: string }) {
                         onClick={() => setRevoking(row.excusal)}
                         className="text-xs font-medium text-crit hover:underline"
                       >
-                        {row.excusal.status === 'APPROVED' ? 'Revoke' : 'Decline'}
+                        {row.excusal.status === 'APPROVED'
+                          ? tTrackingLinks('revoke')
+                          : t('actionDecline')}
                       </button>
                     ) : (
                       <button
@@ -470,7 +491,7 @@ function LedgerSection({ planId }: { planId: string }) {
                         onClick={() => setExcuseDialogDate(row.date)}
                         className="text-xs font-medium text-txt-2 hover:underline"
                       >
-                        Excuse
+                        {t('excuseAction')}
                       </button>
                     )}
                   </td>
@@ -495,13 +516,17 @@ function LedgerSection({ planId }: { planId: string }) {
 
       {revoking && (
         <ConfirmDialog
-          title={revoking.status === 'APPROVED' ? 'Revoke this excusal?' : 'Decline this request?'}
+          title={
+            revoking.status === 'APPROVED' ? t('revokeExcusalTitle') : t('declineRequestTitle')
+          }
           message={
             revoking.status === 'APPROVED'
-              ? `${revoking.excusedDate.slice(0, 10)} will go back to counting as a missed day if unpaid. This does not change any money owed.`
-              : `The request for ${revoking.excusedDate.slice(0, 10)} will be declined.`
+              ? t('revokeMessage', { date: revoking.excusedDate.slice(0, 10) })
+              : t('declineMessage', { date: revoking.excusedDate.slice(0, 10) })
           }
-          confirmLabel={revoking.status === 'APPROVED' ? 'Revoke' : 'Decline'}
+          confirmLabel={
+            revoking.status === 'APPROVED' ? tTrackingLinks('revoke') : t('actionDecline')
+          }
           danger
           onConfirm={() => void handleRevoke(revoking)}
           onCancel={() => setRevoking(null)}
@@ -525,6 +550,8 @@ function ContractEndDateEditor({
   plan: OwnershipPlan;
   onUpdated: (plan: OwnershipPlan) => void;
 }) {
+  const { t } = useTranslation('ownershipPlanDetail');
+  const { t: tCommon } = useTranslation('common');
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(plan.contractEndDate?.slice(0, 10) ?? '');
   const [saving, setSaving] = useState(false);
@@ -549,7 +576,7 @@ function ContractEndDateEditor({
       onUpdated(updated);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save the end date.');
+      setError(err instanceof ApiError ? err.message : t('saveEndDateError'));
     } finally {
       setSaving(false);
     }
@@ -559,16 +586,16 @@ function ContractEndDateEditor({
     return (
       <span>
         {plan.contractEndDate ? (
-          `ends ${plan.contractEndDate.slice(0, 10)}`
+          t('endsLine', { date: plan.contractEndDate.slice(0, 10) })
         ) : (
-          <span className="text-warn">no end date set - system estimate {plan.derivedEndDate}</span>
+          <span className="text-warn">{t('noEndDateSet', { date: plan.derivedEndDate })}</span>
         )}{' '}
         <button
           type="button"
           onClick={startEditing}
           className="text-txt-2 underline hover:text-txt"
         >
-          {plan.contractEndDate ? 'edit' : 'set end date'}
+          {plan.contractEndDate ? t('editButton') : t('setEndDateButton')}
         </button>
       </span>
     );
@@ -588,14 +615,14 @@ function ContractEndDateEditor({
         disabled={saving || !value}
         className="rounded bg-gray-900 px-2 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
       >
-        {saving ? 'Saving…' : 'Save'}
+        {saving ? tCommon('saving') : tCommon('save')}
       </button>
       <button
         type="button"
         onClick={() => setEditing(false)}
         className="text-xs text-txt-2 hover:underline"
       >
-        Cancel
+        {tCommon('cancel')}
       </button>
       {error && <span className="text-xs text-crit">{error}</span>}
     </span>
@@ -622,6 +649,7 @@ function CompletionChecklistSection({
   plan: OwnershipPlan;
   onUpdated: (plan: OwnershipPlan) => void;
 }) {
+  const { t } = useTranslation('ownershipPlanDetail');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -636,7 +664,7 @@ function CompletionChecklistSection({
       });
       onUpdated(updated);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update the checklist.');
+      setError(err instanceof ApiError ? err.message : t('checklistUpdateError'));
     } finally {
       setSaving(null);
     }
@@ -646,27 +674,31 @@ function CompletionChecklistSection({
     [
       {
         key: 'registrationCardHandedOver',
-        label: 'Registration card handed over',
+        label: t('checklistRegistrationCard'),
         at: plan.registrationCardHandedOverAt,
       },
       {
         key: 'spareKeyHandedOver',
-        label: 'Spare key handed over',
+        label: t('checklistSpareKey'),
         at: plan.spareKeyHandedOverAt,
       },
       {
         key: 'nameTransferConfirmed',
-        label: 'Name transfer confirmed',
+        label: t('checklistNameTransfer'),
         at: plan.nameTransferConfirmedAt,
       },
     ];
   if (plan.depositHandling === 'HELD_REFUNDABLE') {
-    items.push({ key: 'depositReturned', label: 'Deposit returned', at: plan.depositReturnedAt });
+    items.push({
+      key: 'depositReturned',
+      label: t('checklistDepositReturned'),
+      at: plan.depositReturnedAt,
+    });
   }
 
   return (
     <section className="mb-8">
-      <h2 className="mb-2 text-sm font-semibold text-txt">Completion checklist</h2>
+      <h2 className="mb-2 text-sm font-semibold text-txt">{t('checklistSectionTitle')}</h2>
       <div className="space-y-2 rounded border border-line bg-panel p-4">
         {items.map((item) => (
           <label key={item.key} className="flex items-center gap-2 text-sm">
@@ -687,60 +719,74 @@ function CompletionChecklistSection({
 }
 
 export function OwnershipPlanDetailPage() {
+  const { t } = useTranslation('ownershipPlanDetail');
+  const { t: tOwnership } = useTranslation('ownership');
   const { planId } = useParams<{ planId: string }>();
   const [plan, setPlan] = useState<OwnershipPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadPlan = useCallback(() => {
     if (!planId) return;
     apiFetch<OwnershipPlan>(`/ownership-plans/${planId}`)
       .then(setPlan)
-      .catch(() => setError('Could not load this ownership plan.'));
-  }, [planId]);
+      .catch(() => setError(t('pageLoadError')));
+  }, [planId, t]);
+
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
 
   if (!planId) return null;
   if (error) return <p className="text-sm text-crit">{error}</p>;
-  if (!plan) return <p className="text-sm text-txt-2">Loading…</p>;
+  if (!plan) return <p className="text-sm text-txt-2">{t('loading')}</p>;
 
   return (
     <div>
       <Link to="/ownership" className="mb-4 inline-block text-sm text-txt-2 hover:underline">
-        ← Back to ownership plans
+        {t('backLink')}
       </Link>
       <h1 className="mb-1 text-xl font-semibold text-txt">
-        {plan.driver ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}` : 'Driver'}
+        {plan.driver
+          ? `${plan.driver.user.firstName} ${plan.driver.user.lastName}`
+          : tOwnership('tableDriver')}
         {' — '}
-        {plan.motorcycle?.registrationNumber ?? 'Vehicle'}
+        {plan.motorcycle?.registrationNumber ?? tOwnership('tableVehicle')}
       </h1>
       <p className="mb-4 text-sm text-txt-2">
-        {formatTZS(plan.dailyAmount)}/day for {plan.instalmentCount} days · declared value{' '}
-        {formatTZS(plan.totalPrice)} · {formatTZS(plan.downPayment)} down · started{' '}
-        {plan.startDate.slice(0, 10)} · <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
+        {t('perDayForDays', { daily: formatTZS(plan.dailyAmount), count: plan.instalmentCount })}
+        {' · '}
+        {t('declaredValueSummary', { amount: formatTZS(plan.totalPrice) })}
+        {' · '}
+        {t('downPaymentSummary', { amount: formatTZS(plan.downPayment) })}
+        {' · '}
+        {t('startedSummary', { date: plan.startDate.slice(0, 10) })}
+        {' · '}
+        <ContractEndDateEditor plan={plan} onUpdated={setPlan} />
       </p>
       {/* Stage G10 - a THIRD signal, separate from the behind/ahead figures
           below and the breach threshold OwnershipPage's severity colouring
           watches - a date condition, not a payment-streak condition. */}
       {plan.pastDeadlineStillOwing && (
         <p className="mb-4 text-sm font-medium text-violet">
-          Past the contract's end date, still owing {formatTZS(plan.remainingToOwn)}.
+          {t('pastDeadlineMessage', { amount: formatTZS(plan.remainingToOwn) })}
         </p>
       )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded border border-line bg-panel p-3">
-          <p className="text-xs text-txt-2">Paid to date</p>
+          <p className="text-xs text-txt-2">{t('kpiPaidToDate')}</p>
           <p className="text-lg font-semibold text-txt">{formatTZS(plan.amountPaid)}</p>
         </div>
         <div className="rounded border border-line bg-panel p-3">
-          <p className="text-xs text-txt-2">Remaining</p>
+          <p className="text-xs text-txt-2">{tOwnership('tableRemaining')}</p>
           <p className="text-lg font-semibold text-txt">{formatTZS(plan.remainingToOwn)}</p>
         </div>
         <div className="rounded border border-line bg-panel p-3">
-          <p className="text-xs text-txt-2">Days left</p>
+          <p className="text-xs text-txt-2">{tOwnership('tableDaysLeft')}</p>
           <p className="text-lg font-semibold text-txt">{plan.daysLeft}</p>
         </div>
         <div className="rounded border border-line bg-panel p-3">
-          <p className="text-xs text-txt-2">Projected completion</p>
+          <p className="text-xs text-txt-2">{tOwnership('tableProjectedCompletion')}</p>
           <p className="text-lg font-semibold text-txt">{plan.projectedCompletion}</p>
         </div>
       </div>

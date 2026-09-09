@@ -40,6 +40,8 @@ import enLogin from '../locales/en/login.json';
 import swLogin from '../locales/sw/login.json';
 import enOwnership from '../locales/en/ownership.json';
 import swOwnership from '../locales/sw/ownership.json';
+import enOwnershipPlanDetail from '../locales/en/ownershipPlanDetail.json';
+import swOwnershipPlanDetail from '../locales/sw/ownershipPlanDetail.json';
 import type { Language } from './types';
 
 /**
@@ -50,13 +52,13 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L20 translate them (operationsCenter, payments,
+ * batch as Stage L2-L22 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
  * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
- * bulkImport, trackingLinks, trackingMap, login, then ownership - see
- * DESIGN_SWAHILI_UI.md's per-page rollout plan). Not built ahead of
- * need: a page gets its own namespace only once it's actually
- * translated.
+ * bulkImport, trackingLinks, trackingMap, login, ownership, then
+ * ownershipPlanDetail - see DESIGN_SWAHILI_UI.md's per-page rollout
+ * plan). Not built ahead of need: a page gets its own namespace only
+ * once it's actually translated.
  * `gpsProviderSettings` (L14), `billing` (L15), and `bulkImport` (L16)
  * each carry their own `ownerOnlyGate` key - the plain-owner variant of
  * a five-page pattern. `trackingLinks` (L17) and `trackingMap` (L18)
@@ -87,6 +89,14 @@ import type { Language } from './types';
  * a/b): L20 Part 1 covered everything except CreatePlanFormModal, and
  * L21 Part 2 finished it by translating that "Create plan" form,
  * closing out the page.
+ * `ownershipPlanDetail` (L22) covers OwnershipPlanDetailPage.tsx - its
+ * own namespace rather than an extension of `ownership`, same
+ * precedent as `motorcycleDetail` getting its own namespace separate
+ * from `fleet`. Several of its strings cross-reuse `ownership`'s
+ * existing keys (tableRemaining/tableDaysLeft/tableProjectedCompletion/
+ * tableDriver/tableVehicle/noEndDateDialogTitle) via a second
+ * useTranslation('ownership') hook, same pattern AssignmentsPage
+ * established with payments.json at L9.
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -111,6 +121,7 @@ void i18n.use(initReactI18next).init({
       trackingMap: enTrackingMap,
       login: enLogin,
       ownership: enOwnership,
+      ownershipPlanDetail: enOwnershipPlanDetail,
     },
     sw: {
       common: sw,
@@ -133,6 +144,7 @@ void i18n.use(initReactI18next).init({
       trackingMap: swTrackingMap,
       login: swLogin,
       ownership: swOwnership,
+      ownershipPlanDetail: swOwnershipPlanDetail,
     },
   },
   lng: 'en',
