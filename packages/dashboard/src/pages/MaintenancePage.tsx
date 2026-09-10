@@ -9,7 +9,6 @@ import type {
   MaintenanceSummaryResponse,
   Motorcycle,
   UpdateMaintenancePayload,
-  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -17,26 +16,7 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
-
-// Stage L8 - deliberate near-duplicate of FleetPage.tsx's own
-// VEHICLE_TYPE_LABEL_KEY/vehicleTypeLabel (L7), which are private to that
-// file (not exported). Both now point at the same centralized common.json
-// keys, so there is exactly one English/Swahili string per vehicle type -
-// only the small Record + helper wrapper is duplicated, not a whole
-// namespace. Worth exporting from a shared module next time a third page
-// needs this exact wrapper.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
-
-function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
-  return vehicleType in VEHICLE_TYPE_LABEL_KEY
-    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
-    : vehicleType;
-}
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 // Stage L8 - bug fix: pipelineLabels used to hardcode the same four
 // strings as the KPI tiles below as a second literal map. Now points at

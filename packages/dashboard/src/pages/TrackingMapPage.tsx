@@ -16,25 +16,9 @@ import { markerStatus, vehicleDivIcon, STATUS_COLOR, statusLabel } from '../lib/
 import { today, formatDateTime } from '../lib/format';
 import { PageChassis } from '../components/chassis/PageChassis';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-
-// Stage L18 (DESIGN_SWAHILI_UI.md) - this is now the FIFTH page with its own
-// private copy of this exact VehicleType label wrapper (Fleet L7,
-// Maintenance L8, Assignments L9, Reports L12, now this). Like Reports,
-// this page never shipped its own duplicate translated strings before this
-// stage, so it reads straight off the already-centralized common.json keys
-// from day one - no separate cleanup step needed here.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
-
-function vehicleTypeLabel(vehicleType: VehicleType, tCommon: TFunction<'common'>): string {
-  return tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType]);
-}
 
 // 'ALL' isn't a real VehicleType, so it gets its own trackingMap.json key -
 // same wording ReportsPage's own allVehicles key already established at

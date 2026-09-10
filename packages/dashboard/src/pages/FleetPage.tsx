@@ -22,24 +22,13 @@ import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
 import { VehicleMap } from '../components/VehicleMap';
 import { markerStatus, vehicleDivIcon, STATUS_COLOR, statusLabel } from '../lib/gps-status';
+import { VEHICLE_TYPE_LABEL_KEY, vehicleTypeLabel } from '../lib/vehicle-type';
 
 const DEFAULT_CENTER: [number, number] = [-6.8, 39.28];
 const REFRESH_MS = 30_000;
 
 const STATUS_OPTIONS: MotorcycleStatus[] = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 const VEHICLE_TYPE_OPTIONS: VehicleType[] = ['MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-
-// Stage L7 - centralized into common.json: this is the third page needing
-// this VehicleType label map (ExpensesPage's own in L4, TransportPage's own
-// in L6, both still using their local near-duplicates - not migrated here,
-// see this stage's report). New pages should consume these common keys
-// directly rather than building another local copy.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
 
 // Stage L7 - the first page needing a label map for this enum (unlike
 // VehicleType above), so no centralization question yet - same as L5's
@@ -50,16 +39,11 @@ const MOTORCYCLE_STATUS_LABEL_KEY: Record<MotorcycleStatus, string> = {
   RETIRED: 'motorcycleStatusRetired',
 };
 
-// Stage L7 - FleetVehicleRow/IdleVehicleRow type vehicleType/status as plain
-// `string` (not the narrower enums), so these guard against a value the
-// label maps above don't recognize by falling back to the raw string,
-// matching the `?? t.vehicleType` fallback the pre-L7 code already used.
-function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
-  return vehicleType in VEHICLE_TYPE_LABEL_KEY
-    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
-    : vehicleType;
-}
-
+// Stage L7 - FleetVehicleRow/IdleVehicleRow type status as plain `string`
+// (not the narrower enum), so this guards against a value the label map
+// above doesn't recognize by falling back to the raw string, matching the
+// `?? t.status` fallback the pre-L7 code already used (vehicleTypeLabel's
+// own equivalent guard now lives in lib/vehicle-type.ts).
 function motorcycleStatusLabel(status: string, t: TFunction<'fleet'>): string {
   return status in MOTORCYCLE_STATUS_LABEL_KEY
     ? t(MOTORCYCLE_STATUS_LABEL_KEY[status as MotorcycleStatus])

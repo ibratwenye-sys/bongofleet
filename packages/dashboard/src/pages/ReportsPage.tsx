@@ -16,24 +16,9 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-// Stage L12 (DESIGN_SWAHILI_UI.md) - this is now the FOURTH page with its
-// own private copy of this exact VehicleType label wrapper (Fleet L7,
-// Maintenance L8, Assignments L9, now this). Unlike those three, ReportsPage
-// never shipped its own duplicate translated strings before this stage -
-// it read straight off the already-centralized common.json keys from day
-// one, so there was no separate cleanup step needed here.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
-
-function vehicleTypeLabel(vehicleType: VehicleType, tCommon: TFunction<'common'>): string {
-  return tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType]);
-}
 
 // Same "one extra ALL option" problem ExpensesPage.tsx's own
 // vehicleTypeFilterLabel() solved at L4 - 'ALL' isn't a real VehicleType,

@@ -11,7 +11,6 @@ import type {
   Motorcycle,
   Payment,
   PaymentStatus,
-  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -21,6 +20,7 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 // Stage L9 - reuse PaymentsPage.tsx's own PAYMENT_STATUS_LABEL_KEY (L3)
 // rather than inventing a third copy of these three strings: same
@@ -31,24 +31,6 @@ const PAYMENT_STATUS_LABEL_KEY: Record<PaymentStatus, string> = {
   COMPLETED: 'paymentStatusCompleted',
   FAILED: 'paymentStatusFailed',
 };
-
-// Stage L9 - this is now the THIRD page with its own private copy of this
-// exact VehicleType label wrapper (Fleet L7, Maintenance L8, now this).
-// Extracting VEHICLE_TYPE_LABEL_KEY/vehicleTypeLabel into a shared module
-// is overdue - queued as a follow-up, not done here since Fleet and
-// Maintenance are already shipped/verified and out of this stage's scope.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
-
-function vehicleTypeLabel(vehicleType: string, tCommon: TFunction<'common'>): string {
-  return vehicleType in VEHICLE_TYPE_LABEL_KEY
-    ? tCommon(VEHICLE_TYPE_LABEL_KEY[vehicleType as VehicleType])
-    : vehicleType;
-}
 
 function todayDateInput(): string {
   return new Date().toISOString().slice(0, 10);
