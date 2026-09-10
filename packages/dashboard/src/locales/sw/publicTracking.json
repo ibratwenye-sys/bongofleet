@@ -1,0 +1,20 @@
+{
+  "pageTitle": "BongoFleet Ufuatiliaji wa Magari",
+  "loading": "Inapakia…",
+  "errorInvalidLink": "Kiungo hiki cha ufuatiliaji si sahihi, kimeisha muda, au kimebatilishwa.",
+  "errorLoadFailed": "Imeshindikana kupakia kiungo hiki cha ufuatiliaji. Tafadhali jaribu tena.",
+  "noVehicles": "Hakuna magari ya kuonyesha.",
+
+  "justNow": "sasa hivi",
+  "minutesAgo_one": "dakika {{count}} iliyopita",
+  "minutesAgo_other": "dakika {{count}} zilizopita",
+  "hoursAgo_one": "saa {{count}} iliyopita",
+  "hoursAgo_other": "saa {{count}} zilizopita",
+  "daysAgo_one": "siku {{count}} iliyopita",
+  "daysAgo_other": "siku {{count}} zilizopita",
+
+  "lastSeen": "Lilionekana mara ya mwisho {{time}}.",
+  "noLocationYet": "Hakuna eneo lililoripotiwa bado.",
+  "asOfLine": "Kufikia {{time}} · {{lat}}, {{lng}}",
+  "openInGoogleMaps": "Fungua kwenye Google Maps ↗"
+}

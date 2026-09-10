@@ -42,6 +42,8 @@ import enOwnership from '../locales/en/ownership.json';
 import swOwnership from '../locales/sw/ownership.json';
 import enOwnershipPlanDetail from '../locales/en/ownershipPlanDetail.json';
 import swOwnershipPlanDetail from '../locales/sw/ownershipPlanDetail.json';
+import enPublicTracking from '../locales/en/publicTracking.json';
+import swPublicTracking from '../locales/sw/publicTracking.json';
 import type { Language } from './types';
 
 /**
@@ -52,13 +54,13 @@ import type { Language } from './types';
  * the signed-in user's own account preference is known.
  *
  * `common` (shared chassis/chrome strings) plus one namespace per page
- * batch as Stage L2-L22 translate them (operationsCenter, payments,
+ * batch as Stage L2-L23 translate them (operationsCenter, payments,
  * expenses, transport, fleet, maintenance, assignments, drivers,
  * approvals, reports, motorcycleDetail, gpsProviderSettings, billing,
- * bulkImport, trackingLinks, trackingMap, login, ownership, then
- * ownershipPlanDetail - see DESIGN_SWAHILI_UI.md's per-page rollout
- * plan). Not built ahead of need: a page gets its own namespace only
- * once it's actually translated.
+ * bulkImport, trackingLinks, trackingMap, login, ownership,
+ * ownershipPlanDetail, then publicTracking - see DESIGN_SWAHILI_UI.md's
+ * per-page rollout plan). Not built ahead of need: a page gets its own
+ * namespace only once it's actually translated.
  * `gpsProviderSettings` (L14), `billing` (L15), and `bulkImport` (L16)
  * each carry their own `ownerOnlyGate` key - the plain-owner variant of
  * a five-page pattern. `trackingLinks` (L17) and `trackingMap` (L18)
@@ -97,6 +99,16 @@ import type { Language } from './types';
  * tableDriver/tableVehicle/noEndDateDialogTitle) via a second
  * useTranslation('ownership') hook, same pattern AssignmentsPage
  * established with payments.json at L9.
+ * `publicTracking` (L23) is architecturally different from every
+ * namespace above: PublicTrackingPage.tsx is public and unauthenticated,
+ * so there is no signed-in account preference to read. That page always
+ * forces `sw` on mount (useLayoutEffect, before first paint) regardless
+ * of this tab's current i18next language, and restores whatever
+ * language was active before on unmount - a page-local override, not a
+ * change to `lng`/`fallbackLng` here. It's still given an `en` file like
+ * every other namespace, purely for architectural uniformity (this app
+ * has no toggle on that page and no plan to add one yet - see
+ * DESIGN_GPS_TRACKING.md's open question on that).
  */
 void i18n.use(initReactI18next).init({
   resources: {
@@ -122,6 +134,7 @@ void i18n.use(initReactI18next).init({
       login: enLogin,
       ownership: enOwnership,
       ownershipPlanDetail: enOwnershipPlanDetail,
+      publicTracking: enPublicTracking,
     },
     sw: {
       common: sw,
@@ -145,6 +158,7 @@ void i18n.use(initReactI18next).init({
       login: swLogin,
       ownership: swOwnership,
       ownershipPlanDetail: swOwnershipPlanDetail,
+      publicTracking: swPublicTracking,
     },
   },
   lng: 'en',

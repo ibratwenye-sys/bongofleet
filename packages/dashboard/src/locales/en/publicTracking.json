@@ -1,0 +1,20 @@
+{
+  "pageTitle": "BongoFleet vehicle tracking",
+  "loading": "Loading…",
+  "errorInvalidLink": "This tracking link is invalid, expired, or has been revoked.",
+  "errorLoadFailed": "Could not load this tracking link. Please try again.",
+  "noVehicles": "No vehicles to show.",
+
+  "justNow": "Just now",
+  "minutesAgo_one": "{{count}} minute ago",
+  "minutesAgo_other": "{{count}} minutes ago",
+  "hoursAgo_one": "{{count}} hour ago",
+  "hoursAgo_other": "{{count}} hours ago",
+  "daysAgo_one": "{{count}} day ago",
+  "daysAgo_other": "{{count}} days ago",
+
+  "lastSeen": "Last seen {{time}}.",
+  "noLocationYet": "No location reported yet.",
+  "asOfLine": "As of {{time}} · {{lat}}, {{lng}}",
+  "openInGoogleMaps": "Open in Google Maps ↗"
+}
