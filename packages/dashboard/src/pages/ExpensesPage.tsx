@@ -22,20 +22,9 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 const CATEGORY_OPTIONS: (VehicleType | 'ALL')[] = ['ALL', 'MOTORBIKE', 'BAJAJI', 'CAR', 'TRUCK'];
-
-// Stage L4 - the only label mapping for this enum anywhere in the app; see
-// StatusBadge/PaymentsPage's PAYMENT_STATUS_LABEL_KEY (L3) for the same
-// pattern. VEHICLE_TYPE_LABEL_KEY covers the four real types; the filter's
-// extra 'ALL' option has its own key since VehicleType itself has no ALL
-// member.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
 
 // Stage L4 - deliberately NOT translated (DESIGN_SWAHILI_UI.md's enum-vs-
 // free-text boundary): the category field itself is free text an owner can
@@ -43,8 +32,8 @@ const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
 // language from actual usage. Translating only this suggestion list would
 // be cosmetic - it wouldn't change what's actually saved or shown
 // elsewhere - and would desync the suggestions from the data they're
-// meant to shortcut. Left as literal English, unlike the fixed
-// VEHICLE_TYPE_LABEL_KEY enum above.
+// meant to shortcut. Left as literal English, unlike the fixed vehicle-type
+// enum (lib/vehicle-type.ts).
 const CATEGORY_SUGGESTIONS = [
   'Fuel',
   'Repairs',
@@ -55,8 +44,16 @@ const CATEGORY_SUGGESTIONS = [
 ];
 const APPROVALS_QUEUE_LIMIT = 5;
 
-function vehicleTypeFilterLabel(category: VehicleType | 'ALL', t: TFunction<'expenses'>): string {
-  return category === 'ALL' ? t('categoryAllTypes') : t(VEHICLE_TYPE_LABEL_KEY[category]);
+// 'ALL' isn't a real VehicleType, so it gets its own categoryAllTypes key -
+// same "ALL-plus-vehicle-type" shape Reports'/TrackingMap's own
+// categoryOptionLabel(category, t, tCommon) already use, now that this
+// wrapper takes the same two translators they do.
+function vehicleTypeFilterLabel(
+  category: VehicleType | 'ALL',
+  t: TFunction<'expenses'>,
+  tCommon: TFunction<'common'>,
+): string {
+  return category === 'ALL' ? t('categoryAllTypes') : vehicleTypeLabel(category, tCommon);
 }
 
 interface FormState {
@@ -259,12 +256,13 @@ function kpisToTiles(data: ExpenseSummaryResponse, t: TFunction<'expenses'>): Kp
 
 function CostPerVehicleTypeCard({ rows }: { rows: CostPerVehicleTypeRow[] }) {
   const { t } = useTranslation('expenses');
+  const { t: tCommon } = useTranslation('common');
   return (
     <Card title={t('costPerVehicleTypeTitle')}>
       <div className="divide-y divide-line-soft">
         {rows.map((r) => (
           <div key={r.vehicleType} className="flex items-center justify-between px-4 py-2">
-            <span className="text-sm text-txt-2">{t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}</span>
+            <span className="text-sm text-txt-2">{vehicleTypeLabel(r.vehicleType, tCommon)}</span>
             <span className="text-sm font-medium text-txt">{formatTZS(r.costPerVehicle)}</span>
           </div>
         ))}
@@ -329,6 +327,7 @@ function ClaimsAwaitingApprovalCard({ pending }: { pending: Expense[] }) {
 
 function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
   const { t } = useTranslation('expenses');
+  const { t: tCommon } = useTranslation('common');
   return (
     <Card
       title={t('vehicleAnomaliesTitle')}
@@ -356,7 +355,7 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
                   <tr key={r.motorcycleId} className="border-b border-line-soft last:border-0">
                     <td className="px-4 py-2 font-medium text-txt">{r.registrationNumber}</td>
                     <td className="px-4 py-2 text-txt-2">
-                      {t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}
+                      {vehicleTypeLabel(r.vehicleType, tCommon)}
                     </td>
                     <td className="px-4 py-2 text-right text-txt-2">
                       {formatTZS(r.currentPeriodCost)}
@@ -385,7 +384,7 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-txt">
-                    {r.registrationNumber} · {t(VEHICLE_TYPE_LABEL_KEY[r.vehicleType])}
+                    {r.registrationNumber} · {vehicleTypeLabel(r.vehicleType, tCommon)}
                   </span>
                   <span className="rounded bg-warn-d px-1.5 py-0.5 text-xs font-medium text-warn">
                     {t('flagged')}
@@ -407,6 +406,7 @@ function VehicleAnomaliesTable({ rows }: { rows: VehicleAnomalyRow[] }) {
 
 export function ExpensesPage() {
   const { t } = useTranslation('expenses');
+  const { t: tCommon } = useTranslation('common');
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
   const [summary, setSummary] = useState<ExpenseSummaryResponse | null>(null);
@@ -591,7 +591,7 @@ export function ExpensesPage() {
             >
               {CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>
-                  {vehicleTypeFilterLabel(c, t)}
+                  {vehicleTypeFilterLabel(c, t, tCommon)}
                 </option>
               ))}
             </select>

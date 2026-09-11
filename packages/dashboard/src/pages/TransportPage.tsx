@@ -12,7 +12,6 @@ import type {
   TransportJobStatus,
   TransportOperationsResponse,
   UpdateTransportJobPayload,
-  VehicleType,
 } from '../lib/types';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -22,6 +21,7 @@ import { PageChassis } from '../components/chassis/PageChassis';
 import { ChassisGrid, ClosingRow } from '../components/chassis/ChassisGrid';
 import { Card } from '../components/chassis/Card';
 import type { KpiTile } from '../components/chassis/KpiRail';
+import { vehicleTypeLabel } from '../lib/vehicle-type';
 
 const STATUS_OPTIONS: TransportJobStatus[] = ['SCHEDULED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
 
@@ -215,21 +215,6 @@ function toJobForm(job: TransportJob | null, vehicles: Motorcycle[]): JobFormSta
   };
 }
 
-// Stage L6 - deliberate near-duplicate of ExpensesPage.tsx's own
-// VEHICLE_TYPE_LABEL_KEY (L4, `expenses` namespace) for the same VehicleType
-// enum. Not centralized into common.json here: this batch's job is closing
-// out Transport specifically, and reaching into an already-shipped,
-// already-verified page to extract a shared map is a separate refactor.
-// Same "duplicate now, centralize once a third page needs it" precedent
-// DriverPicker's placement set in L3 - move both into common.json next time
-// either page's vehicle-type labels need touching again.
-const VEHICLE_TYPE_LABEL_KEY: Record<VehicleType, string> = {
-  MOTORBIKE: 'vehicleTypeMotorbike',
-  BAJAJI: 'vehicleTypeBajaji',
-  CAR: 'vehicleTypeCar',
-  TRUCK: 'vehicleTypeTruck',
-};
-
 function JobFormModal({
   job,
   vehicles,
@@ -331,7 +316,7 @@ function JobFormModal({
               <option value="">{t('selectVehiclePlaceholder')}</option>
               {vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.registrationNumber} ({t(VEHICLE_TYPE_LABEL_KEY[v.vehicleType])})
+                  {v.registrationNumber} ({vehicleTypeLabel(v.vehicleType, tCommon)})
                 </option>
               ))}
             </select>

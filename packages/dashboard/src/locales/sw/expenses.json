@@ -63,10 +63,6 @@
   "deleteExpenseTitle": "Futa Matumizi",
   "deleteExpenseMessage": "Futa matumizi ya {{category}} ya {{amount}}? Hatua hii haiwezi kutenduliwa.",
 
-  "vehicleTypeMotorbike": "Pikipiki",
-  "vehicleTypeBajaji": "Bajaji",
-  "vehicleTypeCar": "Gari",
-  "vehicleTypeTruck": "Lori",
   "categoryAllTypes": "Aina Zote",
 
   "fieldCategory": "Aina",

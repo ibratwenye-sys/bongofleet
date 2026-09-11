@@ -63,10 +63,6 @@
   "deleteExpenseTitle": "Delete expense",
   "deleteExpenseMessage": "Delete the {{category}} expense of {{amount}}? This cannot be undone.",
 
-  "vehicleTypeMotorbike": "Motorbike",
-  "vehicleTypeBajaji": "Bajaji",
-  "vehicleTypeCar": "Car",
-  "vehicleTypeTruck": "Truck",
   "categoryAllTypes": "All types",
 
   "fieldCategory": "Category",
